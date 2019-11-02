@@ -13,3 +13,5 @@
 
 *.iml
 .idea
+*.ipr
+*.iws
