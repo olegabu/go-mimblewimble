@@ -3,17 +3,23 @@ package go_mimblewimble
 import (
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
+	"log"
 	"testing"
 )
 
-func TestVerifySignature(t *testing.T) {
-	bytes, _ := ioutil.ReadFile("1g_repost_fix_kernel.json")
+func getTxBytes() []byte {
+	bytes, err := ioutil.ReadFile("1g_repost_fix_kernel.json")
+	if err != nil {
+		log.Panic("cannot open json file with test transaction")
+	}
 
-	assert.Nil(t, VerifySignature(bytes))
+	return bytes
 }
 
-func TestVerifyCommitmentsSum(t *testing.T) {
-	bytes, _ := ioutil.ReadFile("1g_repost_fix_kernel.json")
+func TestValidateSignature(t *testing.T) {
+	assert.Nil(t, ValidateSignature(getTxBytes()))
+}
 
-	assert.Nil(t, VerifyCommitmentsSum(bytes))
+func TestValidateCommitmentsSum(t *testing.T) {
+	assert.Nil(t, ValidateCommitmentsSum(getTxBytes()))
 }

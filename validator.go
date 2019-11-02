@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-func VerifySignature(txBytes []byte) error {
+func ValidateSignature(txBytes []byte) error {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return errors.Wrap(err, "cannot ContextCreate ContextBoth")
@@ -78,7 +78,7 @@ func VerifySignature(txBytes []byte) error {
 // if transaction is valid, then
 // offset*G + kernel_excess === 0*H + R*G === (inputs - outputs - fee))*G === inputs*G - (outputs+Fee)*G ===
 // === InputCommitmentsSum - (OutputCommitments + FeeCommitments)
-func VerifyCommitmentsSum(txBytes []byte) error {
+func ValidateCommitmentsSum(txBytes []byte) error {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return errors.Wrap(err, "cannot ContextCreate ContextBoth")
