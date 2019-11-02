@@ -5,7 +5,7 @@
 Note Go modules are not yet supported.
 
 ```bash
-unset GO11MODULE
+unset GO111MODULE
 go install
 go test
 ```
