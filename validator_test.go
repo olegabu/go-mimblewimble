@@ -1,16 +1,13 @@
-package main
+package go_mimblewimble
 
 import (
-	"github.com/blockcypher/libgrin/core"
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
 	"testing"
 )
 
-func TestValidateTx(t *testing.T) {
-	inputs := []core.Input{{Commit: core.JSONableSlice{}}}
-	outputs := []core.Output{{Commit: core.JSONableSlice{}}, {Commit: core.JSONableSlice{}}}
-	kernels := []core.TxKernel{{Excess: core.JSONableSlice{}, ExcessSig: core.JSONableSlice{}}}
-	body := core.TransactionBody{Inputs: inputs, Outputs: outputs, Kernels: kernels}
-	tx := core.Transaction{Body: body}
-	assert.Nil(t, ValidateTx(tx))
+func TestVerifySignature(t *testing.T) {
+	bytes, _ := ioutil.ReadFile("1g_repost_fix_kernel.json")
+
+	assert.Nil(t, VerifySignature(bytes))
 }
