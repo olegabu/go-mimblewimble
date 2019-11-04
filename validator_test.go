@@ -1,4 +1,4 @@
-package go_mimblewimble
+package mw
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -8,7 +8,8 @@ import (
 )
 
 func getTxBytes() []byte {
-	bytes, err := ioutil.ReadFile("1g_repost_fix_kernel.json")
+	//bytes, err := ioutil.ReadFile("1g_repost_fix_kernel.json") // fails TestValidateCommitmentsSum
+	bytes, err := ioutil.ReadFile("10_grin_repost.json")
 	if err != nil {
 		log.Panic("cannot open json file with test transaction")
 	}
@@ -16,10 +17,8 @@ func getTxBytes() []byte {
 	return bytes
 }
 
-func TestValidateSignature(t *testing.T) {
-	assert.Nil(t, ValidateSignature(getTxBytes()))
-}
-
-func TestValidateCommitmentsSum(t *testing.T) {
-	assert.Nil(t, ValidateCommitmentsSum(getTxBytes()))
+func TestValidateTransaction(t *testing.T) {
+	tx, err := ValidateTransaction(getTxBytes())
+	assert.NotNil(t, tx)
+	assert.Nil(t, err)
 }

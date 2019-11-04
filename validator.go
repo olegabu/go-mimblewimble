@@ -1,30 +1,50 @@
-package go_mimblewimble
+package mw
 
 import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	libgrin "github.com/blockcypher/libgrin/core"
+	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
 )
 
-func ValidateSignature(txBytes []byte) error {
+func ValidateTransaction(txBytes []byte) (*core.Transaction, error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		return errors.Wrap(err, "cannot ContextCreate ContextBoth")
+		return nil, errors.Wrap(err, "cannot ContextCreate")
 	}
 
-	tx := &libgrin.Transaction{}
+	defer secp256k1.ContextDestroy(context)
+
+	tx := &core.Transaction{}
 
 	err = json.Unmarshal(txBytes, tx)
 	if err != nil {
-		return errors.Wrap(err, "cannot unmarshal json to Transaction")
+		return nil, errors.Wrap(err, "cannot unmarshal json to Transaction")
 	}
 
+	err = validateSignature(context, tx)
+	if err != nil {
+		return tx, errors.Wrap(err, "cannot validateSignature")
+	}
+
+	err = validateCommitmentsSum(context, tx)
+	if err != nil {
+		return tx, errors.Wrap(err, "cannot validateCommitmentsSum")
+	}
+
+	err = validateBulletproofs(context, tx)
+	if err != nil {
+		return tx, errors.Wrap(err, "cannot validateBulletproofs")
+	}
+
+	return tx, nil
+}
+
+func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 	excessSigBytes, err := hex.DecodeString(tx.Body.Kernels[0].ExcessSig)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode ExcessSig")
@@ -53,9 +73,6 @@ func ValidateSignature(txBytes []byte) error {
 	hash.Write(fee)
 	msg := hash.Sum(nil)
 
-	// _, serPubkey, _ := secp256k1.EcPubkeySerialize(context, pubkey)
-	fmt.Printf("fee : %v\nfeatures: %v\nmsg:%v\nexcessBytes:%v\n", fee, features, hex.EncodeToString(msg), hex.EncodeToString(excessBytes))
-
 	status, err = secp256k1.AggsigVerifySingle(
 		context,
 		excessSigBytes,
@@ -78,46 +95,34 @@ func ValidateSignature(txBytes []byte) error {
 // if transaction is valid, then
 // offset*G + kernel_excess === 0*H + R*G === (inputs - outputs - fee))*G === inputs*G - (outputs+Fee)*G ===
 // === InputCommitmentsSum - (OutputCommitments + FeeCommitments)
-func ValidateCommitmentsSum(txBytes []byte) error {
-	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	if err != nil {
-		return errors.Wrap(err, "cannot ContextCreate ContextBoth")
-	}
-
-	tx := &libgrin.Transaction{}
-
-	err = json.Unmarshal(txBytes, tx)
-	if err != nil {
-		return errors.Wrap(err, "cannot unmarshal json to Transaction")
-	}
-
+func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) error {
 	// parse inputs and outputs
 
 	var outputs, inputs []*secp256k1.Commitment
 
-	for _, input := range tx.Body.Inputs {
+	for i, input := range tx.Body.Inputs {
 		commitmentBytes, err := hex.DecodeString(input.Commit)
 		if err != nil {
-			return errors.Wrap(err, "cannot decode input.Commit from hex")
+			return errors.Wrapf(err, "cannot decode input.Commit from hex for input %v", i)
 		}
 
 		status, commitment, err := secp256k1.CommitmentParse(context, commitmentBytes)
 		if !status || err != nil {
-			return errors.Wrap(err, "cannot parse commitmentBytes")
+			return errors.Wrapf(err, "cannot parse commitmentBytes for input %v", i)
 		}
 
 		inputs = append(inputs, commitment)
 	}
 
-	for _, output := range tx.Body.Outputs {
+	for i, output := range tx.Body.Outputs {
 		commitmentBytes, err := hex.DecodeString(output.Commit)
 		if err != nil {
-			return errors.Wrap(err, "cannot decode output.Commit from hex")
+			return errors.Wrapf(err, "cannot decode input.Commit from hex for output %v", i)
 		}
 
 		status, commitment, err := secp256k1.CommitmentParse(context, commitmentBytes)
 		if !status || err != nil {
-			return errors.Wrap(err, "cannot parse commitmentBytes")
+			return errors.Wrapf(err, "cannot parse commitmentBytes for output %v", i)
 		}
 
 		outputs = append(outputs, commitment)
@@ -185,6 +190,60 @@ func ValidateCommitmentsSum(txBytes []byte) error {
 
 	if bytes.Compare(serializedKernelExcess[:], serializedCommitmentsSum[:]) != 0 {
 		return errors.New("serializedKernelExcess not equal to serializedCommitmentsSum")
+	}
+
+	return nil
+}
+
+func validateBulletproofs(context *secp256k1.Context, tx *core.Transaction) error {
+	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*1024)
+	if err != nil {
+		return errors.Wrap(err, "cannot ScratchSpaceCreate")
+	}
+
+	bulletproofGenerators := secp256k1.BulletproofGeneratorsCreate(context, &secp256k1.GeneratorG, 256)
+	if bulletproofGenerators == nil {
+		return errors.Wrap(err, "cannot BulletproofGeneratorsCreate")
+	}
+
+	for i, output := range tx.Body.Outputs {
+		err := validateBulletproof(context, output, scratch, bulletproofGenerators)
+		if err != nil {
+			return errors.Wrapf(err, "cannot validateBulletproof output %v", i)
+		}
+	}
+
+	return nil
+}
+
+func validateBulletproof(context *secp256k1.Context, output core.Output, scratch *secp256k1.ScratchSpace, bulletproofGenerators *secp256k1.BulletproofGenerators) error {
+	commitmentBytes, err := hex.DecodeString(output.Commit)
+	if err != nil {
+		return errors.Wrap(err, "cannot decode Commit from hex")
+	}
+
+	status, BPCommitment, err := secp256k1.CommitmentParse(context, commitmentBytes)
+	if !status || err != nil {
+		return errors.Wrap(err, "cannot parse commitmentBytes")
+	}
+
+	proofBytes, err := hex.DecodeString(output.Proof)
+	if err != nil {
+		return errors.Wrap(err, "cannot decode Proof from hex")
+	}
+
+	proofStatus, err := secp256k1.BulletproofRangeproofVerify(
+		context,
+		scratch,
+		bulletproofGenerators,
+		proofBytes,
+		nil, // min_values: NULL for all-zeroes minimum values to prove ranges above
+		BPCommitment,
+		64,
+		&secp256k1.GeneratorH,
+		nil)
+	if proofStatus != 1 || err != nil {
+		return errors.Wrap(err, "cannot BulletproofRangeproofVerify")
 	}
 
 	return nil
