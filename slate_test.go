@@ -19,7 +19,7 @@ func TestCreateSlate(t *testing.T) {
 	inputValue := uint64(40)
 	amount := uint64(25)
 
-	output, blind, err := newOutput(context, inputValue)
+	output, blind, err := output(context, inputValue)
 	assert.Nil(t, err)
 
 	inputs := []WalletOutput{WalletOutput{

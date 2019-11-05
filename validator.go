@@ -65,13 +65,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 		return errors.Wrap(err, "CommitmentToPublicKey failed")
 	}
 
-	features := []byte{byte(0)}
-	fee := make([]byte, 8)
-	binary.BigEndian.PutUint64(fee, uint64(tx.Body.Kernels[0].Fee))
-	hash, _ := blake2b.New256(nil)
-	hash.Write(features)
-	hash.Write(fee)
-	msg := hash.Sum(nil)
+	msg := kernelSignatureMessage(tx.Body.Kernels[0])
 
 	status, err = secp256k1.AggsigVerifySingle(
 		context,
@@ -88,6 +82,29 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 	}
 
 	return nil
+}
+
+// msg = hash(features)                       for coinbase kernels
+//       hash(features || fee)                for plain kernels
+//       hash(features || fee || lock_height) for height locked kernels
+func kernelSignatureMessage(kernel core.TxKernel) []byte {
+	featuresBytes := []byte{byte(kernel.Features)}
+	feeBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(feeBytes, uint64(kernel.Fee))
+	lockHeightBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(lockHeightBytes, uint64(kernel.LockHeight))
+
+	hash, _ := blake2b.New256(nil)
+	hash.Write(featuresBytes)
+
+	if kernel.Features == core.PlainKernel {
+		hash.Write(feeBytes)
+	} else if kernel.Features == core.HeightLockedKernel {
+		hash.Write(feeBytes)
+		hash.Write(featuresBytes)
+	}
+
+	return hash.Sum(nil)
 }
 
 // Offset is a part of blinding factors sum, sometimes referred to as K1, that is
