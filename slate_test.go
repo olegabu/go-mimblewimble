@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCreateAndRespondSlate(t *testing.T) {
+func TestRound(t *testing.T) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	assert.Nil(t, err)
 
@@ -35,4 +35,8 @@ func TestCreateAndRespondSlate(t *testing.T) {
 	slateResponseBytes, err := CreateResponse(slateBytes)
 	assert.Nil(t, err)
 	fmt.Println(string(slateResponseBytes))
+
+	txBytes, err := CreateTransaction(slateResponseBytes)
+	assert.Nil(t, err)
+	fmt.Println(string(txBytes))
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
@@ -182,14 +183,33 @@ func CreateResponse(slateBytes []byte) ([]byte, error) {
 		return nil, errors.Wrapf(err, "cannot create publicNonceString")
 	}
 
+	// parse out message to use as part of the Schnorr challenge
+
 	msg := kernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
-	schnorrChallenge, err := schnorrChallenge(context, msg, publicBlindExcess, publicNonce, slate.ParticipantData)
+	// parse out sender's public blinds and nonces
+
+	senderPublicBlindExcess, err := stringToPubKey(context, slate.ParticipantData[0].PublicBlindExcess)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get senderPublicBlindExcess")
+	}
+
+	senderPublicNonce, err := stringToPubKey(context, slate.ParticipantData[0].PublicNonce)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get senderPublicNonce")
+	}
+
+	// calculate Schnorr challenge
+
+	schnorrChallenge, err := schnorrChallenge(context, msg, senderPublicBlindExcess, senderPublicNonce, publicBlindExcess, publicNonce)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot calculate schnorrChallenge")
 	}
 
+	// this seed is not used, we pass it to satisfy the underlying C function
 	seed, _ := random()
+
+	// calculate receiver's partial Schnorr signature
 
 	schnorrSig, err := secp256k1.AggsigSignSingle(context, schnorrChallenge, blind[:], nonce[:], nil, nil, nil, nil, seed[:])
 	if err != nil {
@@ -232,12 +252,79 @@ func CreateTransaction(slateBytes []byte) ([]byte, error) {
 		return nil, errors.Wrap(err, "cannot unmarshal json to slate")
 	}
 
+	// parse out message to use as part of the Schnorr challenge
+
 	msg := kernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
-	schnorrChallenge, err := schnorrChallenge(context, msg, publicBlindExcess, publicNonce, slate.ParticipantData)
+	// parse out public blinds and nonces for both sender and receiver from the slate
+	//TODO should the sender trust its public keys in receiver's response or use its own, remembered from construction of the slate?
+
+	senderPublicBlindExcess, err := stringToPubKey(context, slate.ParticipantData[0].PublicBlindExcess)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get senderPublicBlindExcess")
+	}
+
+	senderPublicNonce, err := stringToPubKey(context, slate.ParticipantData[0].PublicNonce)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get senderPublicNonce")
+	}
+
+	receiverPublicBlindExcess, err := stringToPubKey(context, slate.ParticipantData[1].PublicBlindExcess)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get receiverPublicBlindExcess")
+	}
+
+	receiverPublicNonce, err := stringToPubKey(context, slate.ParticipantData[1].PublicNonce)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get receiverPublicNonce")
+	}
+
+	// calculate Schnorr challenge
+
+	schnorrChallenge, err := schnorrChallenge(context, msg, senderPublicBlindExcess, senderPublicNonce, receiverPublicBlindExcess, receiverPublicNonce)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot calculate schnorrChallenge")
 	}
+
+	//// convert receiver public blind and nonce into bytes to calculate receiver's partial signature
+
+	res, receiverPublicBlindExcessBytes, err := secp256k1.EcPubkeySerialize(context, receiverPublicBlindExcess, uint(compressedPubKeyFlag))
+	if res != 1 || err != nil {
+		return nil, errors.Wrapf(err, "cannot serialize receiverPublicBlindExcess")
+	}
+
+	res, receiverPublicNonceBytes, err := secp256k1.EcPubkeySerialize(context, receiverPublicNonce, uint(compressedPubKeyFlag))
+	if res != 1 || err != nil {
+		return nil, errors.Wrapf(err, "cannot serialize receiverPublicNonce")
+	}
+
+	// verify receiver's partial Schnorr signature
+
+	// this seed is not used, we pass it to satisfy the underlying C function
+	seed, _ := random()
+
+	schnorrSig, err := secp256k1.AggsigSignSingle(context, schnorrChallenge, receiverPublicBlindExcessBytes, receiverPublicNonceBytes, nil, nil, nil, nil, seed[:])
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot calculate schnorrSig")
+	}
+
+	receiverPartialSigBytes, err := hex.DecodeString(*slate.ParticipantData[1].PartSig)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot parse receiverPartialSig from hex")
+	}
+
+	status, receiverPartialSig, err := secp256k1.CommitmentParse(context, receiverPartialSigBytes)
+	if !status || err != nil {
+		return nil, errors.Wrap(err, "cannot parse receiverPartialSigBytes")
+	}
+
+	status, publicReceiverPartialSig, err := secp256k1.CommitmentToPublicKey(context, receiverPartialSig)
+	if !status || err != nil {
+		return nil, errors.Wrapf(err, "cannot create publicReceiverPartialSig")
+	}
+
+	fmt.Println(schnorrSig)
+	fmt.Println(publicReceiverPartialSig)
 
 	tx := core.Transaction{}
 
@@ -324,6 +411,20 @@ func stringToPubKey(context *secp256k1.Context, s string) (*secp256k1.PublicKey,
 	return pk, nil
 }
 
+func stringToPubKeyBytes(context *secp256k1.Context, s string) ([]byte, error) {
+	pk, err := stringToPubKey(context, s)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot convert string to PubKey")
+	}
+
+	res, bytes, err := secp256k1.EcPubkeySerialize(context, pk, compressedPubKeyFlag)
+	if res != 1 || err != nil {
+		return nil, errors.Wrapf(err, "cannot serialize PubKey")
+	}
+
+	return bytes, nil
+}
+
 func sumPubKeysToBytes(context *secp256k1.Context, pubKeys []*secp256k1.PublicKey) ([]byte, error) {
 	res, sumPubKeys, err := secp256k1.EcPubkeyCombine(context, pubKeys)
 	if res != 1 || err != nil {
@@ -338,25 +439,24 @@ func sumPubKeysToBytes(context *secp256k1.Context, pubKeys []*secp256k1.PublicKe
 	return sumPubKeysBytes, nil
 }
 
-func schnorrChallenge(context *secp256k1.Context, msg []byte, publicBlindExcess *secp256k1.PublicKey, publicNonce *secp256k1.PublicKey, participantData []libwallet.ParticipantData) ([]byte, error) {
-	senderData := participantData[0]
+//senderPublicBlindExcess, err := stringToPubKey(context, senderPublicBlindExcess)
+//if err != nil {
+//return nil, errors.Wrapf(err, "cannot get senderPublicBlindExcess")
+//}
 
-	senderPublicBlindExcess, err := stringToPubKey(context, senderData.PublicBlindExcess)
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot get senderPublicBlindExcess")
-	}
+//senderPublicNonce, err := stringToPubKey(context, senderData.PublicNonce)
+//if err != nil {
+//return nil, errors.Wrapf(err, "cannot get senderPublicNonce")
+//}
 
-	senderPublicNonce, err := stringToPubKey(context, senderData.PublicNonce)
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot get senderPublicNonce")
-	}
+func schnorrChallenge(context *secp256k1.Context, msg []byte, senderPublicBlindExcess *secp256k1.PublicKey, senderPublicNonce *secp256k1.PublicKey, receiverPublicBlindExcess *secp256k1.PublicKey, receiverPublicNonce *secp256k1.PublicKey) ([]byte, error) {
 
-	sumPublicBlindsBytes, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicBlindExcess, publicBlindExcess})
+	sumPublicBlindsBytes, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicBlindExcess, receiverPublicBlindExcess})
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot get sumPublicBlindsBytes")
 	}
 
-	sumPublicNoncesBytes, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicNonce, publicNonce})
+	sumPublicNoncesBytes, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot get sumPublicNoncesBytes")
 	}
