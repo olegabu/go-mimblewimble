@@ -14,6 +14,8 @@ import (
 
 const compressedPubKeyFlag = (1 << 1) | (1 << 8)
 
+var seed = [32]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+
 type WalletOutput struct {
 	core.Output
 	Blind [32]byte
@@ -206,7 +208,7 @@ func CreateResponse(slateBytes []byte) ([]byte, error) {
 	}
 
 	// this seed is not used, we pass it to satisfy the underlying C function
-	seed, _ := random()
+	//seed, _ := random()
 
 	// calculate receiver's partial Schnorr signature
 
@@ -303,7 +305,7 @@ func CreateTransaction(slateBytes []byte, senderBlind []byte, senderNonce []byte
 	// calculate receiver's partial Schnorr signature
 
 	// this seed is not used, we pass it to satisfy the underlying C function
-	seed, _ := random()
+	//seed, _ := random()
 
 	senderPartialSigBytes, err := secp256k1.AggsigSignSingle(context, schnorrChallenge, senderBlind, senderNonce, nil, nil, nil, nil, seed[:])
 	if err != nil {
