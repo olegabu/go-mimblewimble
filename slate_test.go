@@ -39,4 +39,8 @@ func TestRound(t *testing.T) {
 	txBytes, err := CreateTransaction(slateResponseBytes, senderBlind, senderNonce)
 	assert.Nil(t, err)
 	fmt.Println(string(txBytes))
+
+	tx, err := ValidateTransaction(txBytes)
+	assert.Nil(t, err)
+	fmt.Println(tx)
 }

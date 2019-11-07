@@ -294,7 +294,7 @@ func CreateTransaction(slateBytes []byte, senderBlind []byte, senderNonce []byte
 		return nil, errors.Wrap(err, "cannot parse receiverPartialSig from hex")
 	}
 
-	status, err := secp256k1.AggsigVerifySingle(context, receiverPartialSigBytes, schnorrChallenge, nil, receiverPublicBlindExcess, receiverPublicBlindExcess, nil, false)
+	status, err := secp256k1.AggsigVerifySingle(context, receiverPartialSigBytes, schnorrChallenge, nil, receiverPublicBlindExcess, nil, nil, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot verify receiver partial signature")
 	}
@@ -342,7 +342,7 @@ func CreateTransaction(slateBytes []byte, senderBlind []byte, senderNonce []byte
 
 	tx := slate.Transaction
 
-	tx.Body.Kernels[0].ExcessSig = excessString
+	tx.Body.Kernels[0].Excess = excessString
 	tx.Body.Kernels[0].ExcessSig = excessSigString
 
 	txBytes, err := json.Marshal(tx)

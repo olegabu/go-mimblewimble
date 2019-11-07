@@ -73,7 +73,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 		msg,
 		nil,
 		publicKey,
-		publicKey,
+		nil,
 		nil,
 		false,
 	)
