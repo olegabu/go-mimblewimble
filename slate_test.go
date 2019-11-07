@@ -28,7 +28,7 @@ func TestRound(t *testing.T) {
 		Value:  inputValue,
 	}}
 
-	slateBytes, err := CreateSlate(amount, inputs)
+	slateBytes, senderBlind, senderNonce, err := CreateSlate(amount, inputs)
 	assert.Nil(t, err)
 	fmt.Println(string(slateBytes))
 
@@ -36,7 +36,7 @@ func TestRound(t *testing.T) {
 	assert.Nil(t, err)
 	fmt.Println(string(slateResponseBytes))
 
-	txBytes, err := CreateTransaction(slateResponseBytes)
+	txBytes, err := CreateTransaction(slateResponseBytes, senderBlind, senderNonce)
 	assert.Nil(t, err)
 	fmt.Println(string(txBytes))
 }
