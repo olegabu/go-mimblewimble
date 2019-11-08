@@ -28,15 +28,21 @@ func TestRound(t *testing.T) {
 		Value:  inputValue,
 	}}
 
-	slateBytes, senderBlind, senderNonce, err := CreateSlate(amount, inputs)
+	slateBytes, id, walletOutputBytes, walletSlateBytes, err := CreateSlate(amount, inputs)
 	assert.Nil(t, err)
+	fmt.Println(string(id))
 	fmt.Println(string(slateBytes))
+	fmt.Println(string(walletOutputBytes))
+	fmt.Println(string(walletSlateBytes))
 
-	slateResponseBytes, err := CreateResponse(slateBytes)
+	slateResponseBytes, id, walletOutputBytes, walletSlateBytes, err := CreateResponse(slateBytes)
 	assert.Nil(t, err)
+	fmt.Println(string(id))
 	fmt.Println(string(slateResponseBytes))
+	fmt.Println(string(walletOutputBytes))
+	fmt.Println(string(walletSlateBytes))
 
-	txBytes, err := CreateTransaction(slateResponseBytes, senderBlind, senderNonce)
+	txBytes, err := CreateTransaction(slateResponseBytes, walletSlateBytes)
 	assert.Nil(t, err)
 	fmt.Println(string(txBytes))
 
