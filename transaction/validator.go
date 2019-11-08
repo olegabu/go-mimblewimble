@@ -1,4 +1,4 @@
-package mw
+package transaction
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-func ValidateTransaction(txBytes []byte) (*core.Transaction, error) {
+func Validate(txBytes []byte) (*core.Transaction, error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot ContextCreate")
@@ -36,10 +36,10 @@ func ValidateTransaction(txBytes []byte) (*core.Transaction, error) {
 		return tx, errors.Wrap(err, "cannot validateCommitmentsSum")
 	}
 
-	err = validateBulletproofs(context, tx)
-	if err != nil {
-		return tx, errors.Wrap(err, "cannot validateBulletproofs")
-	}
+	//err = validateBulletproofs(context, tx)
+	//if err != nil {
+	//	return tx, errors.Wrap(err, "cannot validateBulletproofs")
+	//}
 
 	return tx, nil
 }
@@ -65,7 +65,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 		return errors.Wrap(err, "CommitmentToPublicKey failed")
 	}
 
-	msg := kernelSignatureMessage(tx.Body.Kernels[0])
+	msg := KernelSignatureMessage(tx.Body.Kernels[0])
 
 	status, err = secp256k1.AggsigVerifySingle(
 		context,
@@ -87,7 +87,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 // msg = hash(features)                       for coinbase kernels
 //       hash(features || fee)                for plain kernels
 //       hash(features || fee || lock_height) for height locked kernels
-func kernelSignatureMessage(kernel core.TxKernel) []byte {
+func KernelSignatureMessage(kernel core.TxKernel) []byte {
 	featuresBytes := []byte{byte(kernel.Features)}
 	feeBytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(feeBytes, uint64(kernel.Fee))
