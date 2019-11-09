@@ -128,12 +128,14 @@ func CreateSlate(amount uint64, walletInputs []Output) (slateBytes []byte, walle
 		Output: changeOutput,
 		Blind:  changeBlind,
 		Value:  change,
+		Status: New,
 	}
 
 	walletSlate = Slate{
 		Slate:           *slate,
 		SumSenderBlinds: sumBlinds,
 		Nonce:           nonce,
+		Status:          Sent,
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -244,11 +246,13 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 		Output: output,
 		Blind:  blind,
 		Value:  value,
+		Status: New,
 	}
 
 	walletSlate = Slate{
-		Slate: slate,
-		Nonce: nonce,
+		Slate:  slate,
+		Nonce:  nonce,
+		Status: Sent,
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -374,6 +378,7 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 	walletTx := Transaction{
 		Transaction: tx,
 		ID:          slate.ID,
+		Status:      Unconfirmed,
 	}
 
 	return txBytes, walletTx, nil

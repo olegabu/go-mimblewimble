@@ -14,7 +14,7 @@ func TestRound(t *testing.T) {
 
 	defer secp256k1.ContextDestroy(context)
 
-	blind, err := random()
+	blind, err := secret()
 	assert.Nil(t, err)
 
 	inputValue := uint64(40)
@@ -23,7 +23,7 @@ func TestRound(t *testing.T) {
 	output, blind, err := output(context, inputValue)
 	assert.Nil(t, err)
 
-	inputs := []Output{Output{
+	inputs := []Output{{
 		Output: output,
 		Blind:  blind,
 		Value:  inputValue,

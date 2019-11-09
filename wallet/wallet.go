@@ -5,52 +5,78 @@ import (
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
+	"github.com/olegabu/go-secp256k1-zkp"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"os"
+	"strconv"
 )
 
 type Output struct {
 	core.Output
-	Blind [32]byte
-	Value uint64
+	Blind  [32]byte
+	Value  uint64
+	Status OutputStatus
 }
+
+type OutputStatus int
+
+const (
+	New = iota
+	Valid
+	Locked
+	Spent
+)
 
 type Slate struct {
 	libwallet.Slate
 	SumSenderBlinds [32]byte
 	Nonce           [32]byte
+	Status          SlateStatus
 }
+
+type SlateStatus int
+
+const (
+	Sent = iota
+	Responded
+	Finalized
+)
 
 type Transaction struct {
 	core.Transaction
-	ID uuid.UUID
+	ID     uuid.UUID
+	Status TransactionStatus
 }
+
+type TransactionStatus int
+
+const (
+	Unconfirmed = iota
+	Confirmed
+)
 
 type Database interface {
 	PutSlate(slate Slate) error
 	PutTransaction(tx Transaction) error
 	PutOutput(output Output) error
-
 	GetSlate(id []byte) (slate Slate, err error)
-	GetTransaction(id []byte) (tx Output, err error)
-	ListTransactions() (listTx []core.Transaction, err error)
-	ListOutputs() (listSlate []Slate, err error)
-	GetEnough(amount uint64) (outputs []Output, err error)
+	ListSlates() (slates []Slate, err error)
+	ListTransactions() (transactions []Transaction, err error)
+	ListOutputs() (outputs []Output, err error)
+	GetInputs(amount uint64) (outputs []Output, err error)
 }
 
-type Wallet struct {
-	db Database
-}
-
-func (t *Wallet) Send(amount uint64) (slateBytes []byte, err error) {
-	enoughInputs, err := t.db.GetEnough(amount)
+func Send(amount uint64) (slateBytes []byte, err error) {
+	walletInputs, err := Db.GetInputs(amount)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetEnough")
+		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
 	var sumInputValues uint64
 	inputs := make([]Output, 0)
 
-	for _, input := range enoughInputs {
+	for _, input := range walletInputs {
 		sumInputValues += input.Value
 
 		inputs = append(inputs, input)
@@ -65,12 +91,12 @@ func (t *Wallet) Send(amount uint64) (slateBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
 
-	err = t.db.PutOutput(changeOutput)
+	err = Db.PutOutput(changeOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
-	err = t.db.PutSlate(slate)
+	err = Db.PutSlate(slate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
 	}
@@ -78,18 +104,18 @@ func (t *Wallet) Send(amount uint64) (slateBytes []byte, err error) {
 	return slateBytes, nil
 }
 
-func (t *Wallet) Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
+func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 	responseSlateBytes, receiverOutput, slate, err := CreateResponse(slateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateResponse")
 	}
 
-	err = t.db.PutOutput(receiverOutput)
+	err = Db.PutOutput(receiverOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
-	err = t.db.PutSlate(slate)
+	err = Db.PutSlate(slate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
 	}
@@ -97,7 +123,7 @@ func (t *Wallet) Receive(slateBytes []byte) (responseSlateBytes []byte, err erro
 	return responseSlateBytes, nil
 }
 
-func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
+func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 	responseSlate := Slate{}
 
 	err = json.Unmarshal(responseSlateBytes, &responseSlate)
@@ -107,7 +133,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 
 	id, _ := responseSlate.ID.MarshalText()
 
-	senderSlate, err := t.db.GetSlate(id)
+	senderSlate, err := Db.GetSlate(id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
@@ -117,10 +143,97 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 		return nil, errors.Wrap(err, "cannot CreateTransaction")
 	}
 
-	err = t.db.PutTransaction(tx)
+	err = Db.PutTransaction(tx)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutTransaction")
 	}
 
 	return txBytes, nil
+}
+
+func Issue(value uint64) error {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		return errors.Wrap(err, "cannot ContextCreate")
+	}
+
+	defer secp256k1.ContextDestroy(context)
+
+	output, blind, err := output(context, value)
+	if err != nil {
+		return errors.Wrap(err, "cannot create output")
+	}
+
+	walletOutput := Output{
+		Output: output,
+		Blind:  blind,
+		Value:  value,
+		Status: Valid,
+	}
+
+	err = Db.PutOutput(walletOutput)
+	if err != nil {
+		return errors.Wrap(err, "cannot PutOutput")
+	}
+
+	return nil
+}
+
+func Info() error {
+	outputs, err := Db.ListOutputs()
+	if err != nil {
+		return errors.Wrap(err, "cannot ListOutputs")
+	}
+	outputTable := tablewriter.NewWriter(os.Stdout)
+	outputTable.SetHeader([]string{"value", "status", "features", "commit"})
+	outputTable.SetCaption(true, "Outputs")
+	for _, output := range outputs {
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), strconv.Itoa(int(output.Status)), strconv.Itoa(int(output.Features)), output.Commit})
+	}
+	outputTable.Render()
+	print("\n")
+
+	slates, err := Db.ListSlates()
+	if err != nil {
+		return errors.Wrap(err, "cannot ListSlates")
+	}
+	slateTable := tablewriter.NewWriter(os.Stdout)
+	slateTable.SetHeader([]string{"id", "status", "amount", "in/out", "features", "commit"})
+	slateTable.SetCaption(true, "Slates")
+	for _, slate := range slates {
+		id, _ := slate.ID.MarshalText()
+		for iInput, input := range slate.Transaction.Body.Inputs {
+			slateTable.Append([]string{string(id), strconv.Itoa(int(slate.Status)), strconv.Itoa(int(slate.Amount)), "input " + strconv.Itoa(iInput), strconv.Itoa(int(input.Features)), input.Commit})
+		}
+		for iOutput, output := range slate.Transaction.Body.Outputs {
+			slateTable.Append([]string{string(id), strconv.Itoa(int(slate.Status)), strconv.Itoa(int(slate.Amount)), "output " + strconv.Itoa(iOutput), strconv.Itoa(int(output.Features)), output.Commit})
+		}
+	}
+	slateTable.SetAutoMergeCells(true)
+	//slateTable.SetRowLine(true)
+	slateTable.Render()
+	print("\n")
+
+	transactions, err := Db.ListTransactions()
+	if err != nil {
+		return errors.Wrap(err, "cannot ListTransactions")
+	}
+	transactionTable := tablewriter.NewWriter(os.Stdout)
+	transactionTable.SetHeader([]string{"id", "status", "in/out", "features", "commit"})
+	transactionTable.SetCaption(true, "Transactions")
+	for _, tx := range transactions {
+		id, _ := tx.ID.MarshalText()
+		for iInput, input := range tx.Body.Inputs {
+			transactionTable.Append([]string{string(id), strconv.Itoa(int(tx.Status)), "input " + strconv.Itoa(iInput), strconv.Itoa(int(input.Features)), input.Commit})
+		}
+		for iOutput, output := range tx.Body.Outputs {
+			transactionTable.Append([]string{string(id), strconv.Itoa(int(tx.Status)), "output " + strconv.Itoa(iOutput), strconv.Itoa(int(output.Features)), output.Commit})
+		}
+	}
+	transactionTable.SetAutoMergeCells(true)
+	//table.SetRowLine(true)
+	transactionTable.Render()
+	print("\n")
+
+	return nil
 }
