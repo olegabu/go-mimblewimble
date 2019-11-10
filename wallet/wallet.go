@@ -110,11 +110,11 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
-	slate.Status = Responded
-	err = Db.PutSlate(slate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
-	}
+	//slate.Status = Responded
+	//err = Db.PutSlate(slate)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "cannot PutSlate")
+	//}
 
 	tx := Transaction{
 		Transaction: slate.Transaction,
