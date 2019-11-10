@@ -137,7 +137,7 @@ func CreateSlate(amount uint64, change uint64, walletInputs []Output) (slateByte
 	walletSlate = Slate{
 		Slate:           *slate,
 		SumSenderBlinds: sumBlinds,
-		Nonce:           nonce,
+		SenderNonce:     nonce,
 		Status:          Sent,
 	}
 
@@ -185,7 +185,7 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 		return nil, Output{}, Slate{}, errors.Wrap(err, "cannot create publicBlindExcessString")
 	}
 
-	// choose sender nonce and calculate its public key
+	// choose receiver nonce and calculate its public key
 
 	nonce, err := secret()
 	if err != nil {
@@ -206,7 +206,7 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 
 	msg := transaction.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
-	// parse out sender public blinds and nonces
+	// parse out sender public blind and public nonce
 
 	senderPublicBlindExcess, err := stringToPubKey(context, slate.ParticipantData[0].PublicBlindExcess)
 	if err != nil {
@@ -253,9 +253,9 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 	}
 
 	walletSlate = Slate{
-		Slate:  slate,
-		Nonce:  nonce,
-		Status: Sent,
+		Slate:         slate,
+		ReceiverNonce: nonce,
+		Status:        Sent,
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -282,7 +282,7 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 	}
 
 	sumSenderBlinds := walletSlate.SumSenderBlinds[:]
-	senderNonce := walletSlate.Nonce[:]
+	senderNonce := walletSlate.SenderNonce[:]
 
 	// parse out message to use as part of the Schnorr challenge
 
@@ -290,6 +290,10 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 
 	// parse out public blinds and nonces for both sender and receiver from the slate
 	//TODO should the sender trust its public keys in receiver response or use its own, remembered from construction of the slate?
+
+	if len(slate.ParticipantData) != 2 {
+		return nil, Transaction{}, errors.New("missing entries in ParticipantData")
+	}
 
 	senderPublicBlindExcess, err := stringToPubKey(context, slate.ParticipantData[0].PublicBlindExcess)
 	if err != nil {

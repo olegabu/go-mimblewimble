@@ -31,7 +31,8 @@ const (
 type Slate struct {
 	libwallet.Slate
 	SumSenderBlinds [32]byte
-	Nonce           [32]byte
+	SenderNonce     [32]byte
+	ReceiverNonce   [32]byte
 	Status          SlateStatus
 }
 
@@ -68,6 +69,7 @@ type Database interface {
 	ListOutputs() (outputs []Output, err error)
 	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
 	Confirm(transactionID []byte) error
+	Close()
 }
 
 func Send(amount uint64) (slateBytes []byte, err error) {
@@ -88,6 +90,7 @@ func Send(amount uint64) (slateBytes []byte, err error) {
 		}
 	}
 
+	slate.Status = Sent
 	err = Db.PutSlate(slate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
@@ -107,6 +110,7 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
+	slate.Status = Responded
 	err = Db.PutSlate(slate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
@@ -243,4 +247,17 @@ func Info() error {
 
 func Confirm(transactionID []byte) error {
 	return Db.Confirm(transactionID)
+}
+
+func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
+	slate := Slate{}
+	err = json.Unmarshal(slateBytes, &slate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot unmarshal slate from json")
+	}
+	id, err := slate.ID.MarshalText()
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot marshal from uuid")
+	}
+	return id, nil
 }

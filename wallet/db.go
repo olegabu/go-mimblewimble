@@ -27,14 +27,14 @@ func init() {
 		log.Fatal("cannot init leveldb:", err)
 	}
 
-	/*defer func() {
-		err = ldb.Close()
-		if err != nil {
-			log.Fatal("cannot close leveldb:", err)
-		}
-	}()*/
-
 	Db = &leveldbDatabase{db: ldb}
+}
+
+func (t *leveldbDatabase) Close() {
+	err := t.db.Close()
+	if err != nil {
+		log.Fatal("cannot close leveldb:", err)
+	}
 }
 
 func (t *leveldbDatabase) PutSlate(slate Slate) error {

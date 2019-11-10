@@ -45,6 +45,10 @@ func Validate(txBytes []byte) (*core.Transaction, error) {
 }
 
 func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
+	if len(tx.Body.Kernels) < 1 {
+		return errors.New("no entries in Kernels")
+	}
+
 	excessSigBytes, err := hex.DecodeString(tx.Body.Kernels[0].ExcessSig)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode ExcessSig")
