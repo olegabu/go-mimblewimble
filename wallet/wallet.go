@@ -64,36 +64,25 @@ type Database interface {
 	ListSlates() (slates []Slate, err error)
 	ListTransactions() (transactions []Transaction, err error)
 	ListOutputs() (outputs []Output, err error)
-	GetInputs(amount uint64) (outputs []Output, err error)
+	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
 }
 
 func Send(amount uint64) (slateBytes []byte, err error) {
-	walletInputs, err := Db.GetInputs(amount)
+	inputs, change, err := Db.GetInputs(amount)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	var sumInputValues uint64
-	inputs := make([]Output, 0)
-
-	for _, input := range walletInputs {
-		sumInputValues += input.Value
-
-		inputs = append(inputs, input)
-
-		if sumInputValues >= amount {
-			break
-		}
-	}
-
-	slateBytes, changeOutput, slate, err := CreateSlate(amount, inputs)
+	slateBytes, changeOutput, slate, err := CreateSlate(amount, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
 
-	err = Db.PutOutput(changeOutput)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutOutput")
+	if change > 0 {
+		err = Db.PutOutput(changeOutput)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
 	}
 
 	err = Db.PutSlate(slate)
@@ -159,7 +148,7 @@ func Issue(value uint64) error {
 
 	defer secp256k1.ContextDestroy(context)
 
-	output, blind, err := output(context, value)
+	output, blind, err := output(context, value, core.CoinbaseOutput)
 	if err != nil {
 		return errors.Wrap(err, "cannot create output")
 	}

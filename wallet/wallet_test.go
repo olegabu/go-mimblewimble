@@ -21,7 +21,7 @@ func TestIssue(t *testing.T) {
 }
 
 func TestSend(t *testing.T) {
-	slateBytes, err := Send(7)
+	slateBytes, err := Send(6)
 	assert.Nil(t, err)
 	fmt.Println(string(slateBytes))
 }

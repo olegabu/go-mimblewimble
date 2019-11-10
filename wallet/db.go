@@ -5,7 +5,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	"golang.org/x/crypto/blake2b"
 	"log"
 	"os/user"
 	"sort"
@@ -86,11 +85,7 @@ func (t *leveldbDatabase) PutOutput(output Output) error {
 		return errors.Wrap(err, "cannot marshal output into json")
 	}
 
-	hash, _ := blake2b.New256(nil)
-	hash.Write(outputBytes)
-
-	id := hash.Sum(nil)
-
+	id := []byte(output.Commit)
 	id = append([]byte("output"), id...)
 
 	err = t.db.Put(id, outputBytes, nil)
@@ -119,32 +114,63 @@ func (t *leveldbDatabase) GetSlate(id []byte) (slate Slate, err error) {
 	return slate, nil
 }
 
-func (t *leveldbDatabase) GetInputs(amount uint64) (outputs []Output, err error) {
+func (t *leveldbDatabase) GetInputs(amount uint64) (inputs []Output, change uint64, err error) {
+	// collect valid outputs whose amount is less or equal to the amount to send
+
+	outputs := make([]Output, 0)
+
 	iter := t.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
 	for iter.Next() {
 		output := Output{}
 		err = json.Unmarshal(iter.Value(), &output)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot unmarshal output in iterator")
+			return nil, 0, errors.Wrap(err, "cannot unmarshal output in iterator")
 		}
 		if output.Status == Valid {
-			output.Status = Locked
 			outputs = append(outputs, output)
 		}
 	}
 
-	for _, output := range outputs {
-		err = Db.PutOutput(output)
-		if err != nil {
-			return nil, errors.Wrap(err, "cannot update output")
-		}
-	}
+	// sort outputs increasing by value
 
 	sort.Slice(outputs, func(i, j int) bool {
 		return outputs[i].Value < outputs[j].Value
 	})
 
-	return outputs, nil
+	// loop thru outputs and collect into inputs only enough to cover the amount
+
+	inputs = make([]Output, 0)
+
+	var sumValues uint64
+
+	for _, output := range outputs {
+		sumValues += output.Value
+		inputs = append(inputs, output)
+
+		if sumValues >= amount {
+			break
+		}
+	}
+
+	// calculate value of change output
+
+	if sumValues < amount {
+		return nil, 0, errors.New("sum of sender input values is less than the amount to send")
+	}
+
+	change = sumValues - amount
+
+	// lock outputs as their are inputs now
+
+	for _, input := range inputs {
+		input.Status = Locked
+		err = Db.PutOutput(input)
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "cannot lock input")
+		}
+	}
+
+	return inputs, change, nil
 }
 
 func (t *leveldbDatabase) ListSlates() (slates []Slate, err error) {

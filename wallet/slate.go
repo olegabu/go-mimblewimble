@@ -17,7 +17,7 @@ const compressedPubKeyFlag = (1 << 1) | (1 << 8)
 
 var dummyseed = [32]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-func CreateSlate(amount uint64, walletInputs []Output) (slateBytes []byte, walletOutput Output, walletSlate Slate, err error) {
+func CreateSlate(amount uint64, change uint64, walletInputs []Output) (slateBytes []byte, walletOutput Output, walletSlate Slate, err error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return nil, Output{}, Slate{}, errors.Wrap(err, "cannot ContextCreate")
@@ -27,13 +27,10 @@ func CreateSlate(amount uint64, walletInputs []Output) (slateBytes []byte, walle
 
 	// loop thru wallet inputs to collect slate inputs, sum their values, collect input blinding factors as negative to add them to positive change output's blind
 
-	var sumInputValues uint64
 	negBlinds := make([][32]byte, 0)
 	inputs := make([]core.Input, 0)
 
 	for _, walletInput := range walletInputs {
-		sumInputValues += walletInput.Value
-
 		negBlinds = append(negBlinds, walletInput.Blind)
 
 		inputs = append(inputs, core.Input{
@@ -42,18 +39,16 @@ func CreateSlate(amount uint64, walletInputs []Output) (slateBytes []byte, walle
 		})
 	}
 
-	// calculate value of change output
-
-	change := sumInputValues - amount
-	if change < 0 {
-		return nil, Output{}, Slate{}, errors.New("sum of sender input values is less than the amount to send")
-	}
-
 	// create change output and remember its blinding factor
 
-	changeOutput, changeBlind, err := output(context, change)
-	if err != nil {
-		return nil, Output{}, Slate{}, errors.Wrap(err, "cannot create changeOutput")
+	var changeOutput core.Output
+	var changeBlind [32]byte
+
+	if change > 0 {
+		changeOutput, changeBlind, err = output(context, change, core.PlainOutput)
+		if err != nil {
+			return nil, Output{}, Slate{}, errors.Wrap(err, "cannot create changeOutput")
+		}
 	}
 
 	// combine into one slice for summation: input (negative) and output (positive, just one: change) blinding factors
@@ -94,6 +89,12 @@ func CreateSlate(amount uint64, walletInputs []Output) (slateBytes []byte, walle
 
 	//TODO calculate transaction offset
 
+	outputs := make([]core.Output, 0, 1)
+
+	if change > 0 {
+		outputs = append(outputs, changeOutput)
+	}
+
 	slate := &libwallet.Slate{
 		VersionInfo: libwallet.VersionCompatInfo{
 			Version:            2,
@@ -106,7 +107,7 @@ func CreateSlate(amount uint64, walletInputs []Output) (slateBytes []byte, walle
 			Offset: "",
 			Body: core.TransactionBody{
 				Inputs:  inputs,
-				Outputs: []core.Output{changeOutput},
+				Outputs: outputs,
 				Kernels: make([]core.TxKernel, 1),
 			},
 		},
@@ -124,11 +125,13 @@ func CreateSlate(amount uint64, walletInputs []Output) (slateBytes []byte, walle
 		}},
 	}
 
-	walletOutput = Output{
-		Output: changeOutput,
-		Blind:  changeBlind,
-		Value:  change,
-		Status: New,
+	if change > 0 {
+		walletOutput = Output{
+			Output: changeOutput,
+			Blind:  changeBlind,
+			Value:  change,
+			Status: New,
+		}
 	}
 
 	walletSlate = Slate{
@@ -165,7 +168,7 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 
 	value := uint64(slate.Amount)
 
-	output, blind, err := output(context, value)
+	output, blind, err := output(context, value, core.PlainOutput)
 	if err != nil {
 		return nil, Output{}, Slate{}, errors.Wrap(err, "cannot create receiver output")
 	}
@@ -384,7 +387,7 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 	return txBytes, walletTx, nil
 }
 
-func output(context *secp256k1.Context, value uint64) (core.Output, [32]byte, error) {
+func output(context *secp256k1.Context, value uint64, features core.OutputFeatures) (core.Output, [32]byte, error) {
 	blind, err := secret()
 	if err != nil {
 		return core.Output{}, blind, errors.Wrap(err, "cannot get secret for blind")
@@ -398,7 +401,7 @@ func output(context *secp256k1.Context, value uint64) (core.Output, [32]byte, er
 	//TODO create bullet proof to value
 
 	output := core.Output{
-		Features: core.PlainOutput,
+		Features: features,
 		Commit:   commitment.Hex(),
 		Proof:    "",
 	}
