@@ -31,22 +31,17 @@ func TestRound(t *testing.T) {
 		Value:  inputValue,
 	}}
 
-	slateBytes, walletOutput, walletSlate, err := CreateSlate(amount, change, inputs)
+	slateBytes, _, senderWalletSlate, err := CreateSlate(amount, change, inputs)
 	assert.Nil(t, err)
 	fmt.Println("send " + string(slateBytes))
-	fmt.Println(walletOutput)
-	fmt.Println(walletSlate)
 
-	responseSlateBytes, walletOutput, walletSlate, err := CreateResponse(slateBytes)
+	responseSlateBytes, _, _, err := CreateResponse(slateBytes)
 	assert.Nil(t, err)
 	fmt.Println("resp " + string(responseSlateBytes))
-	fmt.Println(walletOutput)
-	fmt.Println(walletSlate)
 
-	txBytes, walletTx, err := CreateTransaction(responseSlateBytes, walletSlate)
+	txBytes, _, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
 	assert.Nil(t, err)
 	fmt.Println("tx   " + string(txBytes))
-	fmt.Println(walletTx)
 
 	tx, err := transaction.Validate(txBytes)
 	assert.Nil(t, err)
