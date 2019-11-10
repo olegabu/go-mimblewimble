@@ -61,10 +61,13 @@ type Database interface {
 	PutTransaction(tx Transaction) error
 	PutOutput(output Output) error
 	GetSlate(id []byte) (slate Slate, err error)
+	GetTransaction(id []byte) (transaction Transaction, err error)
+	GetOutput(id []byte) (output Output, err error)
 	ListSlates() (slates []Slate, err error)
 	ListTransactions() (transactions []Transaction, err error)
 	ListOutputs() (outputs []Output, err error)
 	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
+	Confirm(transactionID []byte) error
 }
 
 func Send(amount uint64) (slateBytes []byte, err error) {
@@ -107,6 +110,17 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 	err = Db.PutSlate(slate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	tx := Transaction{
+		Transaction: slate.Transaction,
+		ID:          slate.ID,
+		Status:      Unconfirmed,
+	}
+
+	err = Db.PutTransaction(tx)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutTransaction")
 	}
 
 	return responseSlateBytes, nil
@@ -225,4 +239,8 @@ func Info() error {
 	print("\n")
 
 	return nil
+}
+
+func Confirm(transactionID []byte) error {
+	return Db.Confirm(transactionID)
 }

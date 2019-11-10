@@ -59,17 +59,21 @@ func (t *leveldbDatabase) PutSlate(slate Slate) error {
 }
 
 func (t *leveldbDatabase) PutTransaction(transaction Transaction) error {
+	transactionBytes, err := json.Marshal(transaction)
+	if err != nil {
+		return errors.Wrap(err, "cannot marshal transaction into json")
+	}
+
 	id, err := transaction.ID.MarshalText()
 	if err != nil {
 		return errors.Wrap(err, "cannot marshal ID into bytes")
 	}
 
-	id = append([]byte("transaction"), id...)
+	//hash, _ := blake2b.New256(nil)
+	//hash.Write(transactionBytes)
+	//id := hash.Sum(nil)
 
-	transactionBytes, err := json.Marshal(transaction)
-	if err != nil {
-		return errors.Wrap(err, "cannot marshal transaction into json")
-	}
+	id = append([]byte("transaction"), id...)
 
 	err = t.db.Put(id, transactionBytes, nil)
 	if err != nil {
@@ -237,4 +241,84 @@ func (t *leveldbDatabase) ListOutputs() (outputs []Output, err error) {
 	}
 
 	return outputs, nil
+}
+
+func (t *leveldbDatabase) GetTransaction(id []byte) (transaction Transaction, err error) {
+	id = append([]byte("transaction"), id...)
+
+	transactionBytes, err := t.db.Get(id, nil)
+	if err != nil {
+		return Transaction{}, errors.Wrap(err, "cannot Get transaction")
+	}
+
+	transaction = Transaction{}
+
+	err = json.Unmarshal(transactionBytes, &transaction)
+	if err != nil {
+		return Transaction{}, errors.Wrap(err, "cannot unmarshal transactionBytes")
+	}
+
+	return transaction, nil
+}
+
+func (t *leveldbDatabase) GetOutput(id []byte) (output Output, err error) {
+	id = append([]byte("output"), id...)
+
+	outputBytes, err := t.db.Get(id, nil)
+	if err != nil {
+		return Output{}, errors.Wrap(err, "cannot Get output")
+	}
+
+	output = Output{}
+
+	err = json.Unmarshal(outputBytes, &output)
+	if err != nil {
+		return Output{}, errors.Wrap(err, "cannot unmarshal outputBytes")
+	}
+
+	return output, nil
+}
+
+func (t *leveldbDatabase) Confirm(transactionID []byte) error {
+	tx, err := t.GetTransaction(transactionID)
+	if err != nil {
+		return errors.Wrap(err, "cannot GetTransaction")
+	}
+
+	tx.Status = Confirmed
+
+	err = t.PutTransaction(tx)
+	if err != nil {
+		return errors.Wrap(err, "cannot PutTransaction")
+	}
+
+	for _, o := range tx.Body.Inputs {
+		output, err := t.GetOutput([]byte(o.Commit))
+		if err != nil {
+			return errors.Wrap(err, "cannot GetOutput")
+		}
+
+		output.Status = Spent
+
+		err = t.PutOutput(output)
+		if err != nil {
+			return errors.Wrap(err, "cannot PutTransaction")
+		}
+	}
+
+	for _, o := range tx.Body.Outputs {
+		output, err := t.GetOutput([]byte(o.Commit))
+		if err != nil {
+			return errors.Wrap(err, "cannot GetOutput")
+		}
+
+		output.Status = Valid
+
+		err = t.PutOutput(output)
+		if err != nil {
+			return errors.Wrap(err, "cannot PutTransaction")
+		}
+	}
+
+	return nil
 }
