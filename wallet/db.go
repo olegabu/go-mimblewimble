@@ -130,7 +130,7 @@ func (t *leveldbDatabase) GetInputs(amount uint64) (inputs []Output, change uint
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "cannot unmarshal output in iterator")
 		}
-		if output.Status == Valid {
+		if output.Status == OutputConfirmed {
 			outputs = append(outputs, output)
 		}
 	}
@@ -167,7 +167,7 @@ func (t *leveldbDatabase) GetInputs(amount uint64) (inputs []Output, change uint
 	// lock outputs as their are inputs now
 
 	for _, input := range inputs {
-		input.Status = Locked
+		input.Status = OutputLocked
 		err = Db.PutOutput(input)
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "cannot lock input")
@@ -285,7 +285,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 		return errors.Wrap(err, "cannot GetTransaction")
 	}
 
-	tx.Status = Confirmed
+	tx.Status = TransactionConfirmed
 
 	err = t.PutTransaction(tx)
 	if err != nil {
@@ -298,7 +298,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 			return errors.Wrap(err, "cannot GetOutput")
 		}
 
-		output.Status = Spent
+		output.Status = OutputSpent
 
 		err = t.PutOutput(output)
 		if err != nil {
@@ -312,7 +312,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 			return errors.Wrap(err, "cannot GetOutput")
 		}
 
-		output.Status = Valid
+		output.Status = OutputConfirmed
 
 		err = t.PutOutput(output)
 		if err != nil {
