@@ -133,7 +133,7 @@ func Info() error {
 	outputTable.SetHeader([]string{"value", "status", "features", "commit"})
 	outputTable.SetCaption(true, "Outputs")
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Status.String(), strconv.Itoa(int(output.Features)), output.Commit})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Status.String(), output.Features.String(), output.Commit})
 	}
 	outputTable.Render()
 	print("\n")
@@ -148,10 +148,10 @@ func Info() error {
 	for _, slate := range slates {
 		id, _ := slate.ID.MarshalText()
 		for iInput, input := range slate.Transaction.Body.Inputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "input " + strconv.Itoa(iInput), strconv.Itoa(int(input.Features)), input.Commit})
+			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit})
 		}
 		for iOutput, output := range slate.Transaction.Body.Outputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "output " + strconv.Itoa(iOutput), strconv.Itoa(int(output.Features)), output.Commit})
+			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit})
 		}
 	}
 	slateTable.SetAutoMergeCells(true)
@@ -169,10 +169,10 @@ func Info() error {
 	for _, tx := range transactions {
 		id, _ := tx.ID.MarshalText()
 		for iInput, input := range tx.Body.Inputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), "input " + strconv.Itoa(iInput), strconv.Itoa(int(input.Features)), input.Commit})
+			transactionTable.Append([]string{string(id), tx.Status.String(), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit})
 		}
 		for iOutput, output := range tx.Body.Outputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), "output " + strconv.Itoa(iOutput), strconv.Itoa(int(output.Features)), output.Commit})
+			transactionTable.Append([]string{string(id), tx.Status.String(), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit})
 		}
 	}
 	transactionTable.SetAutoMergeCells(true)
