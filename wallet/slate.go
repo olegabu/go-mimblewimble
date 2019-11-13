@@ -4,11 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/transaction"
-	"github.com/olegabu/go-secp256k1-zkp"
+	secp256k1 "github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
 )
@@ -402,15 +403,29 @@ func output(context *secp256k1.Context, value uint64, features core.OutputFeatur
 		return core.Output{}, blind, errors.Wrap(err, "cannot create commitment to value")
 	}
 
-	//TODO create bullet proof to value
+	// bullet proof to value
+
+	nonce := blake256(dummyseed[:])
+
+	proof, err := secp256k1.BulletproofRangeproofProve(context, nil, nil, []uint64{value}, [][]byte{blind[:]}, &secp256k1.GeneratorH, nonce[:], nil, nil)
+	if err != nil {
+		return core.Output{}, blind, errors.Wrapf(err, "cannot create bullet proof")
+	}
 
 	output := core.Output{
 		Features: features,
 		Commit:   commitment.Hex(),
-		Proof:    "",
+		Proof:    hex.EncodeToString(proof),
 	}
 
 	return output, blind, nil
+}
+
+func blake256(data []byte) (digest []byte) {
+
+	hash, _ := blake2b.New256(nil)
+	hash.Write(data)
+	return hash.Sum(nil)
 }
 
 func random() ([32]byte, error) {

@@ -36,10 +36,10 @@ func Validate(txBytes []byte) (*core.Transaction, error) {
 		return tx, errors.Wrap(err, "cannot validateCommitmentsSum")
 	}
 
-	//err = validateBulletproofs(context, tx)
-	//if err != nil {
-	//	return tx, errors.Wrap(err, "cannot validateBulletproofs")
-	//}
+	err = validateBulletproofs(context, tx)
+	if err != nil {
+		return tx, errors.Wrap(err, "cannot validateBulletproofs")
+	}
 
 	return tx, nil
 }
