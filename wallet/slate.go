@@ -403,11 +403,12 @@ func output(context *secp256k1.Context, value uint64, features core.OutputFeatur
 		return core.Output{}, blind, errors.Wrap(err, "cannot create commitment to value")
 	}
 
-	// bullet proof to value
+	// create bullet proof to value
 
-	nonce := blake256(dummyseed[:])
+	// use dummy
+	dummynonce := blake256(dummyseed[:])
 
-	proof, err := secp256k1.BulletproofRangeproofProve(context, nil, nil, []uint64{value}, [][]byte{blind[:]}, &secp256k1.GeneratorH, nonce[:], nil, nil)
+	proof, err := secp256k1.BulletproofRangeproofProve(context, nil, nil, []uint64{value}, [][]byte{blind[:]}, &secp256k1.GeneratorH, dummynonce[:], nil, nil)
 	if err != nil {
 		return core.Output{}, blind, errors.Wrapf(err, "cannot create bullet proof")
 	}
