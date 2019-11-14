@@ -10,24 +10,25 @@ import (
 	"sort"
 )
 
-var Db Database
-
 type leveldbDatabase struct {
 	db *leveldb.DB
 }
 
-func init() {
+func NewDatabase() Database {
 	dir, err := homedir.Dir()
 	if err != nil {
 		panic("cannot get homedir")
 	}
 
-	ldb, err := leveldb.OpenFile(dir+"/.mw/wallet", nil)
+	dbFilename := dir + "/.mw/wallet"
+	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
-		log.Fatal("cannot init leveldb:", err)
+		log.Fatalf("cannot open leveldb at %v: %v", dbFilename, err)
 	}
 
-	Db = &leveldbDatabase{db: ldb}
+	var d Database = &leveldbDatabase{db: ldb}
+
+	return d
 }
 
 func (t *leveldbDatabase) Close() {
@@ -168,7 +169,7 @@ func (t *leveldbDatabase) GetInputs(amount uint64) (inputs []Output, change uint
 
 	for _, input := range inputs {
 		input.Status = OutputLocked
-		err = Db.PutOutput(input)
+		err = t.PutOutput(input)
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "cannot lock input")
 		}

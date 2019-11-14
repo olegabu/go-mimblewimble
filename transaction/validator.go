@@ -26,14 +26,16 @@ func Validate(txBytes []byte) (*core.Transaction, error) {
 		return nil, errors.Wrap(err, "cannot unmarshal json to Transaction")
 	}
 
-	err = validateSignature(context, tx)
-	if err != nil {
-		return tx, errors.Wrap(err, "cannot validateSignature")
-	}
+	if !IsIssue(tx) {
+		err = validateSignature(context, tx)
+		if err != nil {
+			return tx, errors.Wrap(err, "cannot validateSignature")
+		}
 
-	err = validateCommitmentsSum(context, tx)
-	if err != nil {
-		return tx, errors.Wrap(err, "cannot validateCommitmentsSum")
+		err = validateCommitmentsSum(context, tx)
+		if err != nil {
+			return tx, errors.Wrap(err, "cannot validateCommitmentsSum")
+		}
 	}
 
 	err = validateBulletproofs(context, tx)
@@ -42,6 +44,17 @@ func Validate(txBytes []byte) (*core.Transaction, error) {
 	}
 
 	return tx, nil
+}
+
+func IsIssue(tx *core.Transaction) bool {
+	allOutputsCoinbase := true
+	for _, output := range tx.Body.Outputs {
+		if output.Features != core.CoinbaseOutput {
+			allOutputsCoinbase = false
+			break
+		}
+	}
+	return allOutputsCoinbase && len(tx.Body.Inputs) == 0
 }
 
 func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {

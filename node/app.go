@@ -2,6 +2,7 @@ package node
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/blockcypher/libgrin/core"
 	_ "github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/transaction"
@@ -9,17 +10,22 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/libs/common"
+	"github.com/tendermint/tendermint/libs/log"
+	"os"
 	"strings"
 )
 
 type MWApplication struct {
 	db           *leveldb.DB
 	currentBatch *leveldb.Batch
+	logger       log.Logger
 }
 
 func NewMWApplication(db *leveldb.DB) *MWApplication {
 	return &MWApplication{
-		db: db,
+		db:     db,
+		logger: log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
 	}
 }
 
@@ -42,19 +48,21 @@ func (MWApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseE
 }
 
 func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *core.Transaction, err error) {
+	app.logger.Debug(string(txBytes))
+
 	tx, err = transaction.Validate(txBytes)
 	if err != nil {
 		return 1, tx, errors.Wrapf(err, "transaction is invalid")
 	}
 
 	for _, input := range tx.Body.Inputs {
-		_, err = app.db.Get([]byte(input.Commit), nil)
+		_, err = app.db.Get(outputKey(input.Commit), nil)
 		if err != nil {
 			return 1, tx, errors.Wrapf(err, "cannot get input %v", input)
 		}
 	}
 
-	return 0, tx, nil
+	return abcitypes.CodeTypeOK, tx, nil
 }
 
 func (app *MWApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
@@ -80,22 +88,21 @@ func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.Re
 	}
 
 	// delete spent inputs
-
 	for _, input := range tx.Body.Inputs {
-		_, err = app.db.Get([]byte(input.Commit), nil)
+		_, err = app.db.Get(outputKey(input.Commit), nil)
 		if err != nil {
 			return abcitypes.ResponseDeliverTx{Code: 1, Log: errors.Wrapf(err, "cannot get input %v", input).Error()}
 		}
-		app.currentBatch.Delete([]byte(input.Commit))
+		app.currentBatch.Delete(outputKey(input.Commit))
 	}
 
 	// create new outputs
-
 	for _, output := range tx.Body.Outputs {
-		app.currentBatch.Put([]byte(output.Commit), []byte(output.Commit))
+		outputBytes, _ := json.Marshal(output)
+		app.currentBatch.Put(outputKey(output.Commit), outputBytes)
 	}
 
-	return abcitypes.ResponseDeliverTx{Code: 0}
+	return abcitypes.ResponseDeliverTx{Code: code}
 }
 
 func (app *MWApplication) Commit() abcitypes.ResponseCommit {
@@ -108,6 +115,8 @@ func (app *MWApplication) Commit() abcitypes.ResponseCommit {
 }
 
 func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
+	app.logger.Debug(fmt.Sprintf("reqQuery %v", reqQuery))
+
 	resQuery.Key = []byte(reqQuery.Path)
 
 	paths := strings.Split(reqQuery.Path, "/")
@@ -120,6 +129,7 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 
 			iter := app.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
 			for iter.Next() {
+				//app.logger.Debug("iter", iter.Key(), iter.Value())
 				output := core.Output{}
 				_ = json.Unmarshal(iter.Value(), &output)
 				outputs = append(outputs, output)
@@ -141,9 +151,26 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 				resQuery.Value = outputBytes
 			}
 
-			resQuery.Value = []byte(paths[1])
+			resQuery.Value = outputBytes
 		}
 	}
 
 	return
+}
+
+func outputKey(commit string) []byte {
+	return append([]byte("output"), []byte(commit)...)
+}
+
+// see https://github.com/tendermint/tendermint/blob/60827f75623b92eff132dc0eff5b49d2025c591e/docs/spec/abci/abci.md#events
+// see https://github.com/tendermint/tendermint/blob/master/UPGRADING.md
+func transferEvent(tx core.Transaction) []abcitypes.Event {
+	return []abcitypes.Event{
+		{
+			Type: "transfer",
+			Attributes: common.KVPairs{
+				{Key: []byte("id"), Value: []byte("foo")},
+			},
+		},
+	}
 }

@@ -26,7 +26,10 @@ type Database interface {
 }
 
 func Send(amount uint64) (slateBytes []byte, err error) {
-	inputs, change, err := Db.GetInputs(amount)
+	db := NewDatabase()
+	defer db.Close()
+
+	inputs, change, err := db.GetInputs(amount)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
@@ -37,14 +40,14 @@ func Send(amount uint64) (slateBytes []byte, err error) {
 	}
 
 	if change > 0 {
-		err = Db.PutOutput(changeOutput)
+		err = db.PutOutput(changeOutput)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot PutOutput")
 		}
 	}
 
 	slate.Status = SlateSent
-	err = Db.PutSlate(slate)
+	err = db.PutSlate(slate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
 	}
@@ -53,18 +56,21 @@ func Send(amount uint64) (slateBytes []byte, err error) {
 }
 
 func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
+	db := NewDatabase()
+	defer db.Close()
+
 	responseSlateBytes, receiverOutput, slate, err := CreateResponse(slateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateResponse")
 	}
 
-	err = Db.PutOutput(receiverOutput)
+	err = db.PutOutput(receiverOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
 	//slate.Status = SlateResponded
-	//err = Db.PutSlate(slate)
+	//err = db.PutSlate(slate)
 	//if err != nil {
 	//	return nil, errors.Wrap(err, "cannot PutSlate")
 	//}
@@ -75,7 +81,7 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 		Status:      TransactionUnconfirmed,
 	}
 
-	err = Db.PutTransaction(tx)
+	err = db.PutTransaction(tx)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutTransaction")
 	}
@@ -84,6 +90,9 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 }
 
 func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
+	db := NewDatabase()
+	defer db.Close()
+
 	responseSlate := Slate{}
 
 	err = json.Unmarshal(responseSlateBytes, &responseSlate)
@@ -93,7 +102,7 @@ func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 
 	id, _ := responseSlate.ID.MarshalText()
 
-	senderSlate, err := Db.GetSlate(id)
+	senderSlate, err := db.GetSlate(id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
@@ -103,7 +112,7 @@ func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot CreateTransaction")
 	}
 
-	err = Db.PutTransaction(tx)
+	err = db.PutTransaction(tx)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutTransaction")
 	}
@@ -111,17 +120,20 @@ func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 	return txBytes, nil
 }
 
-func Issue(value uint64) error {
+func Issue(value uint64) (txBytes []byte, err error) {
+	db := NewDatabase()
+	defer db.Close()
+
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		return errors.Wrap(err, "cannot ContextCreate")
+		return nil, errors.Wrap(err, "cannot ContextCreate")
 	}
 
 	defer secp256k1.ContextDestroy(context)
 
 	output, blind, err := output(context, value, core.CoinbaseOutput)
 	if err != nil {
-		return errors.Wrap(err, "cannot create output")
+		return nil, errors.Wrap(err, "cannot create output")
 	}
 
 	walletOutput := Output{
@@ -131,16 +143,33 @@ func Issue(value uint64) error {
 		Status: OutputConfirmed,
 	}
 
-	err = Db.PutOutput(walletOutput)
+	err = db.PutOutput(walletOutput)
 	if err != nil {
-		return errors.Wrap(err, "cannot PutOutput")
+		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
-	return nil
+	tx := core.Transaction{
+		Offset: "",
+		Body: core.TransactionBody{
+			Inputs:  nil,
+			Outputs: []core.Output{output},
+			Kernels: nil,
+		},
+	}
+
+	txBytes, err = json.Marshal(tx)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot marshal tx to json")
+	}
+
+	return
 }
 
 func Info() error {
-	outputs, err := Db.ListOutputs()
+	db := NewDatabase()
+	defer db.Close()
+
+	outputs, err := db.ListOutputs()
 	if err != nil {
 		return errors.Wrap(err, "cannot ListOutputs")
 	}
@@ -153,7 +182,7 @@ func Info() error {
 	outputTable.Render()
 	print("\n")
 
-	slates, err := Db.ListSlates()
+	slates, err := db.ListSlates()
 	if err != nil {
 		return errors.Wrap(err, "cannot ListSlates")
 	}
@@ -174,7 +203,7 @@ func Info() error {
 	slateTable.Render()
 	print("\n")
 
-	transactions, err := Db.ListTransactions()
+	transactions, err := db.ListTransactions()
 	if err != nil {
 		return errors.Wrap(err, "cannot ListTransactions")
 	}
@@ -199,7 +228,10 @@ func Info() error {
 }
 
 func Confirm(transactionID []byte) error {
-	return Db.Confirm(transactionID)
+	db := NewDatabase()
+	defer db.Close()
+
+	return db.Confirm(transactionID)
 }
 
 func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {

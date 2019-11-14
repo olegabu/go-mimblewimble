@@ -39,9 +39,10 @@ func Start() error {
 		return errors.Wrap(err, "cannot get homedir")
 	}
 
-	db, err := leveldb.OpenFile(dir+"/.mw/state", nil)
+	dbFilename := dir + "/.mw/state"
+	db, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
-		return errors.Wrap(err, "cannot open leveldb")
+		return errors.Wrapf(err, "cannot open leveldb at %v", dbFilename)
 	}
 
 	defer func() {
