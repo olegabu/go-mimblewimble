@@ -1,127 +1,149 @@
 package node
 
 import (
-	"bytes"
-	"github.com/dgraph-io/badger"
+	"encoding/json"
+	"github.com/blockcypher/libgrin/core"
+	_ "github.com/blockcypher/libgrin/core"
+	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/pkg/errors"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"strings"
 )
 
-type KVStoreApplication struct {
-	db           *badger.DB
-	currentBatch *badger.Txn
+type MWApplication struct {
+	db           *leveldb.DB
+	currentBatch *leveldb.Batch
 }
 
-func NewKVStoreApplication(db *badger.DB) *KVStoreApplication {
-	return &KVStoreApplication{
+func NewMWApplication(db *leveldb.DB) *MWApplication {
+	return &MWApplication{
 		db: db,
 	}
 }
 
-var _ abcitypes.Application = (*KVStoreApplication)(nil)
+var _ abcitypes.Application = (*MWApplication)(nil)
 
-func (KVStoreApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
+func (MWApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
 	return abcitypes.ResponseInfo{}
 }
 
-func (KVStoreApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
+func (MWApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
 	return abcitypes.ResponseSetOption{}
 }
 
-func (KVStoreApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+func (MWApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
 	return abcitypes.ResponseInitChain{}
 }
 
-func (KVStoreApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
+func (MWApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
 	return abcitypes.ResponseEndBlock{}
 }
 
-func (app *KVStoreApplication) isValid(tx []byte) (code uint32) {
-	// check format
-	parts := bytes.Split(tx, []byte("="))
-	if len(parts) != 2 {
-		return 1
-	}
-
-	key, value := parts[0], parts[1]
-
-	// check if the same key=value already exists
-	err := app.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(key)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == nil {
-			return item.Value(func(val []byte) error {
-				if bytes.Equal(val, value) {
-					code = 2
-				}
-				return nil
-			})
-		}
-		return nil
-	})
+func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *core.Transaction, err error) {
+	tx, err = transaction.Validate(txBytes)
 	if err != nil {
-		panic(err)
+		return 1, tx, errors.Wrapf(err, "transaction is invalid")
 	}
 
-	return code
+	for _, input := range tx.Body.Inputs {
+		_, err = app.db.Get([]byte(input.Commit), nil)
+		if err != nil {
+			return 1, tx, errors.Wrapf(err, "cannot get input %v", input)
+		}
+	}
+
+	return 0, tx, nil
 }
 
-func (app *KVStoreApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	code := app.isValid(req.Tx)
-	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
+func (app *MWApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
+	code, _, err := app.isValid(req.Tx)
+	var log string
+	if err != nil {
+		log = err.Error()
+	} else {
+		log = "transaction is valid"
+	}
+	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1, Log: log}
 }
 
-func (app *KVStoreApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	app.currentBatch = app.db.NewTransaction(true)
+func (app *MWApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
+	app.currentBatch = new(leveldb.Batch)
 	return abcitypes.ResponseBeginBlock{}
 }
 
-func (app *KVStoreApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
-	code := app.isValid(req.Tx)
-	if code != 0 {
-		return abcitypes.ResponseDeliverTx{Code: code}
+func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
+	code, tx, err := app.isValid(req.Tx)
+	if err != nil {
+		return abcitypes.ResponseDeliverTx{Code: code, Log: err.Error()}
 	}
 
-	parts := bytes.Split(req.Tx, []byte("="))
-	key, value := parts[0], parts[1]
+	// delete spent inputs
 
-	err := app.currentBatch.Set(key, value)
-	if err != nil {
-		panic(err)
+	for _, input := range tx.Body.Inputs {
+		_, err = app.db.Get([]byte(input.Commit), nil)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: 1, Log: errors.Wrapf(err, "cannot get input %v", input).Error()}
+		}
+		app.currentBatch.Delete([]byte(input.Commit))
+	}
+
+	// create new outputs
+
+	for _, output := range tx.Body.Outputs {
+		app.currentBatch.Put([]byte(output.Commit), []byte(output.Commit))
 	}
 
 	return abcitypes.ResponseDeliverTx{Code: 0}
 }
 
-func (app *KVStoreApplication) Commit() abcitypes.ResponseCommit {
-	err := app.currentBatch.Commit()
+func (app *MWApplication) Commit() abcitypes.ResponseCommit {
+	err := app.db.Write(app.currentBatch, nil)
 	if err != nil {
 		panic(err)
 	}
+
 	return abcitypes.ResponseCommit{Data: []byte{}}
 }
 
-func (app *KVStoreApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
-	resQuery.Key = reqQuery.Data
-	err := app.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(reqQuery.Data)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
-		}
-		if err == badger.ErrKeyNotFound || item == nil {
-			resQuery.Log = "does not exist"
-		} else {
-			return item.Value(func(val []byte) error {
+func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
+	resQuery.Key = []byte(reqQuery.Path)
+
+	paths := strings.Split(reqQuery.Path, "/")
+
+	if paths[0] == "output" {
+		if len(paths) == 1 {
+			// return all outputs
+
+			outputs := make([]core.Output, 0)
+
+			iter := app.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
+			for iter.Next() {
+				output := core.Output{}
+				_ = json.Unmarshal(iter.Value(), &output)
+				outputs = append(outputs, output)
+			}
+			iter.Release()
+			_ = iter.Error()
+
+			resQuery.Value, _ = json.Marshal(outputs)
+		} else if len(paths) > 1 {
+			// return one output
+
+			keyBytes := []byte(paths[1])
+
+			outputBytes, err := app.db.Get(keyBytes, nil)
+			if err != nil {
+				resQuery.Log = "does not exist"
+			} else {
 				resQuery.Log = "exists"
-				resQuery.Value = val
-				return nil
-			})
+				resQuery.Value = outputBytes
+			}
+
+			resQuery.Value = []byte(paths[1])
 		}
-		return nil
-	})
-	if err != nil {
-		panic(err)
 	}
+
 	return
 }

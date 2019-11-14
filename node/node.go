@@ -2,12 +2,13 @@ package node
 
 import (
 	"flag"
+	"github.com/syndtr/goleveldb/leveldb"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 
-	"github.com/dgraph-io/badger"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
@@ -24,17 +25,33 @@ import (
 var configFile string
 
 func init() {
-	flag.StringVar(&configFile, "config", "/home/oleg/.tendermint/config/config.toml", "Path to config.toml")
+	dir, err := homedir.Dir()
+	if err != nil {
+		panic("cannot get homedir")
+	}
+
+	flag.StringVar(&configFile, "config", dir+"/.tendermint/config/config.toml", "Path to config.toml")
 }
 
 func Start() error {
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	dir, err := homedir.Dir()
 	if err != nil {
-		return errors.Wrap(err, "failed to open badger db")
+		return errors.Wrap(err, "cannot get homedir")
 	}
-	defer db.Close()
 
-	app := NewKVStoreApplication(db)
+	db, err := leveldb.OpenFile(dir+"/.mw/state", nil)
+	if err != nil {
+		return errors.Wrap(err, "cannot open leveldb")
+	}
+
+	defer func() {
+		err = db.Close()
+		if err != nil {
+			panic("cannot close leveldb: " + err.Error())
+		}
+	}()
+
+	app := NewMWApplication(db)
 
 	flag.Parse()
 

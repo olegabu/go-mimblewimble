@@ -10,6 +10,21 @@ import (
 	"strconv"
 )
 
+type Database interface {
+	PutSlate(slate Slate) error
+	PutTransaction(tx Transaction) error
+	PutOutput(output Output) error
+	GetSlate(id []byte) (slate Slate, err error)
+	GetTransaction(id []byte) (transaction Transaction, err error)
+	GetOutput(id []byte) (output Output, err error)
+	ListSlates() (slates []Slate, err error)
+	ListTransactions() (transactions []Transaction, err error)
+	ListOutputs() (outputs []Output, err error)
+	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
+	Confirm(transactionID []byte) error
+	Close()
+}
+
 func Send(amount uint64) (slateBytes []byte, err error) {
 	inputs, change, err := Db.GetInputs(amount)
 	if err != nil {
@@ -133,7 +148,7 @@ func Info() error {
 	outputTable.SetHeader([]string{"value", "status", "features", "commit"})
 	outputTable.SetCaption(true, "Outputs")
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Status.String(), output.Features.String(), output.Commit})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Status.String(), output.Features.String(), output.Commit[0:8]})
 	}
 	outputTable.Render()
 	print("\n")
@@ -148,10 +163,10 @@ func Info() error {
 	for _, slate := range slates {
 		id, _ := slate.ID.MarshalText()
 		for iInput, input := range slate.Transaction.Body.Inputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit})
+			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
 		}
 		for iOutput, output := range slate.Transaction.Body.Outputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit})
+			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
 	slateTable.SetAutoMergeCells(true)
@@ -169,10 +184,10 @@ func Info() error {
 	for _, tx := range transactions {
 		id, _ := tx.ID.MarshalText()
 		for iInput, input := range tx.Body.Inputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit})
+			transactionTable.Append([]string{string(id), tx.Status.String(), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
 		}
 		for iOutput, output := range tx.Body.Outputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit})
+			transactionTable.Append([]string{string(id), tx.Status.String(), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
 	transactionTable.SetAutoMergeCells(true)

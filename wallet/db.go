@@ -2,11 +2,11 @@ package wallet
 
 import (
 	"encoding/json"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
-	"os/user"
 	"sort"
 )
 
@@ -17,12 +17,12 @@ type leveldbDatabase struct {
 }
 
 func init() {
-	usr, err := user.Current()
+	dir, err := homedir.Dir()
 	if err != nil {
-		log.Fatal("cannot get current user for home dir:", err)
+		panic("cannot get homedir")
 	}
 
-	ldb, err := leveldb.OpenFile(usr.HomeDir+"/.mw/wallet", nil)
+	ldb, err := leveldb.OpenFile(dir+"/.mw/wallet", nil)
 	if err != nil {
 		log.Fatal("cannot init leveldb:", err)
 	}

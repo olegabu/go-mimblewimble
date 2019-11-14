@@ -90,18 +90,3 @@ func (t TransactionStatus) String() string {
 		return fmt.Sprintf("%d", int(t))
 	}
 }
-
-type Database interface {
-	PutSlate(slate Slate) error
-	PutTransaction(tx Transaction) error
-	PutOutput(output Output) error
-	GetSlate(id []byte) (slate Slate, err error)
-	GetTransaction(id []byte) (transaction Transaction, err error)
-	GetOutput(id []byte) (output Output, err error)
-	ListSlates() (slates []Slate, err error)
-	ListTransactions() (transactions []Transaction, err error)
-	ListOutputs() (outputs []Output, err error)
-	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
-	Confirm(transactionID []byte) error
-	Close()
-}

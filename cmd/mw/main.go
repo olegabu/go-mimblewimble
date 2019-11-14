@@ -180,42 +180,6 @@ func main() {
 		},
 	}
 
-	/*
-
-		func cmdKVStore(cmd *cobra.Command, args []string) error {
-			logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-
-			// Create the application - in memory or persisted to disk
-			var app types.Application
-			if flagPersist == "" {
-				app = kvstore.NewKVStoreApplication()
-			} else {
-				app = kvstore.NewPersistentKVStoreApplication(flagPersist)
-				app.(*kvstore.PersistentKVStoreApplication).SetLogger(logger.With("module", "kvstore"))
-			}
-
-			// Start the listener
-			srv, err := server.NewServer(flagAddress, flagAbci, app)
-			if err != nil {
-				return err
-			}
-			srv.SetLogger(logger.With("module", "abci-server"))
-			if err := srv.Start(); err != nil {
-				return err
-			}
-
-			// Stop upon receiving SIGTERM or CTRL-C.
-			cmn.TrapSignal(logger, func() {
-				// Cleanup
-				srv.Stop()
-			})
-
-			// Run forever.
-			select {}
-		}
-
-	*/
-
 	var rootCmd = &cobra.Command{
 		Use:          "mw",
 		Short:        "Wallet and validator for Mimblewimble",
