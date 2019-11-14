@@ -3,7 +3,7 @@
 ## Building
 
 ```bash
-go install ./cmd/mw
+go install ./...
 ```
 
 If you see an error showing the dependent C library was not found:
@@ -12,7 +12,7 @@ gcc: error: ../../go/pkg/mod/github.com/olegabu/go-secp256k1-zkp@v0.0.0-20191113
 ```
 You'll have to build it yourself in the directory where `go mod` put `go-secp256k1-zkp` package.
 ```bash
-cd $GOPATH/pkg/mod/github.com/olegabu/go-secp256k1-zkp@v0.0.0-20191113113909-cc0ed62ae4db/secp256k1-zkp
+cd $GOPATH/pkg/mod/github.com/olegabu/go-secp256k1-zkp@v0.0.0-20191113113909-cc0ed62ae4db/
 ```
 Fix file and dir permissions there.
 ```bash
