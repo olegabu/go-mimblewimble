@@ -150,11 +150,11 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
 			}
-			_, err = transaction.Validate(transactionBytes)
+			tx, err := transaction.Validate(transactionBytes)
 			if err != nil {
 				return errors.Wrap(err, "cannot transaction.Validate")
 			}
-			fmt.Printf("transaction is valid\n")
+			fmt.Printf("transaction %v is valid\n", tx.ID)
 			return nil
 		},
 	}

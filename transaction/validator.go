@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-func Validate(txBytes []byte) (*core.Transaction, error) {
+func Validate(txBytes []byte) (*Transaction, error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot ContextCreate")
@@ -19,31 +19,33 @@ func Validate(txBytes []byte) (*core.Transaction, error) {
 
 	defer secp256k1.ContextDestroy(context)
 
-	tx := &core.Transaction{}
+	identifiedTx := &Transaction{}
 
-	err = json.Unmarshal(txBytes, tx)
+	err = json.Unmarshal(txBytes, identifiedTx)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot unmarshal json to Transaction")
 	}
 
+	tx := &identifiedTx.Transaction
+
 	if !IsIssue(tx) {
 		err = validateSignature(context, tx)
 		if err != nil {
-			return tx, errors.Wrap(err, "cannot validateSignature")
+			return identifiedTx, errors.Wrap(err, "cannot validateSignature")
 		}
 
 		err = validateCommitmentsSum(context, tx)
 		if err != nil {
-			return tx, errors.Wrap(err, "cannot validateCommitmentsSum")
+			return identifiedTx, errors.Wrap(err, "cannot validateCommitmentsSum")
 		}
 	}
 
 	err = validateBulletproofs(context, tx)
 	if err != nil {
-		return tx, errors.Wrap(err, "cannot validateBulletproofs")
+		return identifiedTx, errors.Wrap(err, "cannot validateBulletproofs")
 	}
 
-	return tx, nil
+	return identifiedTx, nil
 }
 
 func IsIssue(tx *core.Transaction) bool {

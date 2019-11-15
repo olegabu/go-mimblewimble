@@ -378,15 +378,22 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 	tx.Body.Kernels[0].Excess = excessString
 	tx.Body.Kernels[0].ExcessSig = excessSigString
 
-	txBytes, err := json.Marshal(tx)
+	identifiedTx := transaction.Transaction{
+		Transaction: tx,
+		ID:          slate.ID,
+	}
+
+	txBytes, err := json.Marshal(identifiedTx)
 	if err != nil {
-		return nil, Transaction{}, errors.Wrap(err, "cannot marshal transaction to json")
+		return nil, Transaction{}, errors.Wrap(err, "cannot marshal identifiedTx to json")
 	}
 
 	walletTx := Transaction{
-		Transaction: tx,
-		ID:          slate.ID,
-		Status:      TransactionUnconfirmed,
+		Transaction: transaction.Transaction{
+			Transaction: slate.Transaction,
+			ID:          slate.ID,
+		},
+		Status: TransactionUnconfirmed,
 	}
 
 	return txBytes, walletTx, nil

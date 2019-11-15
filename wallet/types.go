@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
-	"github.com/google/uuid"
+	"github.com/olegabu/go-mimblewimble/transaction"
 )
 
 type Output struct {
@@ -68,8 +68,7 @@ func (t SlateStatus) String() string {
 }
 
 type Transaction struct {
-	core.Transaction
-	ID     uuid.UUID
+	transaction.Transaction
 	Status TransactionStatus
 }
 

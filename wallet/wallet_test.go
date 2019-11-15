@@ -10,7 +10,7 @@ import (
 
 func TestWalletRound(t *testing.T) {
 	for _, value := range []int{1, 5, 10} {
-		err := Issue(uint64(value))
+		_, err := Issue(uint64(value))
 		assert.Nil(t, err)
 	}
 

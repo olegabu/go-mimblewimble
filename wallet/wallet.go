@@ -3,6 +3,7 @@ package wallet
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
+	"github.com/olegabu/go-mimblewimble/transaction"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
@@ -76,9 +77,11 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 	//}
 
 	tx := Transaction{
-		Transaction: slate.Transaction,
-		ID:          slate.ID,
-		Status:      TransactionUnconfirmed,
+		Transaction: transaction.Transaction{
+			Transaction: slate.Transaction,
+			ID:          slate.ID,
+		},
+		Status: TransactionUnconfirmed,
 	}
 
 	err = db.PutTransaction(tx)
@@ -177,7 +180,7 @@ func Info() error {
 	outputTable.SetHeader([]string{"value", "status", "features", "commit"})
 	outputTable.SetCaption(true, "Outputs")
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Status.String(), output.Features.String(), output.Commit[0:8]})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Status.String(), output.Features.String(), output.Commit})
 	}
 	outputTable.Render()
 	print("\n")

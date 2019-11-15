@@ -47,8 +47,8 @@ func (MWApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseE
 	return abcitypes.ResponseEndBlock{}
 }
 
-func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *core.Transaction, err error) {
-	app.logger.Debug(string(txBytes))
+func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *transaction.Transaction, err error) {
+	app.logger.Debug("isValid", string(txBytes))
 
 	tx, err = transaction.Validate(txBytes)
 	if err != nil {
@@ -66,12 +66,12 @@ func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *core.Transac
 }
 
 func (app *MWApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	code, _, err := app.isValid(req.Tx)
+	code, tx, err := app.isValid(req.Tx)
 	var log string
 	if err != nil {
 		log = err.Error()
 	} else {
-		log = "transaction is valid"
+		log = fmt.Sprintf("transaction %v is valid", tx.ID)
 	}
 	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1, Log: log}
 }
@@ -89,10 +89,6 @@ func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.Re
 
 	// delete spent inputs
 	for _, input := range tx.Body.Inputs {
-		_, err = app.db.Get(outputKey(input.Commit), nil)
-		if err != nil {
-			return abcitypes.ResponseDeliverTx{Code: 1, Log: errors.Wrapf(err, "cannot get input %v", input).Error()}
-		}
 		app.currentBatch.Delete(outputKey(input.Commit))
 	}
 
@@ -102,7 +98,7 @@ func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.Re
 		app.currentBatch.Put(outputKey(output.Commit), outputBytes)
 	}
 
-	return abcitypes.ResponseDeliverTx{Code: code}
+	return abcitypes.ResponseDeliverTx{Code: code, Events: transferEvents(*tx)}
 }
 
 func (app *MWApplication) Commit() abcitypes.ResponseCommit {
@@ -124,7 +120,6 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 	if paths[0] == "output" {
 		if len(paths) == 1 {
 			// return all outputs
-
 			outputs := make([]core.Output, 0)
 
 			iter := app.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
@@ -140,17 +135,14 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 			resQuery.Value, _ = json.Marshal(outputs)
 		} else if len(paths) > 1 {
 			// return one output
+			outputBytes, err := app.db.Get(outputKey(paths[1]), nil)
 
-			keyBytes := []byte(paths[1])
-
-			outputBytes, err := app.db.Get(keyBytes, nil)
 			if err != nil {
 				resQuery.Log = "does not exist"
 			} else {
 				resQuery.Log = "exists"
 				resQuery.Value = outputBytes
 			}
-
 			resQuery.Value = outputBytes
 		}
 	}
@@ -164,12 +156,12 @@ func outputKey(commit string) []byte {
 
 // see https://github.com/tendermint/tendermint/blob/60827f75623b92eff132dc0eff5b49d2025c591e/docs/spec/abci/abci.md#events
 // see https://github.com/tendermint/tendermint/blob/master/UPGRADING.md
-func transferEvent(tx core.Transaction) []abcitypes.Event {
+func transferEvents(tx transaction.Transaction) []abcitypes.Event {
 	return []abcitypes.Event{
 		{
 			Type: "transfer",
 			Attributes: common.KVPairs{
-				{Key: []byte("id"), Value: []byte("foo")},
+				{Key: []byte("id"), Value: []byte(tx.ID.String())},
 			},
 		},
 	}
