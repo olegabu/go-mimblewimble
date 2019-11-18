@@ -18,8 +18,12 @@ Fix file and dir permissions there.
 ```bash
 chmod +x secp256k1-zkp/autogen.sh
 find . -type d -exec chmod 777 {} \;
+```
+Install tools and build.
+```bash
+sudo apt-get install autoconf libtool libgmp3-dev
 make
-``` 
+```
 
 You also may need to tell which repo is private.
 ```bash

@@ -16,6 +16,15 @@ import (
 	"strings"
 )
 
+type Database interface {
+	Begin() error
+	CheckInput(input core.Input) error
+	SpendInput(input core.Input) error
+	PutOutput(output core.Output) error
+	Commit() error
+	Close()
+}
+
 type MWApplication struct {
 	db           *leveldb.DB
 	currentBatch *leveldb.Batch

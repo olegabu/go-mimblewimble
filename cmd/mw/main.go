@@ -6,6 +6,7 @@ import (
 	"github.com/olegabu/go-mimblewimble/transaction"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/pkg/errors"
+	"github.com/tendermint/tendermint/cmd/tendermint/commands"
 	"github.com/tendermint/tendermint/rpc/client"
 	"io/ioutil"
 	"strconv"
@@ -213,7 +214,7 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd)
+	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, commands.RootCmd)
 
 	_ = rootCmd.Execute()
 }
