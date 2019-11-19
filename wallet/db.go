@@ -14,7 +14,7 @@ type leveldbDatabase struct {
 	db *leveldb.DB
 }
 
-func NewDatabase() Database {
+func NewLeveldbDatabase() Database {
 	dir, err := homedir.Dir()
 	if err != nil {
 		panic("cannot get homedir")

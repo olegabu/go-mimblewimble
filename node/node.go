@@ -2,7 +2,6 @@ package node
 
 import (
 	"flag"
-	"github.com/syndtr/goleveldb/leveldb"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -34,25 +33,9 @@ func init() {
 }
 
 func Start() error {
-	dir, err := homedir.Dir()
-	if err != nil {
-		return errors.Wrap(err, "cannot get homedir")
-	}
-
-	dbFilename := dir + "/.mw/state"
-	db, err := leveldb.OpenFile(dbFilename, nil)
-	if err != nil {
-		return errors.Wrapf(err, "cannot open leveldb at %v", dbFilename)
-	}
-
-	defer func() {
-		err = db.Close()
-		if err != nil {
-			panic("cannot close leveldb: " + err.Error())
-		}
-	}()
-
+	db := NewLeveldbDatabase()
 	app := NewMWApplication(db)
+	defer db.Close()
 
 	flag.Parse()
 

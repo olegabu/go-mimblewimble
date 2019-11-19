@@ -26,6 +26,10 @@ type Database interface {
 	Close()
 }
 
+func NewDatabase() Database {
+	return NewLeveldbDatabase()
+}
+
 func Send(amount uint64) (slateBytes []byte, err error) {
 	db := NewDatabase()
 	defer db.Close()

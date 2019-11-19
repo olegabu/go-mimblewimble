@@ -7,31 +7,31 @@ import (
 	_ "github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/transaction"
 	"github.com/pkg/errors"
-	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/util"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/common"
 	"github.com/tendermint/tendermint/libs/log"
+	"net/http"
 	"os"
 	"strings"
 )
 
 type Database interface {
-	Begin() error
-	CheckInput(input core.Input) error
+	Begin()
+	InputExists(input core.Input) error
 	SpendInput(input core.Input) error
 	PutOutput(output core.Output) error
 	Commit() error
 	Close()
+	GetOutput(id []byte) (outputBytes []byte, err error)
+	ListOutputs() (outputs []core.Output, err error)
 }
 
 type MWApplication struct {
-	db           *leveldb.DB
-	currentBatch *leveldb.Batch
-	logger       log.Logger
+	db     Database
+	logger log.Logger
 }
 
-func NewMWApplication(db *leveldb.DB) *MWApplication {
+func NewMWApplication(db Database) *MWApplication {
 	return &MWApplication{
 		db:     db,
 		logger: log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
@@ -61,14 +61,7 @@ func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *transaction.
 
 	tx, err = transaction.Validate(txBytes)
 	if err != nil {
-		return 1, tx, errors.Wrapf(err, "transaction is invalid")
-	}
-
-	for _, input := range tx.Body.Inputs {
-		_, err = app.db.Get(outputKey(input.Commit), nil)
-		if err != nil {
-			return 1, tx, errors.Wrapf(err, "cannot get input %v", input)
-		}
+		return http.StatusUnauthorized, tx, errors.Wrap(err, "transaction is invalid")
 	}
 
 	return abcitypes.CodeTypeOK, tx, nil
@@ -76,17 +69,17 @@ func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *transaction.
 
 func (app *MWApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
 	code, tx, err := app.isValid(req.Tx)
-	var log string
+	var responseLog string
 	if err != nil {
-		log = err.Error()
+		responseLog = err.Error()
 	} else {
-		log = fmt.Sprintf("transaction %v is valid", tx.ID)
+		responseLog = fmt.Sprintf("transaction %v is valid", tx.ID)
 	}
-	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1, Log: log}
+	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1, Log: responseLog}
 }
 
 func (app *MWApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	app.currentBatch = new(leveldb.Batch)
+	app.db.Begin()
 	return abcitypes.ResponseBeginBlock{}
 }
 
@@ -96,27 +89,37 @@ func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.Re
 		return abcitypes.ResponseDeliverTx{Code: code, Log: err.Error()}
 	}
 
-	// delete spent inputs
+	// check if inputs exist and mark them spent
 	for _, input := range tx.Body.Inputs {
-		app.currentBatch.Delete(outputKey(input.Commit))
+		err = app.db.InputExists(input)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: http.StatusNotFound, Log: err.Error()}
+		}
+
+		err = app.db.SpendInput(input)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: err.Error()}
+		}
 	}
 
-	// create new outputs
+	// save new outputs
 	for _, output := range tx.Body.Outputs {
-		outputBytes, _ := json.Marshal(output)
-		app.currentBatch.Put(outputKey(output.Commit), outputBytes)
+		err = app.db.PutOutput(output)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: err.Error()}
+		}
 	}
 
 	return abcitypes.ResponseDeliverTx{Code: code, Events: transferEvents(*tx)}
 }
 
 func (app *MWApplication) Commit() abcitypes.ResponseCommit {
-	err := app.db.Write(app.currentBatch, nil)
+	data := []byte{0}
+	err := app.db.Commit()
 	if err != nil {
-		panic(err)
+		data = []byte(err.Error())
 	}
-
-	return abcitypes.ResponseCommit{Data: []byte{}}
+	return abcitypes.ResponseCommit{Data: data}
 }
 
 func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
@@ -129,25 +132,22 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 	if paths[0] == "output" {
 		if len(paths) == 1 {
 			// return all outputs
-			outputs := make([]core.Output, 0)
-
-			iter := app.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
-			for iter.Next() {
-				//app.logger.Debug("iter", iter.Key(), iter.Value())
-				output := core.Output{}
-				_ = json.Unmarshal(iter.Value(), &output)
-				outputs = append(outputs, output)
+			outputs, err := app.db.ListOutputs()
+			if err != nil {
+				resQuery.Log = errors.Wrap(err, "cannot list outputs").Error()
+			} else {
+				value, err := json.Marshal(outputs)
+				if err != nil {
+					resQuery.Log = errors.Wrap(err, "cannot marshal outputs").Error()
+				} else {
+					resQuery.Value = value
+				}
 			}
-			iter.Release()
-			_ = iter.Error()
-
-			resQuery.Value, _ = json.Marshal(outputs)
 		} else if len(paths) > 1 {
 			// return one output
-			outputBytes, err := app.db.Get(outputKey(paths[1]), nil)
-
+			outputBytes, err := app.db.GetOutput([]byte(paths[1]))
 			if err != nil {
-				resQuery.Log = "does not exist"
+				resQuery.Log = errors.Wrap(err, "does not exist").Error()
 			} else {
 				resQuery.Log = "exists"
 				resQuery.Value = outputBytes
@@ -157,10 +157,6 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 	}
 
 	return
-}
-
-func outputKey(commit string) []byte {
-	return append([]byte("output"), []byte(commit)...)
 }
 
 // see https://github.com/tendermint/tendermint/blob/60827f75623b92eff132dc0eff5b49d2025c591e/docs/spec/abci/abci.md#events
