@@ -5,31 +5,17 @@ import (
 	"github.com/blockcypher/libgrin/core"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/hyperledger/fabric/protos/peer"
-	"github.com/mitchellh/go-homedir"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	"log"
 )
 
 type shimDatabase struct {
-	db           *shim.DB
-	currentBatch *shim.Batch
+	stub           shim.ChaincodeStubInterface
 }
 
-func NewShimDatabase() ledger.Database {
-	dir, err := homedir.Dir()
-	if err != nil {
-		panic("cannot get homedir")
-	}
-
-	dbFilename := dir + "/.mw/state"
-	ldb, err := shim.OpenFile(dbFilename, nil)
-	if err != nil {
-		log.Fatalf("cannot open shim at %v: %v", dbFilename, err)
-	}
-
-	var d ledger.Database = &shimDatabase{db: ldb}
+func NewShimDatabase(stub shim.ChaincodeStubInterface) ledger.Database {
+	var d ledger.Database = &shimDatabase{stub: stub}
 
 	return d
 }
@@ -39,7 +25,7 @@ func (t *shimDatabase) Close() {
 }
 
 func (t *shimDatabase) InputExists(input core.Input) error {
-	_, err := t.db.Get(outputKey(input.Commit), nil)
+	_, err := t.stub.GetState(outputKey(input.Commit), nil)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get input %v", input)
 	}
@@ -67,7 +53,7 @@ func (t *shimDatabase) Commit() (err error) {
 }
 
 func (t *shimDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
-	outputBytes, err = t.db.Get(outputKey(string(id)), nil)
+	outputBytes, err = t.stub.Get(outputKey(string(id)), nil)
 	if err != nil {
 		err = errors.Wrapf(err, "cannot db.Get")
 	}
@@ -77,7 +63,7 @@ func (t *shimDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
 func (t *shimDatabase) ListOutputs() (outputs []core.Output, err error) {
 	outputs = make([]core.Output, 0)
 
-	iter := t.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
+	iter := t.stub.NewIterator(util.BytesPrefix([]byte("output")), nil)
 	for iter.Next() {
 		//app.logger.Debug("iter", iter.Key(), iter.Value())
 		output := core.Output{}
