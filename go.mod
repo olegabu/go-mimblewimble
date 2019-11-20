@@ -26,4 +26,5 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	github.com/tendermint/tendermint v0.32.7
 	golang.org/x/crypto v0.0.0-20191112222119-e1110fd1c708
+	google.golang.org/appengine v1.4.0 // indirect
 )

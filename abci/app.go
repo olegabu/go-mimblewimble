@@ -1,7 +1,6 @@
 package abci
 
 import (
-	"encoding/json"
 	"fmt"
 	_ "github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/ledger"
@@ -44,26 +43,13 @@ func (MWApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseE
 	return abcitypes.ResponseEndBlock{}
 }
 
-func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *ledger.Transaction, err error) {
-	app.logger.Debug("isValid", string(txBytes))
-
-	tx, err = ledger.ValidateTransaction(txBytes)
-	if err != nil {
-		return http.StatusUnauthorized, tx, errors.Wrap(err, "transaction is invalid")
-	}
-
-	return abcitypes.CodeTypeOK, tx, nil
-}
-
 func (app *MWApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	code, tx, err := app.isValid(req.Tx)
-	var responseLog string
+	tx, err := ledger.ValidateTransaction(req.Tx)
 	if err != nil {
-		responseLog = err.Error()
-	} else {
-		responseLog = fmt.Sprintf("transaction %v is valid", tx.ID)
+		return abcitypes.ResponseCheckTx{Code: http.StatusUnauthorized, GasWanted: 1, Log: errors.Wrap(err, "transaction is invalid").Error()}
 	}
-	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1, Log: responseLog}
+
+	return abcitypes.ResponseCheckTx{Code: abcitypes.CodeTypeOK, GasWanted: 1, Log: fmt.Sprintf("transaction %v is valid", tx.ID)}
 }
 
 func (app *MWApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
@@ -72,33 +58,17 @@ func (app *MWApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.
 }
 
 func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
-	code, tx, err := app.isValid(req.Tx)
+	tx, err := ledger.ValidateTransaction(req.Tx)
 	if err != nil {
-		return abcitypes.ResponseDeliverTx{Code: code, Log: err.Error()}
+		return abcitypes.ResponseDeliverTx{Code: http.StatusUnauthorized, Log: errors.Wrap(err, "transaction is invalid").Error()}
 	}
 
-	// check if inputs exist and mark them spent
-	for _, input := range tx.Body.Inputs {
-		err = app.db.InputExists(input)
-		if err != nil {
-			return abcitypes.ResponseDeliverTx{Code: http.StatusNotFound, Log: err.Error()}
-		}
-
-		err = app.db.SpendInput(input)
-		if err != nil {
-			return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: err.Error()}
-		}
+	err = ledger.PersistTransaction(tx, app.db)
+	if err != nil {
+		return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: errors.Wrap(err, "cannot persist transaction").Error()}
 	}
 
-	// save new outputs
-	for _, output := range tx.Body.Outputs {
-		err = app.db.PutOutput(output)
-		if err != nil {
-			return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: err.Error()}
-		}
-	}
-
-	return abcitypes.ResponseDeliverTx{Code: code, Events: transferEvents(*tx)}
+	return abcitypes.ResponseDeliverTx{Code: abcitypes.CodeTypeOK, Events: transferEvents(*tx)}
 }
 
 func (app *MWApplication) Commit() abcitypes.ResponseCommit {
@@ -120,16 +90,11 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 	if paths[0] == "output" {
 		if len(paths) == 1 {
 			// return all outputs
-			outputs, err := app.db.ListOutputs()
+			outputsBytes, err := app.db.ListOutputs()
 			if err != nil {
 				resQuery.Log = errors.Wrap(err, "cannot list outputs").Error()
 			} else {
-				value, err := json.Marshal(outputs)
-				if err != nil {
-					resQuery.Log = errors.Wrap(err, "cannot marshal outputs").Error()
-				} else {
-					resQuery.Value = value
-				}
+				resQuery.Value = outputsBytes
 			}
 		} else if len(paths) > 1 {
 			// return one output

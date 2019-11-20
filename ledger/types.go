@@ -13,7 +13,7 @@ type Database interface {
 	Commit() error
 	Close()
 	GetOutput(id []byte) (outputBytes []byte, err error)
-	ListOutputs() (outputs []core.Output, err error)
+	ListOutputs() (outputsBytes []byte, err error)
 }
 
 type Transaction struct {

@@ -1,17 +1,15 @@
-package chaincode
+package main
 
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
-	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
-	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 type shimDatabase struct {
-	stub           shim.ChaincodeStubInterface
+	stub shim.ChaincodeStubInterface
 }
 
 func NewShimDatabase(stub shim.ChaincodeStubInterface) ledger.Database {
@@ -25,22 +23,28 @@ func (t *shimDatabase) Close() {
 }
 
 func (t *shimDatabase) InputExists(input core.Input) error {
-	_, err := t.stub.GetState(outputKey(input.Commit), nil)
-	if err != nil {
-		return errors.Wrapf(err, "cannot get input %v", input)
+	o, err := t.stub.GetState(t.outputKey(input.Commit))
+	if err != nil || o == nil {
+		return errors.Wrapf(err, "cannot GetState input %v", input)
 	}
 
 	return nil
 }
 
 func (t *shimDatabase) SpendInput(input core.Input) error {
-	t.currentBatch.Delete(outputKey(input.Commit))
+	err := t.stub.DelState(t.outputKey(input.Commit))
+	if err != nil {
+		return errors.Wrapf(err, "cannot DelState input %v", input)
+	}
 	return nil
 }
 
 func (t *shimDatabase) PutOutput(output core.Output) error {
 	outputBytes, _ := json.Marshal(output)
-	t.currentBatch.Put(outputKey(output.Commit), outputBytes)
+	err := t.stub.PutState(t.outputKey(output.Commit), outputBytes)
+	if err != nil {
+		return errors.Wrapf(err, "cannot PutState output %v", output)
+	}
 	return nil
 }
 
@@ -53,29 +57,41 @@ func (t *shimDatabase) Commit() (err error) {
 }
 
 func (t *shimDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
-	outputBytes, err = t.stub.Get(outputKey(string(id)), nil)
+	outputBytes, err = t.stub.GetState(t.outputKey(string(id)))
 	if err != nil {
-		err = errors.Wrapf(err, "cannot db.Get")
+		return nil, errors.Wrapf(err, "cannot GetState output")
 	}
 	return
 }
 
-func (t *shimDatabase) ListOutputs() (outputs []core.Output, err error) {
-	outputs = make([]core.Output, 0)
+func (t *shimDatabase) ListOutputs() (outputsBytes []byte, err error) {
+	outputs := make([]core.Output, 0)
 
-	iter := t.stub.NewIterator(util.BytesPrefix([]byte("output")), nil)
-	for iter.Next() {
-		//app.logger.Debug("iter", iter.Key(), iter.Value())
+	iter, err := t.stub.GetStateByPartialCompositeKey("output", nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot GetStateByPartialCompositeKey")
+	}
+	defer iter.Close()
+
+	for iter.HasNext() {
+		kv, err := iter.Next()
+		if err != nil {
+			return nil, errors.Wrapf(err, "cannot iter.Next")
+		}
 		output := core.Output{}
-		err = json.Unmarshal(iter.Value(), &output)
+		err = json.Unmarshal(kv.Value, &output)
 		outputs = append(outputs, output)
 	}
-	iter.Release()
-	err = iter.Error()
+
+	outputsBytes, err = json.Marshal(outputs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot marshal outputs")
+	}
 
 	return
 }
 
-func outputKey(commit string) []byte {
-	return append([]byte("output"), []byte(commit)...)
+func (t *shimDatabase) outputKey(commit string) string {
+	key, _ := t.stub.CreateCompositeKey("output", []string{commit})
+	return key
 }

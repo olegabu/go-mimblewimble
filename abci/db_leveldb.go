@@ -80,8 +80,8 @@ func (t *leveldbDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
 	return
 }
 
-func (t *leveldbDatabase) ListOutputs() (outputs []core.Output, err error) {
-	outputs = make([]core.Output, 0)
+func (t *leveldbDatabase) ListOutputs() (outputsBytes []byte, err error) {
+	outputs := make([]core.Output, 0)
 
 	iter := t.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
 	for iter.Next() {
@@ -92,6 +92,11 @@ func (t *leveldbDatabase) ListOutputs() (outputs []core.Output, err error) {
 	}
 	iter.Release()
 	err = iter.Error()
+
+	outputsBytes, err = json.Marshal(outputs)
+	if err != nil {
+		err = errors.Wrapf(err, "cannot marshal outputs")
+	}
 
 	return
 }
