@@ -22,7 +22,7 @@ find . -type d -exec chmod 777 {} \;
 Install tools and build.
 ```bash
 sudo apt-get install autoconf libtool libgmp3-dev
-make
+CFLAGS="-fPIC" make
 ```
 
 You also may need to tell which repo is private.
