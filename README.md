@@ -1,6 +1,6 @@
 #  Experimental wallet and library for Mimblewimble protocol
 
-## Building
+## Build
 
 ```bash
 go install ./...
@@ -29,3 +29,51 @@ You also may need to tell which repo is private.
 ```bash
 export GOPRIVATE=github.com/olegabu/go-secp256k1-zkp
 ```
+
+## Run
+
+Reset wallet and ledger (tendermint) databases.
+```bash
+mw tendermint unsafe_reset_all && rm -rf ~/.mw 
+``` 
+
+Start tendermint node with Mimblewimble ABCI application
+```bash
+mw node
+``` 
+
+Run wallet in another console. 
+
+Issue coins to yourself in the wallet.
+```bash
+mw issue 1
+mw info
+```
+Broadcast new Coinbase outputs to tendermint node.
+```bash
+mw broadcast tx-issue-1.json
+```
+Send 1 coin to yourself.
+```bash
+mw send 1
+```
+Receive.
+```bash
+mw recieve slate-send-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+```
+Finalize.
+```bash
+mw finalize slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+mw info
+```
+Broadcast this transaction to tendermint.
+```bash
+mw broadcast tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+```
+Tell wallet the transaction has been confirmed by the network.
+```bash
+mw confirm 8668319f-d8ae-4dda-be5b-e3fd1648565e
+mw info
+```
+
+
