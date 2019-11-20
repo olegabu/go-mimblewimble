@@ -3,28 +3,13 @@ package wallet
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
-	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"os"
 	"strconv"
 )
-
-type Database interface {
-	PutSlate(slate Slate) error
-	PutTransaction(tx Transaction) error
-	PutOutput(output Output) error
-	GetSlate(id []byte) (slate Slate, err error)
-	GetTransaction(id []byte) (transaction Transaction, err error)
-	GetOutput(id []byte) (output Output, err error)
-	ListSlates() (slates []Slate, err error)
-	ListTransactions() (transactions []Transaction, err error)
-	ListOutputs() (outputs []Output, err error)
-	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
-	Confirm(transactionID []byte) error
-	Close()
-}
 
 func NewDatabase() Database {
 	return NewLeveldbDatabase()
@@ -81,7 +66,7 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 	//}
 
 	tx := Transaction{
-		Transaction: transaction.Transaction{
+		Transaction: ledger.Transaction{
 			Transaction: slate.Transaction,
 			ID:          slate.ID,
 		},

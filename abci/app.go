@@ -1,11 +1,10 @@
-package node
+package abci
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/blockcypher/libgrin/core"
 	_ "github.com/blockcypher/libgrin/core"
-	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/common"
@@ -15,23 +14,12 @@ import (
 	"strings"
 )
 
-type Database interface {
-	Begin()
-	InputExists(input core.Input) error
-	SpendInput(input core.Input) error
-	PutOutput(output core.Output) error
-	Commit() error
-	Close()
-	GetOutput(id []byte) (outputBytes []byte, err error)
-	ListOutputs() (outputs []core.Output, err error)
-}
-
 type MWApplication struct {
-	db     Database
+	db     ledger.Database
 	logger log.Logger
 }
 
-func NewMWApplication(db Database) *MWApplication {
+func NewMWApplication(db ledger.Database) *MWApplication {
 	return &MWApplication{
 		db:     db,
 		logger: log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
@@ -56,10 +44,10 @@ func (MWApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseE
 	return abcitypes.ResponseEndBlock{}
 }
 
-func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *transaction.Transaction, err error) {
+func (app *MWApplication) isValid(txBytes []byte) (code uint32, tx *ledger.Transaction, err error) {
 	app.logger.Debug("isValid", string(txBytes))
 
-	tx, err = transaction.Validate(txBytes)
+	tx, err = ledger.ValidateTransaction(txBytes)
 	if err != nil {
 		return http.StatusUnauthorized, tx, errors.Wrap(err, "transaction is invalid")
 	}
@@ -161,7 +149,7 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 
 // see https://github.com/tendermint/tendermint/blob/60827f75623b92eff132dc0eff5b49d2025c591e/docs/spec/abci/abci.md#events
 // see https://github.com/tendermint/tendermint/blob/master/UPGRADING.md
-func transferEvents(tx transaction.Transaction) []abcitypes.Event {
+func transferEvents(tx ledger.Transaction) []abcitypes.Event {
 	return []abcitypes.Event{
 		{
 			Type: "transfer",

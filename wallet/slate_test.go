@@ -3,7 +3,7 @@ package wallet
 import (
 	"fmt"
 	"github.com/blockcypher/libgrin/core"
-	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -43,7 +43,7 @@ func TestRound(t *testing.T) {
 	assert.Nil(t, err)
 	fmt.Println("tx   " + string(txBytes))
 
-	tx, err := transaction.Validate(txBytes)
+	tx, err := ledger.ValidateTransaction(txBytes)
 	assert.Nil(t, err)
 	fmt.Println(tx)
 }

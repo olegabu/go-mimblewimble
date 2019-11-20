@@ -1,4 +1,4 @@
-package transaction
+package ledger
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -18,7 +18,7 @@ func getTxBytes() []byte {
 }
 
 func TestValidate(t *testing.T) {
-	tx, err := Validate(getTxBytes())
+	tx, err := ValidateTransaction(getTxBytes())
 	assert.NotNil(t, tx)
 	assert.Nil(t, err)
 }

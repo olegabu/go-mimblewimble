@@ -8,7 +8,7 @@ import (
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
-	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	secp256k1 "github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
@@ -205,7 +205,7 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 
 	// parse out message to use as part of the Schnorr challenge
 
-	msg := transaction.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
+	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
 	// parse out sender public blind and public nonce
 
@@ -287,7 +287,7 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 
 	// parse out message to use as part of the Schnorr challenge
 
-	msg := transaction.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
+	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
 	// parse out public blinds and nonces for both sender and receiver from the slate
 	//TODO should the sender trust its public keys in receiver response or use its own, remembered from construction of the slate?
@@ -378,7 +378,7 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 	tx.Body.Kernels[0].Excess = excessString
 	tx.Body.Kernels[0].ExcessSig = excessSigString
 
-	identifiedTx := transaction.Transaction{
+	identifiedTx := ledger.Transaction{
 		Transaction: tx,
 		ID:          slate.ID,
 	}
@@ -389,7 +389,7 @@ func CreateTransaction(slateBytes []byte, walletSlate Slate) ([]byte, Transactio
 	}
 
 	walletTx := Transaction{
-		Transaction: transaction.Transaction{
+		Transaction: ledger.Transaction{
 			Transaction: slate.Transaction,
 			ID:          slate.ID,
 		},

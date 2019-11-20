@@ -1,4 +1,4 @@
-package transaction
+package ledger
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-func Validate(txBytes []byte) (*Transaction, error) {
+func ValidateTransaction(txBytes []byte) (*Transaction, error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot ContextCreate")

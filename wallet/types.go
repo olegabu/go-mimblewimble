@@ -4,8 +4,23 @@ import (
 	"fmt"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
-	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/olegabu/go-mimblewimble/ledger"
 )
+
+type Database interface {
+	PutSlate(slate Slate) error
+	PutTransaction(tx Transaction) error
+	PutOutput(output Output) error
+	GetSlate(id []byte) (slate Slate, err error)
+	GetTransaction(id []byte) (transaction Transaction, err error)
+	GetOutput(id []byte) (output Output, err error)
+	ListSlates() (slates []Slate, err error)
+	ListTransactions() (transactions []Transaction, err error)
+	ListOutputs() (outputs []Output, err error)
+	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
+	Confirm(transactionID []byte) error
+	Close()
+}
 
 type Output struct {
 	core.Output
@@ -68,7 +83,7 @@ func (t SlateStatus) String() string {
 }
 
 type Transaction struct {
-	transaction.Transaction
+	ledger.Transaction
 	Status TransactionStatus
 }
 

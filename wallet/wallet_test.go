@@ -3,7 +3,7 @@ package wallet
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -28,7 +28,7 @@ func TestWalletRound(t *testing.T) {
 
 	err = Info()
 
-	_, err = transaction.Validate(txBytes)
+	_, err = ledger.ValidateTransaction(txBytes)
 	assert.Nil(t, err)
 
 	responseSlate := Slate{}

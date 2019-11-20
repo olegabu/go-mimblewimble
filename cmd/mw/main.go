@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/olegabu/go-mimblewimble/node"
-	"github.com/olegabu/go-mimblewimble/transaction"
+	"github.com/olegabu/go-mimblewimble/abci"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/pkg/errors"
 	"github.com/tendermint/tendermint/cmd/tendermint/commands"
@@ -151,9 +151,9 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
 			}
-			tx, err := transaction.Validate(transactionBytes)
+			tx, err := ledger.ValidateTransaction(transactionBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot transaction.Validate")
+				return errors.Wrap(err, "cannot transaction.ValidateTransaction")
 			}
 			fmt.Printf("transaction %v is valid\n", tx.ID)
 			return nil
@@ -199,7 +199,7 @@ func main() {
 		Short: "Runs blockchain node",
 		Long:  `Runs Tendermint node with built in Mimblewimble ABCI app.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := node.Start()
+			err := abci.Start()
 			if err != nil {
 				return errors.Wrap(err, "cannot node.Start")
 			}
