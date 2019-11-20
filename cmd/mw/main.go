@@ -6,10 +6,15 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/pkg/errors"
-	"github.com/tendermint/tendermint/cmd/tendermint/commands"
+	"github.com/tendermint/tendermint/libs/cli"
 	"github.com/tendermint/tendermint/rpc/client"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strconv"
+
+	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
+	cfg "github.com/tendermint/tendermint/config"
 
 	"github.com/spf13/cobra"
 )
@@ -214,9 +219,33 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, commands.RootCmd)
+	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd)
 
-	_ = rootCmd.Execute()
+	// Tendermint commands
+
+	tendermintRootCmd := cmd.RootCmd
+	tendermintRootCmd.AddCommand(
+		cmd.GenValidatorCmd,
+		cmd.InitFilesCmd,
+		cmd.ProbeUpnpCmd,
+		cmd.LiteCmd,
+		cmd.ReplayCmd,
+		cmd.ReplayConsoleCmd,
+		cmd.ResetAllCmd,
+		cmd.ResetPrivValidatorCmd,
+		cmd.ShowValidatorCmd,
+		cmd.TestnetFilesCmd,
+		cmd.ShowNodeIDCmd,
+		cmd.GenNodeKeyCmd,
+		cmd.VersionCmd)
+
+	tendermintBaseCmd := cli.PrepareBaseCmd(tendermintRootCmd, "TM", os.ExpandEnv(filepath.Join("$HOME", cfg.DefaultTendermintDir)))
+
+	rootCmd.AddCommand(tendermintRootCmd)
+
+	if err := tendermintBaseCmd.Execute(); err != nil {
+		panic(err)
+	}
 }
 
 func broadcast(transactionBytes []byte) error {
@@ -226,7 +255,12 @@ func broadcast(transactionBytes []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot start websocket http client")
 	}
-	defer httpClient.Stop()
+	defer func() {
+		err = httpClient.Stop()
+		if err != nil {
+			fmt.Printf("cannot httpClient.Stop: " + err.Error())
+		}
+	}()
 
 	result, err := httpClient.BroadcastTxSync(transactionBytes)
 	if err != nil {
