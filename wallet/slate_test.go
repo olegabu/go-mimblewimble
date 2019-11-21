@@ -31,7 +31,7 @@ func TestRound(t *testing.T) {
 		Value:  inputValue,
 	}}
 
-	slateBytes, _, senderWalletSlate, err := CreateSlate(amount, change, inputs)
+	slateBytes, _, senderWalletSlate, err := CreateSlate(amount, "cash", change, inputs)
 	assert.Nil(t, err)
 	fmt.Println("send " + string(slateBytes))
 

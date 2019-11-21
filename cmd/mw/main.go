@@ -19,19 +19,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const defaultAsset = "¤"
+
 func main() {
 
 	var issueCmd = &cobra.Command{
-		Use:   "issue amount",
+		Use:   "issue amount [asset]",
 		Short: "Creates outputs in the wallet",
 		Long:  `Creates a coinbase output in own wallet. Use for testing only.`,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
 			if err != nil {
 				return errors.Wrap(err, "cannot parse amount")
 			}
-			txBytes, err := wallet.Issue(uint64(amount))
+			asset := defaultAsset
+			if len(args) > 1 {
+				asset = args[1]
+			}
+			txBytes, err := wallet.Issue(uint64(amount), asset)
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Issue")
 			}
@@ -46,16 +52,20 @@ func main() {
 	}
 
 	var sendCmd = &cobra.Command{
-		Use:   "send amount",
+		Use:   "send amount [asset]",
 		Short: "Initiates a send transaction",
 		Long:  `Creates a json file with a slate to pass to the receiver.`,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
 			if err != nil {
 				return errors.Wrap(err, "cannot parse amount")
 			}
-			slateBytes, err := wallet.Send(uint64(amount))
+			asset := defaultAsset
+			if len(args) > 1 {
+				asset = args[1]
+			}
+			slateBytes, err := wallet.Send(uint64(amount), asset)
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Send")
 			}

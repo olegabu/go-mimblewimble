@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"encoding/json"
+	"github.com/blockcypher/libgrin/core"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -10,24 +11,27 @@ import (
 	"sort"
 )
 
+var dbFilename string
+
+func init() {
+	dir, err := homedir.Dir()
+	if err != nil {
+		panic("cannot get homedir")
+	}
+	dbFilename = dir + "/.mw/wallet"
+}
+
 type leveldbDatabase struct {
 	db *leveldb.DB
 }
 
 func NewLeveldbDatabase() Database {
-	dir, err := homedir.Dir()
-	if err != nil {
-		panic("cannot get homedir")
-	}
-
-	dbFilename := dir + "/.mw/wallet"
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
 		log.Fatalf("cannot open leveldb at %v: %v", dbFilename, err)
 	}
 
 	var d Database = &leveldbDatabase{db: ldb}
-
 	return d
 }
 
@@ -38,20 +42,35 @@ func (t *leveldbDatabase) Close() {
 	}
 }
 
-func (t *leveldbDatabase) PutSlate(slate Slate) error {
-	id, err := slate.ID.MarshalText()
-	if err != nil {
-		return errors.Wrap(err, "cannot marshal ID into bytes")
-	}
+func senderSlateKey(id string) []byte {
+	return []byte("slate." + id + ".s")
+}
 
-	id = append([]byte("slate"), id...)
-
+func (t *leveldbDatabase) PutSenderSlate(slate SenderSlate) error {
 	slateBytes, err := json.Marshal(slate)
 	if err != nil {
-		return errors.Wrap(err, "cannot marshal slate into json")
+		return errors.Wrap(err, "cannot marshal SenderSlate into json")
 	}
 
-	err = t.db.Put(id, slateBytes, nil)
+	err = t.db.Put(senderSlateKey(slate.ID.String()), slateBytes, nil)
+	if err != nil {
+		return errors.Wrap(err, "cannot Put slate")
+	}
+
+	return nil
+}
+
+func receiverSlateKey(id string) []byte {
+	return []byte("slate." + id + ".r")
+}
+
+func (t *leveldbDatabase) PutReceiverSlate(slate ReceiverSlate) error {
+	slateBytes, err := json.Marshal(slate)
+	if err != nil {
+		return errors.Wrap(err, "cannot marshal ReceiverSlate into json")
+	}
+
+	err = t.db.Put(receiverSlateKey(slate.ID.String()), slateBytes, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot Put slate")
 	}
@@ -84,16 +103,21 @@ func (t *leveldbDatabase) PutTransaction(transaction Transaction) error {
 	return nil
 }
 
+func outputKey(output Output) []byte {
+	return []byte("output." + output.Asset + "." + output.Commit)
+}
+
+func outputRange(asset string) *util.Range {
+	return util.BytesPrefix([]byte("output." + asset))
+}
+
 func (t *leveldbDatabase) PutOutput(output Output) error {
 	outputBytes, err := json.Marshal(output)
 	if err != nil {
 		return errors.Wrap(err, "cannot marshal output into json")
 	}
 
-	id := []byte(output.Commit)
-	id = append([]byte("output"), id...)
-
-	err = t.db.Put(id, outputBytes, nil)
+	err = t.db.Put(outputKey(output), outputBytes, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot Put output")
 	}
@@ -101,30 +125,28 @@ func (t *leveldbDatabase) PutOutput(output Output) error {
 	return nil
 }
 
-func (t *leveldbDatabase) GetSlate(id []byte) (slate Slate, err error) {
-	id = append([]byte("slate"), id...)
-
-	slateBytes, err := t.db.Get(id, nil)
+func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate SenderSlate, err error) {
+	slateBytes, err := t.db.Get(senderSlateKey(string(id)), nil)
 	if err != nil {
-		return Slate{}, errors.Wrap(err, "cannot Get slate")
+		return SenderSlate{}, errors.Wrap(err, "cannot Get slate")
 	}
 
-	slate = Slate{}
+	slate = SenderSlate{}
 
 	err = json.Unmarshal(slateBytes, &slate)
 	if err != nil {
-		return Slate{}, errors.Wrap(err, "cannot unmarshal slateBytes")
+		return SenderSlate{}, errors.Wrap(err, "cannot unmarshal slateBytes")
 	}
 
 	return slate, nil
 }
 
-func (t *leveldbDatabase) GetInputs(amount uint64) (inputs []Output, change uint64, err error) {
+func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error) {
 	// collect valid outputs whose amount is less or equal to the amount to send
 
 	outputs := make([]Output, 0)
 
-	iter := t.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
+	iter := t.db.NewIterator(outputRange(asset), nil)
 	for iter.Next() {
 		output := Output{}
 		err = json.Unmarshal(iter.Value(), &output)
@@ -225,7 +247,7 @@ func (t *leveldbDatabase) ListTransactions() (transactions []Transaction, err er
 func (t *leveldbDatabase) ListOutputs() (outputs []Output, err error) {
 	outputs = make([]Output, 0)
 
-	iter := t.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
+	iter := t.db.NewIterator(outputRange(""), nil)
 	for iter.Next() {
 		output := Output{}
 		err = json.Unmarshal(iter.Value(), &output)
@@ -262,10 +284,10 @@ func (t *leveldbDatabase) GetTransaction(id []byte) (transaction Transaction, er
 	return transaction, nil
 }
 
-func (t *leveldbDatabase) GetOutput(id []byte) (output Output, err error) {
-	id = append([]byte("output"), id...)
+func (t *leveldbDatabase) GetOutput(commit string, asset string) (output Output, err error) {
+	o := Output{Output: core.Output{Commit: commit}, Asset: asset}
 
-	outputBytes, err := t.db.Get(id, nil)
+	outputBytes, err := t.db.Get(outputKey(o), nil)
 	if err != nil {
 		return Output{}, errors.Wrap(err, "cannot Get output")
 	}
@@ -294,7 +316,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 	}
 
 	for _, o := range tx.Body.Inputs {
-		output, err := t.GetOutput([]byte(o.Commit))
+		output, err := t.GetOutput(o.Commit, tx.Asset)
 		if err != nil {
 			return errors.Wrap(err, "cannot GetOutput")
 		}
@@ -308,7 +330,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 	}
 
 	for _, o := range tx.Body.Outputs {
-		output, err := t.GetOutput([]byte(o.Commit))
+		output, err := t.GetOutput(o.Commit, tx.Asset)
 		if err != nil {
 			return errors.Wrap(err, "cannot GetOutput")
 		}

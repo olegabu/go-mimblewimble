@@ -3,6 +3,7 @@ package wallet
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
+	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/olekukonko/tablewriter"
@@ -15,16 +16,16 @@ func NewDatabase() Database {
 	return NewLeveldbDatabase()
 }
 
-func Send(amount uint64) (slateBytes []byte, err error) {
+func Send(amount uint64, asset string) (slateBytes []byte, err error) {
 	db := NewDatabase()
 	defer db.Close()
 
-	inputs, change, err := db.GetInputs(amount)
+	inputs, change, err := db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, slate, err := CreateSlate(amount, change, inputs)
+	slateBytes, changeOutput, senderSlate, err := CreateSlate(amount, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
@@ -36,8 +37,7 @@ func Send(amount uint64) (slateBytes []byte, err error) {
 		}
 	}
 
-	slate.Status = SlateSent
-	err = db.PutSlate(slate)
+	err = db.PutSenderSlate(senderSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
 	}
@@ -49,7 +49,7 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 	db := NewDatabase()
 	defer db.Close()
 
-	responseSlateBytes, receiverOutput, slate, err := CreateResponse(slateBytes)
+	responseSlateBytes, receiverOutput, receiverSlate, err := CreateResponse(slateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateResponse")
 	}
@@ -59,16 +59,16 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
-	//slate.Status = SlateResponded
-	//err = db.PutSlate(slate)
-	//if err != nil {
-	//	return nil, errors.Wrap(err, "cannot PutSlate")
-	//}
+	err = db.PutReceiverSlate(receiverSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
+	}
 
 	tx := Transaction{
 		Transaction: ledger.Transaction{
-			Transaction: slate.Transaction,
-			ID:          slate.ID,
+			Transaction: receiverSlate.Transaction,
+			ID:          receiverSlate.ID,
+			Asset:       receiverSlate.Asset,
 		},
 		Status: TransactionUnconfirmed,
 	}
@@ -94,7 +94,7 @@ func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 
 	id, _ := responseSlate.ID.MarshalText()
 
-	senderSlate, err := db.GetSlate(id)
+	senderSlate, err := db.GetSenderSlate(id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
@@ -112,7 +112,7 @@ func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 	return txBytes, nil
 }
 
-func Issue(value uint64) (txBytes []byte, err error) {
+func Issue(value uint64, asset string) (txBytes []byte, err error) {
 	db := NewDatabase()
 	defer db.Close()
 
@@ -133,6 +133,7 @@ func Issue(value uint64) (txBytes []byte, err error) {
 		Blind:  blind,
 		Value:  value,
 		Status: OutputConfirmed,
+		Asset:  asset,
 	}
 
 	err = db.PutOutput(walletOutput)
@@ -149,9 +150,15 @@ func Issue(value uint64) (txBytes []byte, err error) {
 		},
 	}
 
-	txBytes, err = json.Marshal(tx)
+	ledgerTx := ledger.Transaction{
+		Transaction: tx,
+		ID:          uuid.New(),
+		Asset:       asset,
+	}
+
+	txBytes, err = json.Marshal(ledgerTx)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot marshal tx to json")
+		return nil, errors.Wrap(err, "cannot marshal ledgerTx to json")
 	}
 
 	return
@@ -166,10 +173,10 @@ func Info() error {
 		return errors.Wrap(err, "cannot ListOutputs")
 	}
 	outputTable := tablewriter.NewWriter(os.Stdout)
-	outputTable.SetHeader([]string{"value", "status", "features", "commit"})
+	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit"})
 	outputTable.SetCaption(true, "Outputs")
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Status.String(), output.Features.String(), output.Commit})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit})
 	}
 	outputTable.Render()
 	print("\n")
@@ -179,15 +186,15 @@ func Info() error {
 		return errors.Wrap(err, "cannot ListSlates")
 	}
 	slateTable := tablewriter.NewWriter(os.Stdout)
-	slateTable.SetHeader([]string{"id", "status", "amount", "in/out", "features", "commit"})
+	slateTable.SetHeader([]string{"id", "status", "amount", "asset", "in/out", "features", "commit"})
 	slateTable.SetCaption(true, "Slates")
 	for _, slate := range slates {
 		id, _ := slate.ID.MarshalText()
 		for iInput, input := range slate.Transaction.Body.Inputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
+			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
 		}
 		for iOutput, output := range slate.Transaction.Body.Outputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
+			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
 	slateTable.SetAutoMergeCells(true)
@@ -200,15 +207,15 @@ func Info() error {
 		return errors.Wrap(err, "cannot ListTransactions")
 	}
 	transactionTable := tablewriter.NewWriter(os.Stdout)
-	transactionTable.SetHeader([]string{"id", "status", "in/out", "features", "commit"})
+	transactionTable.SetHeader([]string{"id", "status", "asset", "in/out", "features", "commit"})
 	transactionTable.SetCaption(true, "Transactions")
 	for _, tx := range transactions {
 		id, _ := tx.ID.MarshalText()
 		for iInput, input := range tx.Body.Inputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
+			transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
 		}
 		for iOutput, output := range tx.Body.Outputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
+			transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
 	transactionTable.SetAutoMergeCells(true)
