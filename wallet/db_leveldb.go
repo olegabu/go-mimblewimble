@@ -89,10 +89,6 @@ func (t *leveldbDatabase) PutTransaction(transaction Transaction) error {
 		return errors.Wrap(err, "cannot marshal ID into bytes")
 	}
 
-	//hash, _ := blake2b.New256(nil)
-	//hash.Write(transactionBytes)
-	//id := hash.Sum(nil)
-
 	id = append([]byte("transaction"), id...)
 
 	err = t.db.Put(id, transactionBytes, nil)

@@ -6,15 +6,13 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/pkg/errors"
+	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
+	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/cli"
-	"github.com/tendermint/tendermint/rpc/client"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
-
-	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
-	cfg "github.com/tendermint/tendermint/config"
 
 	"github.com/spf13/cobra"
 )
@@ -136,7 +134,7 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
-			fmt.Printf("wrote transaction %v, send it to the network to get validated: broadcast %v\n", string(id), fileName)
+			fmt.Printf("wrote transaction %v, send it to the network to get validated: broadcast %v\nthen tell wallet the transaction has been confirmed: confirm %v\n", string(id), fileName, string(id))
 			return nil
 		},
 	}
@@ -200,9 +198,42 @@ func main() {
 				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
 			}
 
-			err = broadcast(transactionBytes)
+			err = abci.Broadcast(transactionBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot broadcast")
+				return errors.Wrap(err, "cannot abci.Broadcast")
+			}
+
+			return nil
+		},
+	}
+
+	var eventsCmd = &cobra.Command{
+		Use:   "events",
+		Short: "Listens to and prints tendermint tx events",
+		Long:  `Subscribes to tendermint event bus and prints out transaction events.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := abci.ListenForTxEvents(abci.PrintTxEvent)
+			if err != nil {
+				return errors.Wrap(err, "cannot abci.ListenForEvents")
+			}
+
+			return nil
+		},
+	}
+
+	var listenCmd = &cobra.Command{
+		Use:   "listen",
+		Short: "Listens to and processes successful tendermint tx events",
+		Long:  `Subscribes to tendermint event bus and updates wallet with confirmed transactions.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := abci.ListenForSuccessfulTxEvents(func(transactionId []byte) {
+				err := wallet.Confirm(transactionId)
+				if err != nil {
+					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", transactionId).Error())
+				}
+			})
+			if err != nil {
+				return errors.Wrap(err, "cannot abci.ListenForEvents")
 			}
 
 			return nil
@@ -216,7 +247,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := abci.Start()
 			if err != nil {
-				return errors.Wrap(err, "cannot node.Start")
+				return errors.Wrap(err, "cannot abci.Start")
 			}
 			return nil
 		},
@@ -229,7 +260,7 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd)
+	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
 	// Tendermint commands
 
@@ -256,28 +287,4 @@ func main() {
 	if err := tendermintBaseCmd.Execute(); err != nil {
 		panic(err)
 	}
-}
-
-func broadcast(transactionBytes []byte) error {
-	broadcastUrl := "tcp://0.0.0.0:26657"
-	httpClient := client.NewHTTP(broadcastUrl, "/websocket")
-	err := httpClient.Start()
-	if err != nil {
-		return errors.Wrap(err, "cannot start websocket http client")
-	}
-	defer func() {
-		err = httpClient.Stop()
-		if err != nil {
-			fmt.Printf("cannot httpClient.Stop: " + err.Error())
-		}
-	}()
-
-	result, err := httpClient.BroadcastTxSync(transactionBytes)
-	if err != nil {
-		return errors.Wrap(err, "cannot broadcast transaction")
-	}
-
-	fmt.Printf("broadcast to %v with result code=%v log=%v\n", broadcastUrl, result.Code, result.Log)
-
-	return nil
 }
