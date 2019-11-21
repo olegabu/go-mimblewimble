@@ -229,7 +229,12 @@ func main() {
 			err := abci.ListenForSuccessfulTxEvents(func(transactionId []byte) {
 				err := wallet.Confirm(transactionId)
 				if err != nil {
-					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", transactionId).Error())
+					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", string(transactionId)).Error())
+				} else {
+					err = wallet.Info()
+					if err != nil {
+						fmt.Println(errors.Wrap(err, "cannot wallet.Info").Error())
+					}
 				}
 			})
 			if err != nil {

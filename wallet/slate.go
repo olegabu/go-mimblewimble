@@ -395,7 +395,6 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 	ledgerTx := ledger.Transaction{
 		Transaction: tx,
 		ID:          slate.ID,
-		Asset:       slate.Asset,
 	}
 
 	txBytes, err := json.Marshal(ledgerTx)
@@ -406,6 +405,7 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 	walletTx := Transaction{
 		Transaction: ledgerTx,
 		Status:      TransactionUnconfirmed,
+		Asset:       slate.Asset,
 	}
 
 	return txBytes, walletTx, nil

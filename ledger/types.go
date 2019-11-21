@@ -18,6 +18,5 @@ type Database interface {
 
 type Transaction struct {
 	core.Transaction
-	ID    uuid.UUID `json:"id,omitempty"`
-	Asset string    `json:"asset,omitempty"`
+	ID uuid.UUID `json:"id,omitempty"`
 }

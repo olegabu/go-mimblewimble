@@ -96,6 +96,7 @@ func (t SlateStatus) String() string {
 type Transaction struct {
 	ledger.Transaction
 	Status TransactionStatus `json:"status,omitempty"`
+	Asset  string            `json:"asset,omitempty"`
 }
 
 type TransactionStatus int

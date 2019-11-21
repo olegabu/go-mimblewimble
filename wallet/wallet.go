@@ -68,9 +68,9 @@ func Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
 		Transaction: ledger.Transaction{
 			Transaction: receiverSlate.Transaction,
 			ID:          receiverSlate.ID,
-			Asset:       receiverSlate.Asset,
 		},
 		Status: TransactionUnconfirmed,
+		Asset:  receiverSlate.Asset,
 	}
 
 	err = db.PutTransaction(tx)
@@ -153,7 +153,6 @@ func Issue(value uint64, asset string) (txBytes []byte, err error) {
 	ledgerTx := ledger.Transaction{
 		Transaction: tx,
 		ID:          uuid.New(),
-		Asset:       asset,
 	}
 
 	txBytes, err = json.Marshal(ledgerTx)
