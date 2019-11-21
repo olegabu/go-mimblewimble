@@ -102,15 +102,13 @@ func ListenForSuccessfulTxEvents(onTx func(transactionId []byte)) error {
 
 				for i, event := range txe.Result.Events {
 					fmt.Printf("event %v: Type=%v\n", i, event.Type)
-					if event.Type == "transfer" {
-						for i, kv := range event.Attributes {
-							key := string(kv.Key)
-							value := string(kv.Value)
-							fmt.Printf("attribute %v: %v=%v\n", i, key, value)
+					for i, kv := range event.Attributes {
+						key := string(kv.Key)
+						value := string(kv.Value)
+						fmt.Printf("attribute %v: %v=%v\n", i, key, value)
 
-							if key == "id" {
-								onTx(kv.Value)
-							}
+						if event.Type == "transfer" && key == "id" {
+							onTx(kv.Value)
 						}
 					}
 				}

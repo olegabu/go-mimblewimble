@@ -43,7 +43,7 @@ func (t *MWChaincode) transfer(stub shim.ChaincodeStubInterface, args []string) 
 
 	txBytes := []byte(args[0])
 
-	tx, err := ledger.ValidateTransaction(txBytes)
+	tx, err := ledger.ValidateTransactionBytes(txBytes)
 	if err != nil {
 		return pb.Response{Status: http.StatusUnauthorized, Message: "transaction is invalid"}
 	}

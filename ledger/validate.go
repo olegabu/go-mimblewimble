@@ -5,58 +5,84 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
 )
 
-func ValidateTransaction(txBytes []byte) (*Transaction, error) {
+func Parse(bytes []byte) (tx *Transaction, issue *Issue, err error) {
+	tx = &Transaction{}
+	issue = &Issue{}
+
+	errTx := json.Unmarshal(bytes, tx)
+	errIssue := json.Unmarshal(bytes, issue)
+
+	if errTx == nil && tx.Body.Kernels != nil && len(tx.Body.Kernels) > 0 {
+		return tx, nil, nil
+	} else if errIssue == nil && issue.Asset != "" {
+		return nil, issue, nil
+	} else {
+		return nil, nil, errors.New(fmt.Sprintf("cannot parse neither to Transaction nor to Issue %v %v", errTx, errIssue))
+	}
+}
+
+func ValidateTransaction(ledgerTx *Transaction) error {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot ContextCreate")
+		return errors.Wrap(err, "cannot ContextCreate")
 	}
 
 	defer secp256k1.ContextDestroy(context)
 
-	identifiedTx := &Transaction{}
+	tx := &ledgerTx.Transaction
 
-	err = json.Unmarshal(txBytes, identifiedTx)
+	err = validateSignature(context, tx)
+	if err != nil {
+		return errors.Wrap(err, "cannot validateSignature")
+	}
+
+	err = validateCommitmentsSum(context, tx)
+	if err != nil {
+		return errors.Wrap(err, "cannot validateCommitmentsSum")
+	}
+
+	err = validateBulletproofs(context, tx.Body.Outputs)
+	if err != nil {
+		return errors.Wrap(err, "cannot validateBulletproofs")
+	}
+
+	return nil
+}
+
+func ValidateIssue(issue *Issue) error {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		return errors.Wrap(err, "cannot ContextCreate")
+	}
+
+	defer secp256k1.ContextDestroy(context)
+
+	err = validateBulletproofs(context, []core.Output{issue.Output})
+	if err != nil {
+		return errors.Wrap(err, "cannot validateBulletproofs")
+	}
+
+	return nil
+}
+
+func ValidateTransactionBytes(txBytes []byte) (ledgerTx *Transaction, err error) {
+	ledgerTx = &Transaction{}
+
+	err = json.Unmarshal(txBytes, ledgerTx)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot unmarshal json to Transaction")
 	}
 
-	tx := &identifiedTx.Transaction
+	err = ValidateTransaction(ledgerTx)
 
-	if !IsIssue(tx) {
-		err = validateSignature(context, tx)
-		if err != nil {
-			return identifiedTx, errors.Wrap(err, "cannot validateSignature")
-		}
-
-		err = validateCommitmentsSum(context, tx)
-		if err != nil {
-			return identifiedTx, errors.Wrap(err, "cannot validateCommitmentsSum")
-		}
-	}
-
-	err = validateBulletproofs(context, tx)
-	if err != nil {
-		return identifiedTx, errors.Wrap(err, "cannot validateBulletproofs")
-	}
-
-	return identifiedTx, nil
-}
-
-func IsIssue(tx *core.Transaction) bool {
-	allOutputsCoinbase := true
-	for _, output := range tx.Body.Outputs {
-		if output.Features != core.CoinbaseOutput {
-			allOutputsCoinbase = false
-			break
-		}
-	}
-	return allOutputsCoinbase && len(tx.Body.Inputs) == 0
+	return
 }
 
 func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
@@ -231,7 +257,7 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 	return nil
 }
 
-func validateBulletproofs(context *secp256k1.Context, tx *core.Transaction) error {
+func validateBulletproofs(context *secp256k1.Context, outputs []core.Output) error {
 	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*1024)
 	if err != nil {
 		return errors.Wrap(err, "cannot ScratchSpaceCreate")
@@ -242,7 +268,7 @@ func validateBulletproofs(context *secp256k1.Context, tx *core.Transaction) erro
 		return errors.Wrap(err, "cannot BulletproofGeneratorsCreate")
 	}
 
-	for i, output := range tx.Body.Outputs {
+	for i, output := range outputs {
 		err := validateBulletproof(context, output, scratch, bulletproofGenerators)
 		if err != nil {
 			return errors.Wrapf(err, "cannot validateBulletproof output %v", i)

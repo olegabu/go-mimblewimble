@@ -43,7 +43,7 @@ func TestRound(t *testing.T) {
 	assert.Nil(t, err)
 	fmt.Println("tx   " + string(txBytes))
 
-	tx, err := ledger.ValidateTransaction(txBytes)
+	tx, err := ledger.ValidateTransactionBytes(txBytes)
 	assert.Nil(t, err)
 	fmt.Println(tx)
 }

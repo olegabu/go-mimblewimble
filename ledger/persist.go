@@ -28,3 +28,12 @@ func PersistTransaction(tx *Transaction, db Database) error {
 
 	return nil
 }
+func PersistIssue(issue *Issue, db Database) error {
+	// save new output
+	err := db.PutOutput(issue.Output)
+	if err != nil {
+		return errors.Wrapf(err, "cannot save output: %v", issue.Output.Commit)
+	}
+
+	return nil
+}

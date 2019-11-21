@@ -39,7 +39,7 @@ func TestWalletRound(t *testing.T) {
 	err = Info()
 	assert.Nil(t, err)
 
-	_, err = ledger.ValidateTransaction(txBytes)
+	_, err = ledger.ValidateTransactionBytes(txBytes)
 	assert.Nil(t, err)
 
 	responseSlate := Slate{}

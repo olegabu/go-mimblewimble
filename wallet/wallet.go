@@ -3,7 +3,6 @@ package wallet
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
-	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/olekukonko/tablewriter"
@@ -112,7 +111,7 @@ func Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 	return txBytes, nil
 }
 
-func Issue(value uint64, asset string) (txBytes []byte, err error) {
+func Issue(value uint64, asset string) (issueBytes []byte, err error) {
 	db := NewDatabase()
 	defer db.Close()
 
@@ -141,23 +140,16 @@ func Issue(value uint64, asset string) (txBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
 
-	tx := core.Transaction{
-		Offset: "",
-		Body: core.TransactionBody{
-			Inputs:  nil,
-			Outputs: []core.Output{output},
-			Kernels: nil,
-		},
+	ledgerIssue := ledger.Issue{
+		Output:     output,
+		Asset:      asset,
+		AssetSig:   "",
+		IssuerCert: "",
 	}
 
-	ledgerTx := ledger.Transaction{
-		Transaction: tx,
-		ID:          uuid.New(),
-	}
-
-	txBytes, err = json.Marshal(ledgerTx)
+	issueBytes, err = json.Marshal(ledgerIssue)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot marshal ledgerTx to json")
+		return nil, errors.Wrap(err, "cannot marshal ledgerIssue to json")
 	}
 
 	return

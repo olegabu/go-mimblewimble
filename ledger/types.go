@@ -20,3 +20,10 @@ type Transaction struct {
 	core.Transaction
 	ID uuid.UUID `json:"id,omitempty"`
 }
+
+type Issue struct {
+	Output     core.Output `json:"output"`
+	Asset      string      `json:"asset,omitempty"`
+	AssetSig   string      `json:"asset_sig,omitempty"`
+	IssuerCert string      `json:"issue_cert,omitempty"`
+}

@@ -39,7 +39,7 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Issue")
 			}
-			fileName := "tx-issue-" + args[0] + ".json"
+			fileName := "issue-" + args[0] + ".json"
 			err = ioutil.WriteFile(fileName, txBytes, 0644)
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
@@ -164,9 +164,9 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
 			}
-			tx, err := ledger.ValidateTransaction(transactionBytes)
+			tx, err := ledger.ValidateTransactionBytes(transactionBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot transaction.ValidateTransaction")
+				return errors.Wrap(err, "cannot transaction.ValidateTransactionBytes")
 			}
 			fmt.Printf("transaction %v is valid\n", tx.ID)
 			return nil
