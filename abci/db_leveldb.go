@@ -83,7 +83,7 @@ func (t *leveldbDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
 func (t *leveldbDatabase) ListOutputs() (outputsBytes []byte, err error) {
 	outputs := make([]core.Output, 0)
 
-	iter := t.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
+	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
 		//app.logger.Debug("iter", iter.Key(), iter.Value())
 		output := core.Output{}
@@ -102,5 +102,9 @@ func (t *leveldbDatabase) ListOutputs() (outputsBytes []byte, err error) {
 }
 
 func outputKey(commit string) []byte {
-	return append([]byte("output"), []byte(commit)...)
+	return []byte("output." + commit)
+}
+
+func outputRange() *util.Range {
+	return util.BytesPrefix([]byte("output."))
 }
