@@ -3,34 +3,20 @@ package wallet
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
-	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
-	"os"
 	"path/filepath"
 	"sort"
 )
-
-var dbFilename string
 
 type leveldbDatabase struct {
 	db *leveldb.DB
 }
 
-func NewLeveldbDatabase() Database {
-	mwroot := os.Getenv("MWROOT")
-
-	if mwroot == "" {
-		dir, err := homedir.Dir()
-		if err != nil {
-			panic("cannot get homedir")
-		}
-		mwroot = filepath.Join(dir, ".mw")
-	}
-
-	dbFilename = filepath.Join(mwroot, "wallet")
+func NewLeveldbDatabase(dbDir string) Database {
+	dbFilename := filepath.Join(dbDir, "wallet")
 
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {

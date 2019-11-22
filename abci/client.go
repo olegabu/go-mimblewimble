@@ -9,25 +9,31 @@ import (
 	"time"
 )
 
-func connect() (httpClient *client.HTTP, err error) {
-	broadcastUrl := "tcp://0.0.0.0:26657"
-	httpClient = client.NewHTTP(broadcastUrl, "/websocket")
-	err = httpClient.Start()
-	if err != nil {
-		err = errors.Wrap(err, "cannot start websocket http client")
-	}
-	fmt.Printf("connected to %v\n", broadcastUrl)
-	return
+type Client struct {
+	broadcastUrl string
+	httpClient   *client.HTTP
 }
 
-func Broadcast(transactionBytes []byte) error {
-	httpClient, err := connect()
+func NewClient(broadcastUrl string) (*Client, error) {
+	httpClient := client.NewHTTP(broadcastUrl, "/websocket")
+	err := httpClient.Start()
 	if err != nil {
-		return errors.Wrap(err, "cannot connect")
+		return nil, errors.Wrap(err, "cannot start websocket http client")
 	}
-	defer httpClient.Stop()
+	fmt.Printf("connected to %v\n", broadcastUrl)
 
-	result, err := httpClient.BroadcastTxSync(transactionBytes)
+	return &Client{
+		broadcastUrl: broadcastUrl,
+		httpClient:   httpClient,
+	}, nil
+}
+
+func (t *Client) Stop() error {
+	return t.httpClient.Stop()
+}
+
+func (t *Client) Broadcast(transactionBytes []byte) error {
+	result, err := t.httpClient.BroadcastTxSync(transactionBytes)
 	if err != nil {
 		return errors.Wrap(err, "cannot broadcast transaction")
 	}
@@ -35,28 +41,28 @@ func Broadcast(transactionBytes []byte) error {
 	fmt.Printf("broadcast with result code=%v log=%v\n", result.Code, result.Log)
 
 	// and wait for confirmation
-	err = waitForOneEvent(httpClient)
+	err = t.waitForOneEvent()
 	if err != nil {
-		return errors.Wrap(err, "cannot waitForOneEvent")
+		return errors.Wrap(err, "cannot waitForOneEvent after broadcast")
 	}
 
 	return nil
 }
 
-func waitForOneEvent(httpClient *client.HTTP) error {
+func (t *Client) waitForOneEvent() error {
 	const timeoutSeconds = 5
 
-	evt, err := client.WaitForOneEvent(httpClient, types.EventTx, timeoutSeconds*time.Second)
+	evt, err := client.WaitForOneEvent(t.httpClient, types.EventTx, timeoutSeconds*time.Second)
 	if err != nil {
 		return errors.Wrap(err, "cannot WaitForOneEvent")
 	}
 
-	PrintTxEvent(evt)
+	t.PrintTxEvent(evt)
 
 	return nil
 }
 
-func PrintTxEvent(evt types.TMEventData) {
+func (t *Client) PrintTxEvent(evt types.TMEventData) {
 	txe, ok := evt.(types.EventDataTx)
 	if ok {
 		fmt.Printf("got EventDataTx: Code=%v Data=%v Log=%v\n", txe.Result.Code, txe.Result.Data, txe.Result.Log)
@@ -70,17 +76,11 @@ func PrintTxEvent(evt types.TMEventData) {
 	}
 }
 
-func ListenForTxEvents(onEvent func(evt types.TMEventData)) error {
+func (t *Client) ListenForTxEvents(onEvent func(evt types.TMEventData)) error {
 	const timeoutSeconds = 60
 
-	httpClient, err := connect()
-	if err != nil {
-		return errors.Wrap(err, "cannot connect")
-	}
-	defer httpClient.Stop()
-
 	for {
-		evt, err := client.WaitForOneEvent(httpClient, types.EventTx, timeoutSeconds*time.Second)
+		evt, err := client.WaitForOneEvent(t.httpClient, types.EventTx, timeoutSeconds*time.Second)
 		if err != nil {
 			if err.Error() == "timed out waiting for event" {
 				fmt.Printf("waiting for tx events for the next %v seconds\n", timeoutSeconds)
@@ -93,8 +93,8 @@ func ListenForTxEvents(onEvent func(evt types.TMEventData)) error {
 	}
 }
 
-func ListenForSuccessfulTxEvents(onTx func(transactionId []byte)) error {
-	return ListenForTxEvents(func(evt types.TMEventData) {
+func (t *Client) ListenForSuccessfulTxEvents(onTx func(transactionId []byte)) error {
+	return t.ListenForTxEvents(func(evt types.TMEventData) {
 		txe, ok := evt.(types.EventDataTx)
 		if ok {
 			if txe.Result.Code == abcitypes.CodeTypeOK {

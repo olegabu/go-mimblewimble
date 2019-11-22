@@ -3,13 +3,11 @@ package abci
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
-	"github.com/mitchellh/go-homedir"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
-	"os"
 	"path/filepath"
 )
 
@@ -20,18 +18,8 @@ type leveldbDatabase struct {
 	currentBatch *leveldb.Batch
 }
 
-func NewLeveldbDatabase() ledger.Database {
-	mwroot := os.Getenv("MWROOT")
-
-	if mwroot == "" {
-		dir, err := homedir.Dir()
-		if err != nil {
-			panic("cannot get homedir")
-		}
-		mwroot = filepath.Join(dir, ".mw")
-	}
-
-	dbFilename = filepath.Join(mwroot, "abci")
+func NewLeveldbDatabase(dbDir string) ledger.Database {
+	dbFilename = filepath.Join(dbDir, "abci")
 
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
