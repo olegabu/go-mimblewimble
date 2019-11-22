@@ -24,6 +24,6 @@ type Transaction struct {
 type Issue struct {
 	Output     core.Output `json:"output"`
 	Asset      string      `json:"asset,omitempty"`
-	AssetSig   string      `json:"asset_sig,omitempty"`
-	IssuerCert string      `json:"issue_cert,omitempty"`
+	AssetSig   []byte      `json:"asset_sig,omitempty"`
+	IssuerCert []byte      `json:"issue_cert,omitempty"`
 }

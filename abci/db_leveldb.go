@@ -9,7 +9,11 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
+	"os"
+	"path/filepath"
 )
+
+var dbFilename string
 
 type leveldbDatabase struct {
 	db           *leveldb.DB
@@ -17,16 +21,23 @@ type leveldbDatabase struct {
 }
 
 func NewLeveldbDatabase() ledger.Database {
-	dir, err := homedir.Dir()
-	if err != nil {
-		panic("cannot get homedir")
+	mwroot := os.Getenv("MWROOT")
+
+	if mwroot == "" {
+		dir, err := homedir.Dir()
+		if err != nil {
+			panic("cannot get homedir")
+		}
+		mwroot = filepath.Join(dir, ".mw")
 	}
 
-	dbFilename := dir + "/.mw/state"
+	dbFilename = filepath.Join(mwroot, "abci")
+
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
 		log.Fatalf("cannot open leveldb at %v: %v", dbFilename, err)
 	}
+	log.Printf("opened abci db at %v\n", dbFilename)
 
 	var d ledger.Database = &leveldbDatabase{db: ldb}
 

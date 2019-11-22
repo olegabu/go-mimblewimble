@@ -8,28 +8,35 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 )
 
 var dbFilename string
-
-func init() {
-	dir, err := homedir.Dir()
-	if err != nil {
-		panic("cannot get homedir")
-	}
-	dbFilename = dir + "/.mw/wallet"
-}
 
 type leveldbDatabase struct {
 	db *leveldb.DB
 }
 
 func NewLeveldbDatabase() Database {
+	mwroot := os.Getenv("MWROOT")
+
+	if mwroot == "" {
+		dir, err := homedir.Dir()
+		if err != nil {
+			panic("cannot get homedir")
+		}
+		mwroot = filepath.Join(dir, ".mw")
+	}
+
+	dbFilename = filepath.Join(mwroot, "wallet")
+
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
 		log.Fatalf("cannot open leveldb at %v: %v", dbFilename, err)
 	}
+	log.Printf("opened wallet db at %v\n", dbFilename)
 
 	var d Database = &leveldbDatabase{db: ldb}
 	return d
@@ -313,6 +320,12 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 
 	for _, o := range tx.Body.Inputs {
 		output, err := t.GetOutput(o.Commit, tx.Asset)
+
+		if errors.Cause(err) == leveldb.ErrNotFound {
+			// not my input
+			continue
+		}
+
 		if err != nil {
 			return errors.Wrap(err, "cannot GetOutput")
 		}
@@ -321,12 +334,18 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 
 		err = t.PutOutput(output)
 		if err != nil {
-			return errors.Wrap(err, "cannot PutTransaction")
+			return errors.Wrap(err, "cannot PutOutput")
 		}
 	}
 
 	for _, o := range tx.Body.Outputs {
 		output, err := t.GetOutput(o.Commit, tx.Asset)
+
+		if errors.Cause(err) == leveldb.ErrNotFound {
+			// not my output
+			continue
+		}
+
 		if err != nil {
 			return errors.Wrap(err, "cannot GetOutput")
 		}
@@ -335,7 +354,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 
 		err = t.PutOutput(output)
 		if err != nil {
-			return errors.Wrap(err, "cannot PutTransaction")
+			return errors.Wrap(err, "cannot PutOutput")
 		}
 	}
 

@@ -141,10 +141,8 @@ func Issue(value uint64, asset string) (issueBytes []byte, err error) {
 	}
 
 	ledgerIssue := ledger.Issue{
-		Output:     output,
-		Asset:      asset,
-		AssetSig:   "",
-		IssuerCert: "",
+		Output: output,
+		Asset:  asset,
 	}
 
 	issueBytes, err = json.Marshal(ledgerIssue)
