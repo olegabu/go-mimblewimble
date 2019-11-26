@@ -1,4 +1,4 @@
-#  Experimental wallet and library for Mimblewimble protocol
+#  Experimental wallet and library for Mimblewimble
 
 This is a toy. Do not use for production.
 
@@ -10,7 +10,7 @@ sudo apt-get install autoconf libtool libgmp3-dev
 make
 ```
 
-## Run offline wallet
+## Demo offline wallet
 
 This demonstrates creation and validation of transactions by the wallet.
 
@@ -25,15 +25,14 @@ mw issue 1
 mw info
 ```
 Send 1 coin to yourself. This will create a `slate-send-<transaction uuid>.json` file that the receiving party needs to 
-fill in by `mw receive` command. Observe a new `Sent` slate and the input that is now in `Locked` state in your wallet 
-by `mw info` command.
+fill in by `mw receive` command. Observe a new `Sent` slate and the input that is now in `Locked` state in your wallet.
 ```bash
 mw send 1
 mw info
 ```
 Receive 1 coin from yourself. This will create a `slate-receive-<transaction uuid>.json` file that needs to be returned 
 to the sender who will turn it into a transaction by `mw finalize` command. 
-Observe new `Unconfirmed` outputs and `Responded` slate in your wallet by `mw info` command.
+Observe new `Unconfirmed` outputs and `Responded` slate in your wallet.
 ```bash
 mw receive slate-send-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
@@ -47,13 +46,13 @@ mw info
 ```
 Tell wallet the transaction has been confirmed by the network. 
 Observe new `Confirmed` outputs and a new transaction, as well as the input turned from `Locked` to `Spent` 
-in your wallet by `mw info` command.
+in your wallet.
 ```bash
 mw confirm 8668319f-d8ae-4dda-be5b-e3fd1648565e
 mw info
 ```
 
-## Run consensus node and two online wallets
+## Demo consensus node and two online wallets
 
 Reset wallet and ledger (tendermint) databases.
 ```bash
@@ -121,4 +120,29 @@ mw broadcast tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 Observe both sender's and receiver's online wallets receive transfer event and update their databases.
 See original Coinbase output turn to `Spent` in the sender's wallet, and a new `Confirmed` output in the receiver's.
 
+## Issue multiple assets
+
+When an asset name is omitted the wallet issues a default asset: currency `¤`.
+Tokens of any asset can be issued and tracked separately by giving the asset's name.  
+
+Issue a stablecoin of 1 dollar, a peg of a bitcoin and a commodity token of an apple.
+```bash
+mw issue 1 $
+mw issue 1 ₿
+mw issue 1 🍎
+mw info
+```
+
+Similarly, assets of any type can be transferred. 
+Issue 5 dollars and broadcast it; then send, receive, finalize and broadcast a transfer of these 5 dollars.
+```bash
+mw issue 5 $
+mw broadcast issue-5.json
+mw info
+mw send 5 $
+mw receive slate-send-5d6cf41e-e3f6-474d-9a5c-314d9344012b.json
+mw finalize slate-receive-5d6cf41e-e3f6-474d-9a5c-314d9344012b.json
+mw broadcast tx-5d6cf41e-e3f6-474d-9a5c-314d9344012b.json
+mw info
+```
 
