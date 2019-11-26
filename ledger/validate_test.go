@@ -18,7 +18,7 @@ func getTxBytes() []byte {
 }
 
 func TestValidate(t *testing.T) {
-	tx, err := ValidateTransaction(getTxBytes())
+	tx, err := ValidateTransactionBytes(getTxBytes())
 	assert.NotNil(t, tx)
 	assert.Nil(t, err)
 }

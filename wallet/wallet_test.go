@@ -5,30 +5,54 @@ import (
 	"fmt"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/stretchr/testify/assert"
+	"os"
+	"os/user"
+	"path/filepath"
 	"testing"
 )
 
+func testDbDir() string {
+	var usr, _ = user.Current()
+	return filepath.Join(usr.HomeDir, ".mw_test")
+}
+
 func TestWalletRound(t *testing.T) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.Nil(t, err)
+
+	db := NewLeveldbDatabase(dir)
+	w := NewWallet(db)
+	defer db.Close()
+
 	for _, value := range []int{1, 5, 10} {
-		_, err := Issue(uint64(value))
+		_, err := w.Issue(uint64(value), "cash")
 		assert.Nil(t, err)
 	}
 
-	slateBytes, err := Send(7)
+	slateBytes, err := w.Send(7, "cash")
 	assert.Nil(t, err)
 	fmt.Println("send " + string(slateBytes))
 
-	responseSlateBytes, err := Receive(slateBytes)
+	err = w.Info()
+	assert.Nil(t, err)
+
+	responseSlateBytes, err := w.Receive(slateBytes)
 	assert.Nil(t, err)
 	fmt.Println("resp " + string(responseSlateBytes))
 
-	txBytes, err := Finalize(responseSlateBytes)
+	err = w.Info()
+	assert.Nil(t, err)
+
+	txBytes, err := w.Finalize(responseSlateBytes)
 	assert.Nil(t, err)
 	fmt.Println("tx   " + string(txBytes))
 
-	err = Info()
+	err = w.Info()
+	assert.Nil(t, err)
 
-	_, err = ledger.ValidateTransaction(txBytes)
+	_, err = ledger.ValidateTransactionBytes(txBytes)
 	assert.Nil(t, err)
 
 	responseSlate := Slate{}
@@ -37,13 +61,18 @@ func TestWalletRound(t *testing.T) {
 	txID, err := responseSlate.ID.MarshalText()
 	assert.Nil(t, err)
 
-	err = Confirm(txID)
+	err = w.Confirm(txID)
 	assert.Nil(t, err)
 
-	err = Info()
+	err = w.Info()
+	assert.Nil(t, err)
 }
 
 func TestInfo(t *testing.T) {
-	err := Info()
+	dir := testDbDir()
+	db := NewLeveldbDatabase(dir)
+	w := NewWallet(db)
+	defer db.Close()
+	err := w.Info()
 	assert.Nil(t, err)
 }

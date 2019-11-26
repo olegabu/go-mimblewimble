@@ -8,25 +8,27 @@ import (
 )
 
 type Database interface {
-	PutSlate(slate Slate) error
+	PutSenderSlate(slate SenderSlate) error
+	PutReceiverSlate(slate ReceiverSlate) error
 	PutTransaction(tx Transaction) error
 	PutOutput(output Output) error
-	GetSlate(id []byte) (slate Slate, err error)
+	GetSenderSlate(id []byte) (slate SenderSlate, err error)
 	GetTransaction(id []byte) (transaction Transaction, err error)
-	GetOutput(id []byte) (output Output, err error)
+	GetOutput(commit string, asset string) (output Output, err error)
 	ListSlates() (slates []Slate, err error)
 	ListTransactions() (transactions []Transaction, err error)
 	ListOutputs() (outputs []Output, err error)
-	GetInputs(amount uint64) (inputs []Output, change uint64, err error)
+	GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error)
 	Confirm(transactionID []byte) error
 	Close()
 }
 
 type Output struct {
 	core.Output
-	Blind  [32]byte
-	Value  uint64
-	Status OutputStatus
+	Blind  [32]byte     `json:"blind,omitempty"`
+	Value  uint64       `json:"value,omitempty"`
+	Status OutputStatus `json:"status,omitempty"`
+	Asset  string       `json:"asset,omitempty"`
 }
 
 type OutputStatus int
@@ -55,10 +57,19 @@ func (t OutputStatus) String() string {
 
 type Slate struct {
 	libwallet.Slate
-	SumSenderBlinds [32]byte
-	SenderNonce     [32]byte
-	ReceiverNonce   [32]byte
-	Status          SlateStatus
+	Asset  string      `json:"asset,omitempty"`
+	Status SlateStatus `json:"status,omitempty"`
+}
+
+type SenderSlate struct {
+	Slate
+	SumSenderBlinds [32]byte `json:"sumSenderBlinds,omitempty"`
+	SenderNonce     [32]byte `json:"senderNonce,omitempty"`
+}
+
+type ReceiverSlate struct {
+	Slate
+	ReceiverNonce [32]byte `json:"receiverNonce,omitempty"`
 }
 
 type SlateStatus int
@@ -84,7 +95,8 @@ func (t SlateStatus) String() string {
 
 type Transaction struct {
 	ledger.Transaction
-	Status TransactionStatus
+	Status TransactionStatus `json:"status,omitempty"`
+	Asset  string            `json:"asset,omitempty"`
 }
 
 type TransactionStatus int

@@ -32,8 +32,8 @@ func init() {
 	flag.StringVar(&configFile, "config", dir+"/.tendermint/config/config.toml", "Path to config.toml")
 }
 
-func Start() error {
-	db := NewLeveldbDatabase()
+func Start(dbDir string) error {
+	db := NewLeveldbDatabase(dbDir)
 	app := NewMWApplication(db)
 	defer db.Close()
 

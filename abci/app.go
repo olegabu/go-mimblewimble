@@ -44,12 +44,24 @@ func (MWApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseE
 }
 
 func (app *MWApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	tx, err := ledger.ValidateTransaction(req.Tx)
-	if err != nil {
-		return abcitypes.ResponseCheckTx{Code: http.StatusUnauthorized, GasWanted: 1, Log: errors.Wrap(err, "transaction is invalid").Error()}
+	tx, issue, err := ledger.Parse(req.Tx)
+	if err != nil || (issue == nil && tx == nil) {
+		return abcitypes.ResponseCheckTx{Code: http.StatusBadRequest, GasWanted: 1, Log: errors.Wrap(err, "cannot parse payload").Error()}
 	}
 
-	return abcitypes.ResponseCheckTx{Code: abcitypes.CodeTypeOK, GasWanted: 1, Log: fmt.Sprintf("transaction %v is valid", tx.ID)}
+	if tx != nil {
+		err := ledger.ValidateTransaction(tx)
+		if err != nil {
+			return abcitypes.ResponseCheckTx{Code: http.StatusUnauthorized, GasWanted: 1, Log: errors.Wrap(err, "transaction is invalid").Error()}
+		}
+	} else {
+		err := ledger.ValidateIssue(issue)
+		if err != nil {
+			return abcitypes.ResponseCheckTx{Code: http.StatusUnauthorized, GasWanted: 1, Log: errors.Wrap(err, "issue is invalid").Error()}
+		}
+	}
+
+	return abcitypes.ResponseCheckTx{Code: abcitypes.CodeTypeOK, GasWanted: 1, Log: "valid"}
 }
 
 func (app *MWApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
@@ -58,17 +70,40 @@ func (app *MWApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.
 }
 
 func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
-	tx, err := ledger.ValidateTransaction(req.Tx)
-	if err != nil {
-		return abcitypes.ResponseDeliverTx{Code: http.StatusUnauthorized, Log: errors.Wrap(err, "transaction is invalid").Error()}
+	tx, issue, err := ledger.Parse(req.Tx)
+	if err != nil || (issue == nil && tx == nil) {
+		return abcitypes.ResponseDeliverTx{Code: http.StatusBadRequest, GasWanted: 1, Log: errors.Wrap(err, "cannot parse payload").Error()}
 	}
 
-	err = ledger.PersistTransaction(tx, app.db)
-	if err != nil {
-		return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: errors.Wrap(err, "cannot persist transaction").Error()}
+	var events []abcitypes.Event
+
+	if tx != nil {
+		err := ledger.ValidateTransaction(tx)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: http.StatusUnauthorized, GasWanted: 1, Log: errors.Wrap(err, "transaction is invalid").Error()}
+		}
+
+		err = ledger.PersistTransaction(tx, app.db)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: errors.Wrap(err, "cannot persist transaction").Error()}
+		}
+
+		events = transferEvents(*tx)
+	} else {
+		err := ledger.ValidateIssue(issue)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: http.StatusUnauthorized, GasWanted: 1, Log: errors.Wrap(err, "issue is invalid").Error()}
+		}
+
+		err = ledger.PersistIssue(issue, app.db)
+		if err != nil {
+			return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: errors.Wrap(err, "cannot persist issue").Error()}
+		}
+
+		events = issueEvents(*issue)
 	}
 
-	return abcitypes.ResponseDeliverTx{Code: abcitypes.CodeTypeOK, Events: transferEvents(*tx)}
+	return abcitypes.ResponseDeliverTx{Code: abcitypes.CodeTypeOK, Events: events}
 }
 
 func (app *MWApplication) Commit() abcitypes.ResponseCommit {
@@ -120,6 +155,17 @@ func transferEvents(tx ledger.Transaction) []abcitypes.Event {
 			Type: "transfer",
 			Attributes: common.KVPairs{
 				{Key: []byte("id"), Value: []byte(tx.ID.String())},
+			},
+		},
+	}
+}
+
+func issueEvents(issue ledger.Issue) []abcitypes.Event {
+	return []abcitypes.Event{
+		{
+			Type: "issue",
+			Attributes: common.KVPairs{
+				{Key: []byte("asset"), Value: []byte(issue.Asset)},
 			},
 		},
 	}

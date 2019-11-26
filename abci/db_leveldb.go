@@ -3,30 +3,29 @@ package abci
 import (
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
-	"github.com/mitchellh/go-homedir"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
+	"path/filepath"
 )
+
+var dbFilename string
 
 type leveldbDatabase struct {
 	db           *leveldb.DB
 	currentBatch *leveldb.Batch
 }
 
-func NewLeveldbDatabase() ledger.Database {
-	dir, err := homedir.Dir()
-	if err != nil {
-		panic("cannot get homedir")
-	}
+func NewLeveldbDatabase(dbDir string) ledger.Database {
+	dbFilename = filepath.Join(dbDir, "abci")
 
-	dbFilename := dir + "/.mw/state"
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
 		log.Fatalf("cannot open leveldb at %v: %v", dbFilename, err)
 	}
+	log.Printf("opened abci db at %v\n", dbFilename)
 
 	var d ledger.Database = &leveldbDatabase{db: ldb}
 
@@ -83,7 +82,7 @@ func (t *leveldbDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
 func (t *leveldbDatabase) ListOutputs() (outputsBytes []byte, err error) {
 	outputs := make([]core.Output, 0)
 
-	iter := t.db.NewIterator(util.BytesPrefix([]byte("output")), nil)
+	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
 		//app.logger.Debug("iter", iter.Key(), iter.Value())
 		output := core.Output{}
@@ -102,5 +101,9 @@ func (t *leveldbDatabase) ListOutputs() (outputsBytes []byte, err error) {
 }
 
 func outputKey(commit string) []byte {
-	return append([]byte("output"), []byte(commit)...)
+	return []byte("output." + commit)
+}
+
+func outputRange() *util.Range {
+	return util.BytesPrefix([]byte("output."))
 }

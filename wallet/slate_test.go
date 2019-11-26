@@ -31,7 +31,7 @@ func TestRound(t *testing.T) {
 		Value:  inputValue,
 	}}
 
-	slateBytes, _, senderWalletSlate, err := CreateSlate(amount, change, inputs)
+	slateBytes, _, senderWalletSlate, err := CreateSlate(amount, "cash", change, inputs)
 	assert.Nil(t, err)
 	fmt.Println("send " + string(slateBytes))
 
@@ -43,7 +43,7 @@ func TestRound(t *testing.T) {
 	assert.Nil(t, err)
 	fmt.Println("tx   " + string(txBytes))
 
-	tx, err := ledger.ValidateTransaction(txBytes)
+	tx, err := ledger.ValidateTransactionBytes(txBytes)
 	assert.Nil(t, err)
 	fmt.Println(tx)
 }

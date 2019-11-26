@@ -18,5 +18,12 @@ type Database interface {
 
 type Transaction struct {
 	core.Transaction
-	ID uuid.UUID
+	ID uuid.UUID `json:"id,omitempty"`
+}
+
+type Issue struct {
+	Output     core.Output `json:"output"`
+	Asset      string      `json:"asset,omitempty"`
+	AssetSig   []byte      `json:"asset_sig,omitempty"`
+	IssuerCert []byte      `json:"issue_cert,omitempty"`
 }

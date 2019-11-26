@@ -2,40 +2,95 @@ package main
 
 import (
 	"fmt"
+	"github.com/mitchellh/go-homedir"
 	"github.com/olegabu/go-mimblewimble/abci"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
+	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/cli"
-	"github.com/tendermint/tendermint/rpc/client"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 
-	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
-	cfg "github.com/tendermint/tendermint/config"
-
 	"github.com/spf13/cobra"
 )
+
+const defaultAsset = "¤"
+
+// flags
+var (
+	// global
+	flagAddress string
+	flagPersist string
+)
+
+var rootCmd *cobra.Command
+
+// to bind MW_ env variables to flags of all commands
+// ex.: db directory can be set with --persist flag:
+// mw info --persist $HOME/.mw_x
+// or MW_PERSIST env var:
+// MW_PERSIST=$HOME/.mw_x mw info
+// see https://github.com/spf13/viper/issues/397#issuecomment-544272457
+func init() {
+	cobra.OnInitialize(func() {
+		// bind env variables
+		// see https://github.com/spf13/viper#working-with-environment-variables
+		viper.SetEnvPrefix("MW")
+		viper.AutomaticEnv()
+		postInitCommands(rootCmd.Commands())
+	})
+}
+
+func postInitCommands(commands []*cobra.Command) {
+	for _, c := range commands {
+		presetRequiredFlags(c)
+		if c.HasSubCommands() {
+			postInitCommands(c.Commands())
+		}
+	}
+}
+
+func presetRequiredFlags(cmd *cobra.Command) {
+	viper.BindPFlags(cmd.Flags())
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if viper.IsSet(f.Name) && viper.GetString(f.Name) != "" {
+			cmd.Flags().Set(f.Name, viper.GetString(f.Name))
+		}
+	})
+}
 
 func main() {
 
 	var issueCmd = &cobra.Command{
-		Use:   "issue amount",
+		Use:   "issue amount [asset]",
 		Short: "Creates outputs in the wallet",
 		Long:  `Creates a coinbase output in own wallet. Use for testing only.`,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
 			if err != nil {
 				return errors.Wrap(err, "cannot parse amount")
 			}
-			txBytes, err := wallet.Issue(uint64(amount))
+			asset := defaultAsset
+			if len(args) > 1 {
+				asset = args[1]
+			}
+
+			db := wallet.NewLeveldbDatabase(flagPersist)
+			w := wallet.NewWallet(db)
+			defer db.Close()
+
+			txBytes, err := w.Issue(uint64(amount), asset)
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Issue")
 			}
-			fileName := "tx-issue-" + args[0] + ".json"
+			fileName := "issue-" + args[0] + ".json"
 			err = ioutil.WriteFile(fileName, txBytes, 0644)
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
@@ -46,16 +101,25 @@ func main() {
 	}
 
 	var sendCmd = &cobra.Command{
-		Use:   "send amount",
+		Use:   "send amount [asset]",
 		Short: "Initiates a send transaction",
 		Long:  `Creates a json file with a slate to pass to the receiver.`,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
 			if err != nil {
 				return errors.Wrap(err, "cannot parse amount")
 			}
-			slateBytes, err := wallet.Send(uint64(amount))
+			asset := defaultAsset
+			if len(args) > 1 {
+				asset = args[1]
+			}
+
+			db := wallet.NewLeveldbDatabase(flagPersist)
+			w := wallet.NewWallet(db)
+			defer db.Close()
+
+			slateBytes, err := w.Send(uint64(amount), asset)
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Send")
 			}
@@ -84,7 +148,12 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot read sender slate file "+slateFileName)
 			}
-			responseSlateBytes, err := wallet.Receive(slateBytes)
+
+			db := wallet.NewLeveldbDatabase(flagPersist)
+			w := wallet.NewWallet(db)
+			defer db.Close()
+
+			responseSlateBytes, err := w.Receive(slateBytes)
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Receive")
 			}
@@ -113,7 +182,12 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot read receiver slate file "+slateFileName)
 			}
-			txBytes, err := wallet.Finalize(slateBytes)
+
+			db := wallet.NewLeveldbDatabase(flagPersist)
+			w := wallet.NewWallet(db)
+			defer db.Close()
+
+			txBytes, err := w.Finalize(slateBytes)
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Finalize")
 			}
@@ -126,7 +200,7 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
-			fmt.Printf("wrote transaction %v, send it to the network to get validated: broadcast %v\n", string(id), fileName)
+			fmt.Printf("wrote transaction %v, send it to the network to get validated: broadcast %v\nthen tell wallet the transaction has been confirmed: confirm %v\n", string(id), fileName, string(id))
 			return nil
 		},
 	}
@@ -137,7 +211,12 @@ func main() {
 		Long:  `Tells the wallet the transaction has been confirmed by the network so the outputs become valid and inputs spent.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := wallet.Confirm([]byte(args[0]))
+
+			db := wallet.NewLeveldbDatabase(flagPersist)
+			w := wallet.NewWallet(db)
+			defer db.Close()
+
+			err := w.Confirm([]byte(args[0]))
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Confirm")
 			}
@@ -156,9 +235,9 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
 			}
-			tx, err := ledger.ValidateTransaction(transactionBytes)
+			tx, err := ledger.ValidateTransactionBytes(transactionBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot transaction.ValidateTransaction")
+				return errors.Wrap(err, "cannot transaction.ValidateTransactionBytes")
 			}
 			fmt.Printf("transaction %v is valid\n", tx.ID)
 			return nil
@@ -170,7 +249,12 @@ func main() {
 		Short: "Prints out outputs, slates, transactions",
 		Long:  `Prints out outputs, slates, transactions stored in the wallet.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := wallet.Info()
+
+			db := wallet.NewLeveldbDatabase(flagPersist)
+			w := wallet.NewWallet(db)
+			defer db.Close()
+
+			err := w.Info()
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Info")
 			}
@@ -190,36 +274,120 @@ func main() {
 				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
 			}
 
-			err = broadcast(transactionBytes)
+			client, err := abci.NewClient(flagAddress)
 			if err != nil {
-				return errors.Wrap(err, "cannot broadcast")
+				return errors.Wrap(err, "cannot get new client")
+			}
+			defer client.Stop()
+
+			err = client.Broadcast(transactionBytes)
+			if err != nil {
+				return errors.Wrap(err, "cannot client.Broadcast")
 			}
 
 			return nil
 		},
 	}
+	broadcastCmd.Flags().StringVarP(&flagAddress,
+		"address",
+		"",
+		"tcp://0.0.0.0:26657",
+		"address of tendermint socket to broadcast to")
+
+	var eventsCmd = &cobra.Command{
+		Use:   "events",
+		Short: "Listens to and prints tendermint tx events",
+		Long:  `Subscribes to tendermint events and prints out transaction events.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := abci.NewClient(flagAddress)
+			if err != nil {
+				return errors.Wrap(err, "cannot get new client")
+			}
+			defer client.Stop()
+
+			err = client.ListenForTxEvents(client.PrintTxEvent)
+			if err != nil {
+				return errors.Wrap(err, "cannot client.ListenForEvents")
+			}
+
+			return nil
+		},
+	}
+	eventsCmd.Flags().StringVarP(&flagAddress,
+		"address",
+		"",
+		"tcp://0.0.0.0:26657",
+		"address of tendermint socket to subscribe for events")
+
+	var listenCmd = &cobra.Command{
+		Use:   "listen",
+		Short: "Listens to and processes successful tendermint tx events",
+		Long:  `Subscribes to tendermint events and updates wallet with confirmed transactions.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, err := abci.NewClient(flagAddress)
+			if err != nil {
+				return errors.Wrap(err, "cannot get new client")
+			}
+			defer client.Stop()
+
+			err = client.ListenForSuccessfulTxEvents(func(transactionId []byte) {
+
+				db := wallet.NewLeveldbDatabase(flagPersist)
+				w := wallet.NewWallet(db)
+				defer db.Close()
+
+				err := w.Confirm(transactionId)
+				if err != nil {
+					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", string(transactionId)).Error())
+				} else {
+					err = w.Info()
+					if err != nil {
+						fmt.Println(errors.Wrap(err, "cannot wallet.Info").Error())
+					}
+				}
+			})
+			if err != nil {
+				return errors.Wrap(err, "cannot abci.ListenForEvents")
+			}
+
+			return nil
+		},
+	}
+	listenCmd.Flags().StringVarP(&flagAddress,
+		"address",
+		"",
+		"tcp://0.0.0.0:26657",
+		"address of tendermint socket to subscribe for events")
 
 	var nodeCmd = &cobra.Command{
 		Use:   "node",
 		Short: "Runs blockchain node",
 		Long:  `Runs Tendermint node with built in Mimblewimble ABCI app.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := abci.Start()
+			err := abci.Start(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot node.Start")
+				return errors.Wrap(err, "cannot abci.Start")
 			}
 			return nil
 		},
 	}
 
-	var rootCmd = &cobra.Command{
+	rootCmd = &cobra.Command{
 		Use:          "mw",
 		Short:        "Wallet and validator for Mimblewimble",
 		Long:         `Experimental wallet and validator for Mimblewimble protocol.`,
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd)
+	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
+
+	dir, err := homedir.Dir()
+	if err != nil {
+		panic("cannot get homedir")
+	}
+	mwroot := filepath.Join(dir, ".mw")
+
+	rootCmd.PersistentFlags().StringVarP(&flagPersist, "persist", "", mwroot, "directory to use for databases")
 
 	// Tendermint commands
 
@@ -246,28 +414,4 @@ func main() {
 	if err := tendermintBaseCmd.Execute(); err != nil {
 		panic(err)
 	}
-}
-
-func broadcast(transactionBytes []byte) error {
-	broadcastUrl := "tcp://0.0.0.0:26657"
-	httpClient := client.NewHTTP(broadcastUrl, "/websocket")
-	err := httpClient.Start()
-	if err != nil {
-		return errors.Wrap(err, "cannot start websocket http client")
-	}
-	defer func() {
-		err = httpClient.Stop()
-		if err != nil {
-			fmt.Printf("cannot httpClient.Stop: " + err.Error())
-		}
-	}()
-
-	result, err := httpClient.BroadcastTxSync(transactionBytes)
-	if err != nil {
-		return errors.Wrap(err, "cannot broadcast transaction")
-	}
-
-	fmt.Printf("broadcast to %v with result code=%v log=%v\n", broadcastUrl, result.Code, result.Log)
-
-	return nil
 }
