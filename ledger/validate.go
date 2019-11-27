@@ -85,6 +85,19 @@ func ValidateTransactionBytes(txBytes []byte) (ledgerTx *Transaction, err error)
 	return
 }
 
+func ValidateIssueBytes(issueBytes []byte) (ledgerIssue *Issue, err error) {
+	ledgerIssue = &Issue{}
+
+	err = json.Unmarshal(issueBytes, ledgerIssue)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot unmarshal json to Issue")
+	}
+
+	err = ValidateIssue(ledgerIssue)
+
+	return
+}
+
 func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 	if len(tx.Body.Kernels) < 1 {
 		return errors.New("no entries in Kernels")
@@ -102,12 +115,12 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 
 	status, excessCommitment, err := secp256k1.CommitmentParse(context, excessBytes[:])
 	if !status || err != nil {
-		return errors.Wrap(err, "CommitmentParse failed")
+		return errors.New("CommitmentParse failed")
 	}
 
 	status, publicKey, err := secp256k1.CommitmentToPublicKey(context, excessCommitment)
 	if !status || err != nil {
-		return errors.Wrap(err, "CommitmentToPublicKey failed")
+		return errors.New("CommitmentToPublicKey failed")
 	}
 
 	msg := KernelSignatureMessage(tx.Body.Kernels[0])
@@ -123,7 +136,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 		false,
 	)
 	if !status || err != nil {
-		return errors.Wrap(err, "AggsigVerifySingle failed")
+		return errors.New("AggsigVerifySingle failed")
 	}
 
 	return nil
@@ -170,7 +183,7 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 
 		status, commitment, err := secp256k1.CommitmentParse(context, commitmentBytes)
 		if !status || err != nil {
-			return errors.Wrapf(err, "cannot parse commitmentBytes for input %v", i)
+			return errors.Errorf("cannot parse commitmentBytes for input %v", i)
 		}
 
 		inputs = append(inputs, commitment)
@@ -184,7 +197,7 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 
 		status, commitment, err := secp256k1.CommitmentParse(context, commitmentBytes)
 		if !status || err != nil {
-			return errors.Wrapf(err, "cannot parse commitmentBytes for output %v", i)
+			return errors.Errorf("cannot parse commitmentBytes for output %v", i)
 		}
 
 		outputs = append(outputs, commitment)
@@ -199,20 +212,20 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 
 	status, overageCommitment, err := secp256k1.Commit(context, zeroBlindingFactor, overage, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot calculate overageCommitment")
+		return errors.New("cannot calculate overageCommitment")
 	}
 
 	// the first part of equality to check
 	// InputCommitmentsSum - (OutputCommitments + FeeCommitments)
 	status, commitmentsSum, err := secp256k1.CommitSum(context, inputs, append(outputs, overageCommitment))
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot calculate commitmentsSum")
+		return errors.New("cannot calculate commitmentsSum")
 	}
 
 	// serialize it to simplify equality check
 	status, serializedCommitmentsSum, err := secp256k1.CommitmentSerialize(context, commitmentsSum)
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot serialize commitmentsSum")
+		return errors.New("cannot serialize commitmentsSum")
 	}
 
 	// calculate the second part
@@ -232,22 +245,22 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 
 	status, offsetCommitment, err := secp256k1.Commit(context, offset32, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot calculate offsetCommitment")
+		return errors.New("cannot calculate offsetCommitment")
 	}
 
 	status, excessCommitment, err := secp256k1.CommitmentParse(context, excessBytes)
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot parse excessBytes")
+		return errors.New("cannot parse excessBytes")
 	}
 
 	status, kernelExcess, err := secp256k1.CommitSum(context, make([]*secp256k1.Commitment, 0), (&([2]*secp256k1.Commitment{offsetCommitment, excessCommitment}))[:])
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot calculate kernelExcess")
+		return errors.New("cannot calculate kernelExcess")
 	}
 
 	status, serializedKernelExcess, err := secp256k1.CommitmentSerialize(context, kernelExcess)
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot serialize kernelExcess")
+		return errors.New("cannot serialize kernelExcess")
 	}
 
 	if bytes.Compare(serializedKernelExcess[:], serializedCommitmentsSum[:]) != 0 {
@@ -286,7 +299,7 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 
 	status, BPCommitment, err := secp256k1.CommitmentParse(context, commitmentBytes)
 	if !status || err != nil {
-		return errors.Wrap(err, "cannot parse commitmentBytes")
+		return errors.New("cannot parse commitmentBytes")
 	}
 
 	proofBytes, err := hex.DecodeString(output.Proof)
@@ -305,7 +318,7 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 		&secp256k1.GeneratorH,
 		nil)
 	if proofStatus != 1 || err != nil {
-		return errors.Wrap(err, "cannot BulletproofRangeproofVerify")
+		return errors.New("cannot BulletproofRangeproofVerify")
 	}
 
 	return nil
