@@ -4,9 +4,27 @@ This is a toy. Do not use for production.
 
 ## Build
 
-Install tools and build.
+Install Golang ([instructions](https://github.com/golang/go/wiki/Ubuntu)).
+```bash
+sudo add-apt-repository ppa:longsleep/golang-backports
+sudo apt-get update
+sudo apt-get install golang-go
+
+echo "export GOPATH=~/go" >> ~/.bashrc
+echo "export GOBIN=~/go/bin" >> ~/.bashrc
+echo "export PATH=$PATH:$GOBIN" >> ~/.bashrc
+. ~/.bashrc
+```
+
+Install tools.
 ```bash
 sudo apt-get install autoconf libtool libgmp3-dev
+```
+
+## Build
+
+```bash
+export GOPRIVATE=github.com/olegabu/go-secp256k1-zkp
 make
 ```
 
@@ -54,12 +72,17 @@ mw info
 
 ## Demo consensus node and two online wallets
 
-Reset wallet and ledger (tendermint) databases.
+If running for the first time generate Tendermint keys.
+```bash
+mw tendermint init
+```
+
+To clean up reset wallet and ledger (Tendermint) databases.
 ```bash
 mw tendermint unsafe_reset_all && rm -rf ~/.mw*
 ``` 
 
-Start tendermint consensus node with Mimblewimble ABCI application.
+Start Tendermint consensus node with Mimblewimble ABCI application.
 ```bash
 mw node
 ``` 
@@ -125,10 +148,9 @@ See original Coinbase output turn to `Spent` in the sender's wallet, and a new `
 When an asset name is omitted the wallet issues a default asset: currency `¤`.
 Tokens of any asset can be issued and tracked separately by giving the asset's name.  
 
-Issue a stablecoin of 1 dollar, a peg of a bitcoin and a commodity token of an apple.
+Issue a stablecoin of 1 dollar and a commodity token of an apple.
 ```bash
 mw issue 1 $
-mw issue 1 ₿
 mw issue 1 🍎
 mw info
 ```
