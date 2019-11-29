@@ -2,13 +2,14 @@ package wallet
 
 import (
 	"encoding/json"
+	"os"
+	"strconv"
+
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
-	"os"
-	"strconv"
 )
 
 type Wallet struct {
@@ -25,7 +26,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := CreateSlate(amount, asset, change, inputs)
+	slateBytes, changeOutput, senderSlate, err := CreateSlate(nil, amount, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}

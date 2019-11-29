@@ -1,15 +1,16 @@
 package ledger
 
 import (
-	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"log"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func getTxBytes() []byte {
-	//bytes, err := ioutil.ReadFile("1g_repost_fix_kernel.json") // fails TestValidateCommitmentsSum
-	bytes, err := ioutil.ReadFile("../10_grin_repost.json")
+	bytes, err := ioutil.ReadFile("../1g_repost_fix_kernel.json") // fails TestValidateCommitmentsSum
+	//bytes, err := ioutil.ReadFile("../10_grin_repost.json")
 	if err != nil {
 		log.Panic("cannot open json file with test transaction")
 	}

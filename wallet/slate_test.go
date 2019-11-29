@@ -2,11 +2,12 @@ package wallet
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestRound(t *testing.T) {
@@ -31,7 +32,7 @@ func TestRound(t *testing.T) {
 		Value:  inputValue,
 	}}
 
-	slateBytes, _, senderWalletSlate, err := CreateSlate(amount, "cash", change, inputs)
+	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, "cash", change, inputs)
 	assert.Nil(t, err)
 	fmt.Println("send " + string(slateBytes))
 
