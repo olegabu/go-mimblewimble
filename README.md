@@ -67,14 +67,14 @@ In this offline scenario we'll skip this part and tell the wallet the transactio
 mw finalize slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
 ```
-Tell wallet the transaction has been confirmed by the network. 
+Tell our wallet the transaction has been confirmed by the network. 
 Observe new `Confirmed` outputs and a new transaction, as well as the input turned from `Locked` to `Spent` 
 in your wallet.
 ```bash
 mw confirm 8668319f-d8ae-4dda-be5b-e3fd1648565e
 mw info
 ```
-You can validate any transaction file in [Grin](https://github.com/mimblewimble/grin) format.
+You can validate any transaction serialized in [Grin](https://github.com/mimblewimble/grin) format.
 ```bash
 mw validate tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw validate 1_grin_repost.json
@@ -82,17 +82,17 @@ mw validate 1_grin_repost.json
 
 ## Demo consensus node and two online wallets
 
-This demonstrates creation of Mimblewimble transactions by sender's and receiver's wallets connected to a consensus network of one Tendermint node with a built in ABCI application that validates transactions.
+This demonstrates creation of Mimblewimble transactions by sender's and receiver's wallets connected to a consensus network of one Tendermint node that validates transactions.
 
 If running for the first time generate Tendermint keys.
 ```bash
 mw tendermint init
 ```
-Clean up: reset wallet and ledger (Tendermint) databases.
+Clean up: delete wallets and reset Tendermint ledger.
 ```bash
 mw tendermint unsafe_reset_all && rm -rf ~/.mw*
 ```
-Start Tendermint consensus node with Mimblewimble ABCI application.
+Start Tendermint consensus node with a built in Mimblewimble ABCI application.
 ```bash
 mw node
 ```
