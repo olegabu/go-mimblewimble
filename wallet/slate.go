@@ -38,7 +38,7 @@ func CreateSlate(context *secp256k1.Context, amount uint64, asset string, change
 	for idx, inp := range walletInputs {
 		slateInputs[idx] = core.Input{
 			Features: inp.Features,
-			Commit: inp.Commit}
+			Commit:   inp.Commit}
 		negativeBlinds[idx] = inp.Blind
 	}
 
@@ -66,19 +66,19 @@ func CreateSlate(context *secp256k1.Context, amount uint64, asset string, change
 
 	// calculate public key for the sum of sender blinding factors
 
-	publicBlindExcessString, err := stringPubKeyFromSecretKey(context, sumBlinds)
+	publicBlindExcessString, _, err := stringPubKeyFromSecretKey(context, sumBlinds)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
 	// generate secret nonce and calculate its public key
 
-	nonce, err := secret()
+	nonce, err := secp256k1.AggsigGenerateSecureNonce(context, dummyseed[:]) // secret()
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get secret for nonce")
 	}
 
-	publicNonceString, err := stringPubKeyFromSecretKey(context, nonce[:])
+	publicNonceString, _, err := stringPubKeyFromSecretKey(context, nonce[:])
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
 	}
@@ -138,9 +138,10 @@ func CreateSlate(context *secp256k1.Context, amount uint64, asset string, change
 	}
 
 	senderSlate = SenderSlate{
-		Slate:       walletSlate,
-		SenderNonce: nonce,
+		Slate: walletSlate,
+		//SenderNonce: nonce,
 	}
+	copy(senderSlate.SenderNonce[:], nonce[:32])
 	copy(senderSlate.SumSenderBlinds[:], sumBlinds[:32])
 	senderSlate.Status = SlateSent
 
@@ -173,8 +174,8 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 
 	// calculate public key for receiver output blinding factor
 
-	res, publicBlindExcess, err := secp256k1.EcPubkeyCreate(context, blind[:])
-	if res != 1 || err != nil {
+	publicBlindExcess, err := pubKeyFromSecretKey(context, blind[:])
+	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
@@ -190,8 +191,8 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot get random for nonce")
 	}
 
-	res, publicNonce, err := secp256k1.EcPubkeyCreate(context, nonce[:])
-	if res != 1 || err != nil {
+	publicNonce, err := pubKeyFromSecretKey(context, nonce[:])
+	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot create publicNonce")
 	}
 
@@ -320,8 +321,7 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 		return nil, Transaction{}, errors.Wrap(err, "cannot get receiverPublicNonce")
 	}
 
-	// calculate Schnorr challenge
-
+	// calculate Schnorr challengeKernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 	schnorrChallenge, err := schnorrChallenge(context, msg, senderPublicBlindExcess, senderPublicNonce, receiverPublicBlindExcess, receiverPublicNonce)
 	if err != nil {
 		return nil, Transaction{}, errors.Wrap(err, "cannot calculate schnorrChallenge")
@@ -452,13 +452,23 @@ func secret() ([32]byte, error) {
 	return random()
 }
 
-func stringPubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (string, error) {
+func pubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (*secp256k1.PublicKey, error) {
 	res, pk, err := secp256k1.EcPubkeyCreate(context, sk32)
-	if res != 1 || err != nil {
-		return "", errors.Wrap(err, "cannot create PublicKey")
+	if res != 1 || pk == nil || err != nil {
+		return nil, errors.Wrap(err, "cannot create Public key from Secret key")
 	}
 
-	return pubKeyToString(context, pk)
+	return pk, nil
+}
+
+func stringPubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (pubkeystr string, pubkey *secp256k1.PublicKey, err error) {
+	pubkey, err = pubKeyFromSecretKey(context, sk32)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "cannot create PublicKey")
+	}
+
+	pubkeystr, err = pubKeyToString(context, pubkey)
+	return pubkeystr, pubkey, err
 }
 
 func pubKeyToString(context *secp256k1.Context, pk *secp256k1.PublicKey) (string, error) {
