@@ -115,7 +115,7 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 
 	defer secp256k1.ContextDestroy(context)
 
-	output, blind, err := output(context, value, core.CoinbaseOutput)
+	output, blind, err := createOutput(context, value, core.CoinbaseOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}

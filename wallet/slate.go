@@ -1,7 +1,6 @@
 package wallet
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 
@@ -50,8 +49,8 @@ func CreateSlate(
 	slateInputs := make([]core.Input, len(walletInputs))
 	inputBlinds := make([][32]byte, len(walletInputs))
 	for index, input := range walletInputs {
-		inputBlinds[index], 
-		slateInputs[index] =
+		inputBlinds[index],
+			slateInputs[index] =
 			input.Blind, core.Input{
 				Features: input.Features,
 				Commit:   input.Commit,
@@ -63,8 +62,8 @@ func CreateSlate(
 	var outputBlinds [][32]byte
 	var slateOutputs []core.Output
 	if change > 0 {
-		slateOutputs = make([]core.Output, numOutputs)
-		outputBlinds = make([][32]byte, numOutputs)
+		slateOutputs = make([]core.Output, 1)
+		outputBlinds = make([][32]byte, 1)
 		slateOutputs[0], outputBlinds[0], err = createOutput(context, change, core.PlainOutput)
 		if err != nil {
 			return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create changeOutput")
@@ -80,19 +79,19 @@ func CreateSlate(
 
 	// calculate public key for the sum of sender blinding factors
 
-	publicBlindExcessString, publicBlindExcess, err := stringPubKeyFromSecretKey(context, sumBlinds)
+	publicBlindExcessString, _, err := stringPubKeyFromSecretKey(context, sumBlinds)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
 	// generate secret nonce and calculate its public key
 
-	nonce, err := secret()
+	nonce, err := secret(context)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get secret for nonce")
 	}
 
-	publicNonceString, publicNonce, err := stringPubKeyFromSecretKey(context, nonce[:])
+	publicNonceString, _, err := stringPubKeyFromSecretKey(context, nonce[:])
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
 	}
@@ -108,7 +107,7 @@ func CreateSlate(
 			BlockHeaderVersion: 2,
 		},
 		NumParticipants: 2,
-		ID: uuid.New(),
+		ID:              uuid.New(),
 		Transaction: core.Transaction{
 			Offset: "",
 			Body: core.TransactionBody{
@@ -134,7 +133,7 @@ func CreateSlate(
 	if change > 0 {
 		walletOutput = Output{
 			Output: slateOutputs[0],
-			Blind:  positiveBlinds[0],
+			Blind:  outputBlinds[0],
 			Value:  change,
 			Status: OutputUnconfirmed,
 			Asset:  asset,
@@ -182,7 +181,7 @@ func CreateSlate(
 ///).unwrap();
 
 func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput Output, receiverSlate ReceiverSlate, err error) {
-	
+
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot ContextCreate")
@@ -213,7 +212,7 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 
 	// choose receiver nonce and calculate its public key
 
-	nonce, err := secret()
+	nonce, err := secret(context)
 	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot get random for nonce")
 	}
@@ -239,21 +238,59 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot get senderPublicNonce")
 	}
 
+	_, sumPublicBlinds, err := sumPubKeysToBytes(context,
+		[]*secp256k1.PublicKey{senderPublicBlindExcess, publicBlindExcess})
+	if err != nil {
+		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot get sumPublicBlindsBytes")
+	}
+
+	_, sumPublicNonces, err := sumPubKeysToBytes(context,
+		[]*secp256k1.PublicKey{senderPublicNonce, publicNonce})
+	if err != nil {
+		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot get sumPublicNoncesBytes")
+	}
+
+	// calculate receiver partial Schnorr signature
+
+	schnorrSig, err := calculatePartialSig(
+		context,
+		blind[:], nonce[:],
+		sumPublicNonces, sumPublicBlinds,
+		msg,
+	)
+	if err != nil {
+		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot calculate schnorrSig")
+	}
+
+	if nil != secp256k1.AggsigVerifySingle(
+		context,
+		schnorrSig,
+		msg,
+		sumPublicNonces,
+		publicBlindExcess,
+		sumPublicBlinds,
+		nil,
+		true,
+	) {
+		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot verify receiver partial signature")
+	}
+
 	// // calculate Schnorr challenge
 
-	// schnorrChallenge, err := schnorrChallenge(context, msg, senderPublicBlindExcess, senderPublicNonce, publicBlindExcess, publicNonce)
+	// schnorrChallenge, err := schnorrChallenge(context, msg,
+	//     senderPublicBlindExcess, senderPublicNonce, publicBlindExcess, publicNonce)
 	// if err != nil {
 	// 	return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot calculate schnorrChallenge")
 	// }
 
 	// calculate receiver partial Schnorr signature
 
-	schnorrSig, err := secp256k1.AggsigSignSingle(
-		context, 
-		schnorrChallenge, blind[:], nonce[:], nil, nil, nil, nil, dummyseed[:])
-	if err != nil {
-		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot calculate schnorrSig")
-	}
+	// schnorrSig, err := secp256k1.AggsigSignSingle(
+	// 	context,
+	// 	msg, blind[:], nonce[:], nil, nil, nil, nil, dummyseed[:])
+	// if err != nil {
+	// 	return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot calculate schnorrSig")
+	// }
 
 	schnorrSigString := hex.EncodeToString(schnorrSig)
 
@@ -290,10 +327,35 @@ func CreateResponse(slateBytes []byte) (responseSlateBytes []byte, walletOutput 
 		Slate:         walletSlate,
 		ReceiverNonce: nonce,
 	}
-
 	receiverSlate.Status = SlateResponded
 
 	return slateBytes, walletOutput, receiverSlate, nil
+}
+
+func calculatePartialSig(
+	context *secp256k1.Context,
+	sec_key []byte,
+	sec_nonce []byte,
+	nonce_sum *secp256k1.PublicKey,
+	pubkey_sum *secp256k1.PublicKey,
+	msg []byte,
+) (
+	sig []byte,
+	err error,
+) {
+	//Now calculate signature using message M=fee, nonce in e=nonce_sum
+	sig, err = secp256k1.AggsigSignSingle(
+		context,
+		msg,
+		sec_key,
+		sec_nonce,
+		nil,
+		nonce_sum,
+		pubkey_sum,
+		nonce_sum,
+		nil,
+	)
+	return
 }
 
 func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Transaction, error) {
@@ -345,10 +407,21 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 		return nil, Transaction{}, errors.Wrap(err, "cannot get receiverPublicNonce")
 	}
 
-	// calculate Schnorr challengeKernelSignatureMessage(slate.Transaction.Body.Kernels[0])
-	schnorrChallenge, err := schnorrChallenge(context, msg, senderPublicBlindExcess, senderPublicNonce, receiverPublicBlindExcess, receiverPublicNonce)
+	// // calculate Schnorr challengeKernelSignatureMessage(slate.Transaction.Body.Kernels[0])
+	// schnorrChallenge, err := schnorrChallenge(context, msg, senderPublicBlindExcess, senderPublicNonce, receiverPublicBlindExcess, receiverPublicNonce)
+	// if err != nil {
+	// 	return nil, Transaction{}, errors.Wrap(err, "cannot calculate schnorrChallenge")
+	// }
+	_, sumPublicBlinds, err := sumPubKeysToBytes(context,
+		[]*secp256k1.PublicKey{senderPublicBlindExcess, receiverPublicBlindExcess})
 	if err != nil {
-		return nil, Transaction{}, errors.Wrap(err, "cannot calculate schnorrChallenge")
+		return nil, Transaction{}, errors.Wrap(err, "cannot get sumPublicBlindsBytes")
+	}
+
+	_, sumPublicNonces, err := sumPubKeysToBytes(context,
+		[]*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
+	if err != nil {
+		return nil, Transaction{}, errors.Wrap(err, "cannot get sumPublicNoncesBytes")
 	}
 
 	// verify receiver partial signature
@@ -358,23 +431,37 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 		return nil, Transaction{}, errors.Wrap(err, "cannot parse receiverPartialSig from hex")
 	}
 
-	if nil != secp256k1.AggsigVerifySingle(context, receiverPartialSigBytes, schnorrChallenge, nil, receiverPublicBlindExcess, nil, nil, false) {
+	if nil != secp256k1.AggsigVerifySingle(
+		context,
+		receiverPartialSigBytes,
+		msg,
+		sumPublicNonces,
+		receiverPublicBlindExcess,
+		sumPublicBlinds,
+		nil,
+		true,
+	) {
 		return nil, Transaction{}, errors.Wrap(err, "cannot verify receiver partial signature")
 	}
 
 	// calculate receiver partial Schnorr signature
 
-	senderPartialSigBytes, err := secp256k1.AggsigSignSingle(context, schnorrChallenge, sumSenderBlinds, senderNonce, nil, nil, nil, nil, dummyseed[:])
+	senderPartialSigBytes, err := calculatePartialSig(
+		context,
+		sumSenderBlinds, senderNonce,
+		sumPublicNonces, sumPublicBlinds,
+		msg,
+	)
 	if err != nil {
 		return nil, Transaction{}, errors.Wrap(err, "cannot calculate schnorrSig")
 	}
 
-	// sum sender and receiver public nonces for the second half of the excess signature
+	// // sum sender and receiver public nonces for the second half of the excess signature
 
-	res, sumPublicNonces, err := secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
-	if res != 1 || err != nil {
-		return nil, Transaction{}, errors.Wrap(err, "cannot sum public nonces")
-	}
+	// res, sumPublicNonces, err := secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
+	// if res != 1 || err != nil {
+	// 	return nil, Transaction{}, errors.Wrap(err, "cannot sum public nonces")
+	// }
 
 	// sum sender and receiver partial signatures and append sum of public nonces to form whole two part excess signature
 
@@ -385,15 +472,15 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 
 	excessSigString := hex.EncodeToString(excessSig)
 
-	// calculate kernel excess as a sum of sender and receiver public blinds
+	// // calculate kernel excess as a sum of sender and receiver public blinds
 
-	res, excess, err := secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{senderPublicBlindExcess, receiverPublicBlindExcess})
-	if res != 1 || err != nil {
-		return nil, Transaction{}, errors.Wrap(err, "cannot sum public blinds")
-	}
+	// res, excess, err := secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{senderPublicBlindExcess, receiverPublicBlindExcess})
+	// if res != 1 || err != nil {
+	// 	return nil, Transaction{}, errors.Wrap(err, "cannot sum public blinds")
+	// }
 
-	excessString, err := pubKeyToString(context, excess)
-	if res != 1 || err != nil {
+	excessString, err := pubKeyToString(context, sumPublicBlinds) // excess)
+	if err != nil {
 		return nil, Transaction{}, errors.Wrap(err, "cannot convert excess to string")
 	}
 
@@ -428,9 +515,9 @@ func createOutput(
 ) (
 	output core.Output,
 	bytes [32]byte,
-	err error
+	err error,
 ) {
-	blind, err := secret()
+	blind, err := secret(context)
 	if err != nil {
 		return core.Output{}, blind, errors.Wrap(err, "cannot get secret for blind")
 	}
@@ -442,15 +529,16 @@ func createOutput(
 
 	// create bullet proof to value
 
+	rnd := secp256k1.Random256()
 	proof, err := secp256k1.BulletproofRangeproofProveSingle(
-		context, nil, nil, 
+		context, nil, nil,
 		[]uint64{value}, [][]byte{blind[:]},
-		&secp256k1.GeneratorH, secp256k1.Random256()[:], nil, nil)
+		&secp256k1.GeneratorH, rnd[:], nil, nil)
 	if err != nil {
 		return core.Output{}, blind, errors.Wrapf(err, "cannot create bullet proof")
 	}
 
-	output := core.Output{
+	output = core.Output{
 		Features: features,
 		Commit:   commitment.Hex(),
 		Proof:    hex.EncodeToString(proof),
@@ -465,9 +553,10 @@ func blake256(data []byte) (digest []byte) {
 	return hash.Sum(nil)
 }
 
-func secret() (rnd32 [32]byte, err error) {
+func secret(context *secp256k1.Context) (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
 	rnd32, err = secp256k1.AggsigGenerateSecureNonce(context, seed32[:])
+	return
 }
 
 func pubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (*secp256k1.PublicKey, error) {
@@ -490,7 +579,7 @@ func stringPubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (pubkeys
 }
 
 func pubKeyToString(context *secp256k1.Context, pk *secp256k1.PublicKey) (string, error) {
-	res, pkBytes, err := secp256k1.EcPubkeySerialize(context, pk, uint(compressedPubKeyFlag))
+	res, pkBytes, err := secp256k1.EcPubkeySerialize(context, pk, uint(secp256k1.EcCompressed))
 	if res != 1 || err != nil {
 		return "", errors.Wrap(err, "cannot serialize PublicKey")
 	}
@@ -519,7 +608,7 @@ func stringToPubKeyBytes(context *secp256k1.Context, s string) ([]byte, error) {
 		return nil, errors.Wrap(err, "cannot convert string to PubKey")
 	}
 
-	res, bytes, err := secp256k1.EcPubkeySerialize(context, pk, compressedPubKeyFlag)
+	res, bytes, err := secp256k1.EcPubkeySerialize(context, pk, secp256k1.EcCompressed)
 	if res != 1 || err != nil {
 		return nil, errors.Wrap(err, "cannot serialize PubKey")
 	}
@@ -527,18 +616,25 @@ func stringToPubKeyBytes(context *secp256k1.Context, s string) ([]byte, error) {
 	return bytes, nil
 }
 
-func sumPubKeysToBytes(context *secp256k1.Context, pubKeys []*secp256k1.PublicKey) ([]byte, error) {
+func sumPubKeysToBytes(
+	context *secp256k1.Context,
+	pubKeys []*secp256k1.PublicKey,
+) (
+	sumPubKeysBytes []byte,
+	sumPubKeys *secp256k1.PublicKey,
+	err error,
+) {
 	res, sumPubKeys, err := secp256k1.EcPubkeyCombine(context, pubKeys)
 	if res != 1 || err != nil {
-		return nil, errors.Wrap(err, "cannot sum public keys")
+		return nil, nil, errors.Wrap(err, "cannot sum public keys")
 	}
 
-	res, sumPubKeysBytes, err := secp256k1.EcPubkeySerialize(context, sumPubKeys, compressedPubKeyFlag)
+	res, sumPubKeysBytes, err = secp256k1.EcPubkeySerialize(context, sumPubKeys, secp256k1.EcCompressed)
 	if res != 1 || err != nil {
-		return nil, errors.Wrap(err, "cannot serialize public blinds")
+		return nil, nil, errors.Wrap(err, "cannot serialize public keys")
 	}
 
-	return sumPubKeysBytes, nil
+	return
 }
 
 func schnorrChallenge(context *secp256k1.Context, msg []byte, senderPublicBlindExcess *secp256k1.PublicKey, senderPublicNonce *secp256k1.PublicKey, receiverPublicBlindExcess *secp256k1.PublicKey, receiverPublicNonce *secp256k1.PublicKey) ([]byte, error) {
@@ -546,12 +642,12 @@ func schnorrChallenge(context *secp256k1.Context, msg []byte, senderPublicBlindE
 	hash.Write(msg)
 
 	if senderPublicBlindExcess != nil && senderPublicNonce != nil && receiverPublicBlindExcess != nil && receiverPublicNonce != nil {
-		sumPublicBlindsBytes, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicBlindExcess, receiverPublicBlindExcess})
+		sumPublicBlindsBytes, _, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicBlindExcess, receiverPublicBlindExcess})
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot get sumPublicBlindsBytes")
 		}
 
-		sumPublicNoncesBytes, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
+		sumPublicNoncesBytes, _, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot get sumPublicNoncesBytes")
 		}

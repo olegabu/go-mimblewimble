@@ -16,14 +16,14 @@ func TestRound(t *testing.T) {
 
 	defer secp256k1.ContextDestroy(context)
 
-	blind, err := secret()
+	blind, err := secret(context)
 	assert.Nil(t, err)
 
 	inputValue := uint64(40)
 	amount := uint64(40)
 	change := uint64(0)
 
-	output, blind, err := output(context, inputValue, core.CoinbaseOutput)
+	output, blind, err := createOutput(context, inputValue, core.CoinbaseOutput)
 	assert.Nil(t, err)
 
 	inputs := []Output{{
