@@ -19,9 +19,11 @@ func TestRound(t *testing.T) {
 	blind, err := secret(context)
 	assert.Nil(t, err)
 
-	inputValue := uint64(40)
-	amount := uint64(40)
-	change := uint64(0)
+	inputValue := uint64(300)
+	amount := uint64(200)
+	fee := uint64(10)
+
+	change := inputValue - amount - fee
 
 	output, blind, err := createOutput(context, inputValue, core.CoinbaseOutput)
 	assert.Nil(t, err)
@@ -32,7 +34,7 @@ func TestRound(t *testing.T) {
 		Value:  inputValue,
 	}}
 
-	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, "cash", change, inputs)
+	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, "cash", change, inputs)
 	assert.Nil(t, err)
 	fmt.Println("send " + string(slateBytes))
 

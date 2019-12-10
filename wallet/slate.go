@@ -23,6 +23,7 @@ var dummyseed = [32]byte{
 func CreateSlate(
 	context *secp256k1.Context,
 	amount uint64,
+	fee uint64,
 	asset string,
 	change uint64,
 	walletInputs []Output,
@@ -32,11 +33,9 @@ func CreateSlate(
 	senderSlate SenderSlate,
 	err error,
 ) {
-
 	// create a local context object if it's not provided in parameters
-
 	if context == nil {
-		context, err = secp256k1.ContextCreate(secp256k1.ContextBoth)
+		context, err = secp256k1.ContextCreate(secp256k1.ContextSign)
 		if err != nil {
 			return nil, Output{}, SenderSlate{}, errors.Wrap(err, "ContextCreate failed")
 		}
@@ -45,20 +44,24 @@ func CreateSlate(
 
 	// loop thru wallet inputs to collect slate inputs, sum their values,
 	// collect input blinding factors as negative to add them to positive change output's blind
-
+	var inputsValue uint64
 	slateInputs := make([]core.Input, len(walletInputs))
 	inputBlinds := make([][32]byte, len(walletInputs))
 	for index, input := range walletInputs {
-		inputBlinds[index],
-			slateInputs[index] =
-			input.Blind, core.Input{
-				Features: input.Features,
-				Commit:   input.Commit,
-			}
+		inputsValue += input.Value
+		inputBlinds[index], slateInputs[index] = input.Blind, core.Input{
+			Features: input.Features,
+			Commit:   input.Commit,
+		}
+	}
+
+	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
+	if 0 != inputsValue - amount - fee - change {
+		err = errors.New("Amounts don't sum up (inputsValue - amount - fee - change != 0)")
+		return
 	}
 
 	// create change output and remember its blinding factor
-
 	var outputBlinds [][32]byte
 	var slateOutputs []core.Output
 	if change > 0 {
@@ -71,21 +74,18 @@ func CreateSlate(
 	}
 
 	// sum up input and change blinding factors
-
-	sumBlinds, err := secp256k1.BlindSum(context, outputBlinds, inputBlinds)
+	blindExcess, err := secp256k1.BlindSum(context, outputBlinds, inputBlinds)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot sum blinding factors")
 	}
 
 	// calculate public key for the sum of sender blinding factors
-
-	publicBlindExcessString, _, err := stringPubKeyFromSecretKey(context, sumBlinds)
+	publicBlindExcessString, _, err := stringPubKeyFromSecretKey(context, blindExcess)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
 	// generate secret nonce and calculate its public key
-
 	nonce, err := secret(context)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get secret for nonce")
@@ -98,7 +98,7 @@ func CreateSlate(
 
 	// put these all into a slate and marshal it to json
 
-	//TODO calculate transaction offset
+	// TODO calculate transaction offset
 
 	slate := &libwallet.Slate{
 		VersionInfo: libwallet.VersionCompatInfo{
@@ -117,7 +117,7 @@ func CreateSlate(
 			},
 		},
 		Amount:     core.Uint64(amount),
-		Fee:        0,
+		Fee:        core.Uint64(fee),
 		Height:     0,
 		LockHeight: 0,
 		ParticipantData: []libwallet.ParticipantData{{
@@ -152,10 +152,10 @@ func CreateSlate(
 
 	senderSlate = SenderSlate{
 		Slate: walletSlate,
-		//SenderNonce: nonce,
+		//SenderNonce: nonce,c
 	}
 	copy(senderSlate.SenderNonce[:], nonce[:32])
-	copy(senderSlate.SumSenderBlinds[:], sumBlinds[:32])
+	copy(senderSlate.SumSenderBlinds[:], blindExcess[:32])
 	senderSlate.Status = SlateSent
 
 	return slateBytes, walletOutput, senderSlate, nil
