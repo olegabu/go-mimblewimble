@@ -26,7 +26,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := CreateSlate(nil, amount, asset, change, inputs)
+	slateBytes, changeOutput, senderSlate, err := CreateSlate(nil, amount, 0, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
