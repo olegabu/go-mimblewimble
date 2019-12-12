@@ -136,12 +136,12 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 func KernelSignatureMessage(kernel core.TxKernel) []byte {
 
 	featuresBytes := []byte{byte(kernel.Features)}
-	feeBytes, lockHeightBytes := make([]byte, 8), make([]byte, 8)
+	feeBytes := make([]byte, 8)
+	lockHeightBytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(feeBytes, uint64(kernel.Fee))
 	binary.BigEndian.PutUint64(lockHeightBytes, uint64(kernel.LockHeight))
 
 	hash, _ := blake2b.New256(nil)
-
 	hash.Write(featuresBytes)
 	if kernel.Features == core.PlainKernel {
 		hash.Write(feeBytes)
@@ -149,7 +149,6 @@ func KernelSignatureMessage(kernel core.TxKernel) []byte {
 		hash.Write(feeBytes)
 		hash.Write(lockHeightBytes)
 	}
-
 	return hash.Sum(nil)
 }
 
