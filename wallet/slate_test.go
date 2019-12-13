@@ -25,7 +25,7 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	output, blind, err := createOutput(context, inputValue, core.CoinbaseOutput)
+	output, err := createOutput(context, blind[:], inputValue, core.CoinbaseOutput)
 	assert.Nil(t, err)
 
 	inputs := []Output{{
