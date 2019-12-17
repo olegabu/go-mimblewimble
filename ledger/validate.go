@@ -39,11 +39,6 @@ func ValidateTransaction(ledgerTx *Transaction) error {
 
 	tx := &ledgerTx.Transaction
 
-	err = validateSignature(context, tx)
-	if err != nil {
-		return errors.Wrap(err, "cannot validateSignature")
-	}
-
 	err = validateCommitmentsSum(context, tx)
 	if err != nil {
 		return errors.Wrap(err, "cannot validateCommitmentsSum")
@@ -52,6 +47,11 @@ func ValidateTransaction(ledgerTx *Transaction) error {
 	err = validateBulletproofs(context, tx.Body.Outputs)
 	if err != nil {
 		return errors.Wrap(err, "cannot validateBulletproofs")
+	}
+
+	err = validateSignature(context, tx)
+	if err != nil {
+		return errors.Wrap(err, "cannot validateSignature")
 	}
 
 	return nil
@@ -196,7 +196,6 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 
 	// NB: FEE = Overage (grin core terminology)
 	overage := uint64(tx.Body.Kernels[0].Fee)
-
 	overageCommitment, err := secp256k1.Commit(context, zeroBlindingFactor[:], overage, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return errors.New("cannot calculate overageCommitment")
@@ -256,8 +255,11 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 	return nil
 }
 
-func validateBulletproofs(context *secp256k1.Context, outputs []core.Output) error {
-	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*1024)
+func validateBulletproofs(
+	context *secp256k1.Context,
+	outputs []core.Output,
+) error {
+	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*4096)
 	if err != nil {
 		return errors.Wrap(err, "cannot ScratchSpaceCreate")
 	}
@@ -293,15 +295,13 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 		return errors.New("cannot parse commitmentBytes")
 	}
 
-	commits := [1]*secp256k1.Commitment{com}
-
 	err = secp256k1.BulletproofRangeproofVerify(
 		context,
 		scratch,
 		bulletproofGenerators,
 		proof,
 		nil, // min_values: NULL for all-zeroes minimum values to prove ranges above
-		commits[:],
+		[]*secp256k1.Commitment{com},
 		64,
 		&secp256k1.GeneratorH,
 		nil)
