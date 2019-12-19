@@ -1,8 +1,6 @@
 package wallet
 
 import (
-	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -26,7 +24,7 @@ func TestRound(t *testing.T) {
 
 	inputValue := uint64(300)
 	amount := uint64(200)
-	fee := uint64(10)
+	fee := uint64(30)
 
 	change := inputValue - amount - fee
 
@@ -75,51 +73,23 @@ func TestExcess(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	slate := ReadSlate(t, "1g_final.json")
+	slate := ReadSlate(t, "../100mg_finalize.json")
 
-	kernelExcess, err := calculateExcess(context, slate.Transaction, slate.Fee)
+	fee := uint64(slate.Fee)
+	kex, err := calculateExcess(context, slate.Transaction, fee)
 	assert.NoError(t, err)
+	fmt.Printf("calculateExcess: %s\n", kex.Hex(context))
 
-	// Verify kernel sums
+	kex0 := slate.Transaction.Body.Kernels[0].Excess
+	fmt.Printf("calculateExcess: %s\n", kex0)
 
-	commitSumOverage, err := secp256k1.CommitSum(context, inputs, outputs)
-	assert.NoError(t, err)
-	assert.NotNil(t, commitSumOverage)
-	assert.IsType(t, secp256k1.Commitment{}, *commitSumOverage)
-
-	fmt.Printf("commitSumOverage=0x%s\n", commitSumOverage.Hex())
-
-	// sum_kernel_excesses
-	offset_bytes, err := hex.DecodeString(tx.Offset)
-	excess_bytes, err := hex.DecodeString(tx.Body.Kernels[0].Excess)
-
-	var offset_32 [32]byte
-
-	copy(offset_32[:], offset_bytes[:32])
-
-	commit_offset, err := secp256k1.Commit(context, offset_32[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
-	assert.NoError(t, err)
-	assert.NotNil(t, commit_offset)
-	assert.IsType(t, secp256k1.Commitment{}, *commit_offset)
-
-	fmt.Printf("commit_offset=0x%s\n", commit_offset.Hex())
-
-	commit_excess, err := secp256k1.CommitmentParse(context, excess_bytes)
-
-	commits_offset_excess := [2]*secp256k1.Commitment{commit_offset, commit_excess}
-
-	empty_array := make([]*secp256k1.Commitment, 0)
-
-	commitSumOffsetExcess, err := secp256k1.CommitSum(context, empty_array, commits_offset_excess[:])
-
-	serializeSumOffsetExcess, err := secp256k1.CommitmentSerialize(context, commitSumOffsetExcess)
-
-	fmt.Printf("commitSumOffsetExcess=0x%s\n", commitSumOffsetExcess.Hex())
-	serializeCommitSumOverage, err := secp256k1.CommitmentSerialize(context, commitSumOverage)
-
-	//fmt.Printf("serializeCommitSumOverage=0x%s\n", hex.EncodeToString(serializeCommitSumOverage[:]))
-	assert.True(t, bytes.Compare(serializeSumOffsetExcess[:], serializeCommitSumOverage[:]) == 0)
-
-	secp256k1.ContextDestroy(context)
+	assert.Equal(t, kex0, kex.Hex(context))
 }
+/*
+func TestGrinExcess(t *testing.T) {
+	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	defer secp256k1.ContextDestroy(context)
 
+	slate := ReadSlate(t, "../1g_final.json")
+
+}*/

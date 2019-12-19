@@ -44,10 +44,10 @@ func ValidateTransaction(ledgerTx *Transaction) error {
 		return errors.Wrap(err, "cannot validateCommitmentsSum")
 	}
 
-	err = validateBulletproofs(context, tx.Body.Outputs)
-	if err != nil {
-		return errors.Wrap(err, "cannot validateBulletproofs")
-	}
+	//err = validateBulletproofs(context, tx.Body.Outputs)
+	//if err != nil {
+	//	return errors.Wrap(err, "cannot validateBulletproofs")
+	//}
 
 	err = validateSignature(context, tx)
 	if err != nil {
