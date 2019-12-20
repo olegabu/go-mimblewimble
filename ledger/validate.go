@@ -44,15 +44,15 @@ func ValidateTransaction(ledgerTx *Transaction) error {
 		return errors.Wrap(err, "cannot validateCommitmentsSum")
 	}
 
-	//err = validateBulletproofs(context, tx.Body.Outputs)
-	//if err != nil {
-	//	return errors.Wrap(err, "cannot validateBulletproofs")
-	//}
-
 	err = validateSignature(context, tx)
 	if err != nil {
 		return errors.Wrap(err, "cannot validateSignature")
 	}
+
+	//err = validateBulletproofs(context, tx.Body.Outputs)
+	//if err != nil {
+	//	return errors.Wrap(err, "cannot validateBulletproofs")
+	//}
 
 	return nil
 }
@@ -195,15 +195,18 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 	var zeroBlindingFactor [32]byte
 
 	// NB: FEE = Overage (grin core terminology)
-	overage := uint64(tx.Body.Kernels[0].Fee)
-	overageCommitment, err := secp256k1.Commit(context, zeroBlindingFactor[:], overage, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
-	if err != nil {
-		return errors.New("cannot calculate overageCommitment")
+	fee := uint64(tx.Body.Kernels[0].Fee)
+	if fee != 0 {
+		feeCommitment, err := secp256k1.Commit(context, zeroBlindingFactor[:], fee, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+		if err != nil {
+			return errors.New("cannot calculate feeCommitment")
+		}
+		outputs = append(outputs, feeCommitment)
 	}
 
 	// the first part of equality to check
 	// InputCommitmentsSum - (OutputCommitments + FeeCommitments)
-	commitmentsSum, err := secp256k1.CommitSum(context, inputs, append(outputs, overageCommitment))
+	commitmentsSum, err := secp256k1.CommitSum(context, inputs, outputs)
 	if err != nil {
 		return errors.New("cannot calculate commitmentsSum")
 	}
@@ -285,14 +288,9 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 		return errors.Wrap(err, "cannot decode Proof from hex")
 	}
 
-	commit, err := hex.DecodeString(output.Commit)
+	com, err := context.CommitmentFromHex(output.Commit)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode Commit from hex")
-	}
-
-	com, err := secp256k1.CommitmentParse(context, commit[:])
-	if err != nil {
-		return errors.New("cannot parse commitmentBytes")
 	}
 
 	err = secp256k1.BulletproofRangeproofVerify(
@@ -300,7 +298,7 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 		scratch,
 		bulletproofGenerators,
 		proof,
-		nil, // min_values: NULL for all-zeroes minimum values to prove ranges above
+		[]uint64{0},
 		[]*secp256k1.Commitment{com},
 		64,
 		&secp256k1.GeneratorH,

@@ -24,7 +24,7 @@ func TestRound(t *testing.T) {
 
 	inputValue := uint64(300)
 	amount := uint64(200)
-	fee := uint64(30)
+	fee := uint64(10)
 
 	change := inputValue - amount - fee
 
@@ -39,19 +39,18 @@ func TestRound(t *testing.T) {
 
 	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, "cash", change, inputs)
 	assert.NoError(t, err)
-	fmt.Printf("tran %s\n", string(slateBytes))
+	fmt.Printf("send %s\n", string(slateBytes))
 
 	responseSlateBytes, _, _, err := CreateResponse(slateBytes)
 	assert.NoError(t, err)
-	fmt.Printf("tran %s\n", string(responseSlateBytes))
+	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
 	txBytes, _, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
 	assert.NoError(t, err)
 	fmt.Printf("tran %s\n", string(txBytes))
 
-	tx, err := ledger.ValidateTransactionBytes(txBytes)
+	_, err = ledger.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
-	fmt.Printf("post %v\n", tx)
 }
 
 var txPrinted bool
@@ -85,11 +84,23 @@ func TestExcess(t *testing.T) {
 
 	assert.Equal(t, kex0, kex.Hex(context))
 }
-/*
-func TestGrinExcess(t *testing.T) {
+
+func TestGrinGen(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	slate := ReadSlate(t, "../1g_final.json")
+	//slate := ReadSlate(t, "../1g_final.json")
 
-}*/
+	blind, _ := secret(context)
+	_, blindPublic, _ := secp256k1.EcPubkeyCreate(context, blind[:])
+	fmt.Printf("blindPublic: %s\n", blindPublic.Hex(context))
+
+	blindCommit, _ := secp256k1.Commit(context, blind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	fmt.Printf("blindCommit: %s\n", blindCommit.Hex(context))
+
+	blindCommitPublic, _ := secp256k1.CommitmentToPublicKey(context, blindCommit)
+	fmt.Printf("blindCommitPublic: %s\n", blindCommitPublic.Hex(context))
+
+	assert.Equal(t, blindPublic, blindCommit)
+}
+

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
@@ -41,7 +40,7 @@ func CreateSlate(
 	// collect input blinding factors (negative)
 	var inputsValue uint64
 	slateInputs := make([]core.Input, len(walletInputs))
-	inputBlinds := make([][32]byte, len(walletInputs) + 1)
+	inputBlinds := make([][32]byte, len(walletInputs))
 	for index, input := range walletInputs {
 		inputsValue += input.Value
 		inputBlinds[index] = input.Blind
@@ -91,10 +90,6 @@ func CreateSlate(
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get random offset")
 	}
-	publicKernelOffset, err := pubKeyFromSecretKey(context, kernelOffset[:])
-	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
-	}
 
 	// Subtract kernel offset from blinding excess sum
 	blindExcess, err := secp256k1.BlindSum(context, [][32]byte{blindExcess1}, [][32]byte{kernelOffset})
@@ -102,20 +97,10 @@ func CreateSlate(
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get offset for blind")
 	}
 
-	// Create public curve points from blindExcess
-	publicBlindExcess1, err := pubKeyFromSecretKey(context, blindExcess1[:])
-	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
-	}
 	publicBlindExcess, err := pubKeyFromSecretKey(context, blindExcess[:])
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
-
-	sumPKEX, _ := sumPubKeys(context, []*secp256k1.PublicKey{publicBlindExcess, publicKernelOffset})
-	fmt.Printf("sumPKEX: %s\n", sumPKEX.Hex(context))
-	fmt.Printf("publicBlindExcess1: %s\n", publicBlindExcess1.Hex(context))
-
 
 	// Create public curve points from blindExcess
 	publicNonce, err := pubKeyFromSecretKey(context, nonce[:])
@@ -124,8 +109,6 @@ func CreateSlate(
 	}
 
 	// put these all into a slate and marshal it to json
-
-	// TODO calculate transaction offset
 
 	slate := &libwallet.Slate{
 		VersionInfo: libwallet.VersionCompatInfo{
@@ -504,7 +487,7 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 
 	excessPublicKey, err := secp256k1.CommitmentToPublicKey(context, kernelExcess)
 	if err != nil {
-		return nil, Transaction{}, errors.Wrap(err, "CommitmentToPublicKey failed")
+		return nil, Transaction{}, errors.Wrap(err, "excessPublicKey: CommitmentToPublicKey failed")
 	}
 
 	// Verify final sig with pk from excess
@@ -514,28 +497,12 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 		finalSig[:],
 		msg,
 		nil,
-		sumPublicBlinds,
-		sumPublicBlinds,
-		nil,
-		false)
-	fmt.Printf("sumPublicBlinds: %s\n", sumPublicBlinds.Hex(context))
-	if err != nil {
-		fmt.Println(errors.Wrap(err, "cannot verify final signature using sumPublicBlinds"))
-	}
-
-	err = secp256k1.AggsigVerifySingle(
-		context,
-		finalSig[:],
-		msg,
-		nil,
 		excessPublicKey,
 		excessPublicKey,
 		nil,
 		false)
-	fmt.Printf("kernelExcess: %s\n", kernelExcess.Hex(context))
-	fmt.Printf("excessPublicKey: %s\n", excessPublicKey.Hex(context))
 	if err != nil {
-		fmt.Println(errors.Wrap(err, "cannot verify final signature using excessPublicKey"))
+		return nil, Transaction{}, errors.Wrap(err, "AggsigVerifySingle failed to verify the finalSig with excessPublicKey")
 	}
 
 	tx.Body.Kernels[0].Excess = kernelExcess.Hex(context)
@@ -576,13 +543,18 @@ func createOutput(
 
 	// create bullet proof to value
 
-	rnd := secp256k1.Random256()
+	nonce, err := secret(context)
+	if err != nil {
+		return core.Output{}, errors.Wrapf(err, "cannot create bullet proof")
+	}
+
 	proof, err := secp256k1.BulletproofRangeproofProveSingle(
 		context, nil, nil,
 		[]uint64{value},
-		[][]byte{blind[:]},
+		[][]byte{blind},
 		&secp256k1.GeneratorH,
-		rnd[:],
+		64,
+		nonce[:],
 		nil,
 		nil)
 	if err != nil {
@@ -754,7 +726,6 @@ func calculateExcess(
 	if err != nil {
 		return
 	}
-	fmt.Printf("txExcess: %s\n", txExcess.Hex(context))
 
 	// subtract the kernel_excess (built from kernel_offset)
 	kernelOffset, err := secp256k1.Commit(context,

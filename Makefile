@@ -3,6 +3,7 @@ SHELL=/bin/bash
 LIBSECPDIR=$(GOPATH)/src/github.com/olegabu/go-secp256k1-zkp
 LIBSECP=$(LIBSECPDIR)/secp256k1-zkp/.libs/libsecp256k1.a
 GO111MODULE=on
+GOPATH=../../../..
 
 install: deps
 	go install ./...
