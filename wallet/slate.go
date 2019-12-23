@@ -51,7 +51,7 @@ func CreateSlate(
 	}
 
 	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
-	if 0 != - inputsValue + amount + fee + change {
+	if 0 != -inputsValue+amount+fee+change {
 		err = errors.New("Amounts don't sum up (inputsValue - amount - fee - change != 0)")
 		return
 	}
@@ -125,7 +125,7 @@ func CreateSlate(
 				Outputs: slateOutputs,
 				Kernels: []core.TxKernel{{
 					Features:   core.PlainKernel,
-					Fee: 		core.Uint64(fee),
+					Fee:        core.Uint64(fee),
 					LockHeight: 0,
 					Excess:     "000000000000000000000000000000000000000000000000000000000000000000",
 					ExcessSig:  "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -387,7 +387,7 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 	senderPublicNonce := context.PublicKeyFromHex(slate.ParticipantData[0].PublicNonce)
 	// sender checks its public keys in receiver response is the same as its own, remembered from construction of the slate?
 	if (0 != bytes.Compare(senderPublicBlind.Bytes(context), senderPublicBlind_.Bytes(context))) ||
-	   (0 != bytes.Compare(senderPublicNonce.Bytes(context), senderPublicNonce_.Bytes(context))) {
+		(0 != bytes.Compare(senderPublicNonce.Bytes(context), senderPublicNonce_.Bytes(context))) {
 		return nil, Transaction{}, errors.Wrap(err, "public keys mismatch, calculated values are not the same as loaded from slate")
 	}
 
@@ -398,7 +398,7 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 	if sumPublicBlinds, err = sumPubKeys(context, []*secp256k1.PublicKey{senderPublicBlind, receiverPublicBlind}); err != nil {
 		return nil, Transaction{}, errors.Wrap(err, "cannot get sumPublicBlindsBytes")
 	}
-	if sumPublicNonces, err = sumPubKeys(context,	[]*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce}); err != nil {
+	if sumPublicNonces, err = sumPubKeys(context, []*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce}); err != nil {
 		return nil, Transaction{}, errors.Wrap(err, "cannot get sumPublicNoncesBytes")
 	}
 
@@ -536,6 +536,11 @@ func createOutput(
 	output core.Output,
 	err error,
 ) {
+	//valuegen, err := secp256k1.GeneratorGenerate(context, blind)
+	//if err != nil {
+	//	return core.Output{}, errors.Wrapf(err, "cannot create bullet proof generator for the blind")
+	//}
+	//commit, err := secp256k1.Commit(context, blind, value, valuegen, &secp256k1.GeneratorG)
 	commitment, err := secp256k1.Commit(context, blind, value, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return core.Output{}, errors.Wrap(err, "cannot create commitment to value")
@@ -543,20 +548,14 @@ func createOutput(
 
 	// create bullet proof to value
 
-	nonce, err := secret(context)
-	if err != nil {
-		return core.Output{}, errors.Wrapf(err, "cannot create bullet proof")
-	}
+	//nonce, err := secret(context)
+	//if err != nil {
+	//	return core.Output{}, errors.Wrapf(err, "cannot create bullet proof")
+	//}
 
-	proof, err := secp256k1.BulletproofRangeproofProveSingle(
-		context, nil, nil,
-		[]uint64{value},
-		[][]byte{blind},
-		&secp256k1.GeneratorH,
-		64,
-		nonce[:],
-		nil,
-		nil)
+	commit, err := secp256k1.CommitmentParse(context, commitment.Bytes(context))
+
+	proof, err := secp256k1.BulletproofRangeproofProveSingle(context, nil, nil, []uint64{value}, [][]byte{blind}, []*secp256k1.Commitment{commit}, &secp256k1.GeneratorH, 64, blind, nil, nil, nil)
 	if err != nil {
 		return core.Output{}, errors.Wrapf(err, "cannot create bullet proof")
 	}
@@ -653,6 +652,7 @@ func sumPubKeys(
 
 	return
 }
+
 //
 // func schnorrChallenge(context *secp256k1.Context, msg []byte, senderPublicBlindExcess *secp256k1.PublicKey, senderPublicNonce *secp256k1.PublicKey, receiverPublicBlindExcess *secp256k1.PublicKey, receiverPublicNonce *secp256k1.PublicKey) ([]byte, error) {
 // 	hash, _ := blake2b.New256(nil)
@@ -729,7 +729,7 @@ func calculateExcess(
 
 	// subtract the kernel_excess (built from kernel_offset)
 	kernelOffset, err := secp256k1.Commit(context,
-		secp256k1.Unhex(tx.Offset),0,
+		secp256k1.Unhex(tx.Offset), 0,
 		&secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return

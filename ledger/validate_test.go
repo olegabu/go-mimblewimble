@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"testing"
@@ -12,20 +13,25 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func getTxBytes() []byte {
-	bytes, err := ioutil.ReadFile("../1g_grin_repost_fix_kernel.json") // fails TestValidateCommitmentsSum
+func getTxBytes(filename string) []byte {
+	bytes, err := ioutil.ReadFile(filename) //"../1g_grin_repost_fix_kernel.json") // fails TestValidateCommitmentsSum
 	//bytes, err := ioutil.ReadFile("../10_grin_repost.json")
 	//bytes, err := ioutil.ReadFile("../1g_final.json")
 
 	if err != nil {
-		log.Panic("cannot open json file with test transaction")
+		log.Panicf("cannot open json file with test transaction: %s", filename)
 	}
+	fmt.Printf("Loaded file %s:\n%s\n", filename, string(bytes))
 
 	return bytes
 }
 
 func TestValidate(t *testing.T) {
-	tx, err := ValidateTransactionBytes(getTxBytes())
+	file := "../100mg_repost.json"
+	bytes := getTxBytes(file)
+	assert.NotEmpty(t, bytes)
+
+	tx, err := ValidateTransactionBytes(bytes)
 	assert.NotNil(t, tx)
 	assert.Nil(t, err)
 }
@@ -49,11 +55,13 @@ func getTx(slateBytes []byte) (tx *core.Transaction, err error) {
 }
 
 func TestValidateSlate(t *testing.T) {
-	bytes := readFile("../1g_final.json")
+	file := "../100mg_finalize.json"
+	tx := getTxBytes(file)
+	assert.NotEmpty(t, tx)
 
-	tx, err := getTx(bytes)
-	assert.NotNil(t, tx)
-	assert.Nil(t, err)
+	//tx, err := getTx(bytes)
+	//assert.NotNil(t, tx)
+	//assert.Nil(t, err)
 
 	txBytes, err := json.Marshal(tx)
 

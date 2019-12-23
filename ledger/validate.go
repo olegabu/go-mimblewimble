@@ -299,7 +299,7 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 		bulletproofGenerators,
 		proof,
 		[]uint64{0},
-		[]*secp256k1.Commitment{com},
+		com,
 		64,
 		&secp256k1.GeneratorH,
 		nil)
