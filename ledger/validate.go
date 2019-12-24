@@ -86,6 +86,19 @@ func ValidateTransactionBytes(txBytes []byte) (ledgerTx *Transaction, err error)
 	return
 }
 
+func ValidateIssueBytes(issueBytes []byte) (ledgerIssue *Issue, err error) {
+	ledgerIssue = &Issue{}
+
+	err = json.Unmarshal(issueBytes, ledgerIssue)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot unmarshal json to Issue")
+	}
+
+	err = ValidateIssue(ledgerIssue)
+
+	return
+}
+
 func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 	if len(tx.Body.Kernels) < 1 {
 		return errors.New("no entries in Kernels")
@@ -123,7 +136,6 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 		nil,
 		false)
 	if err != nil {
-
 		return errors.Wrap(err, "AggsigVerifySingle failed")
 	}
 

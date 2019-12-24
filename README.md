@@ -2,19 +2,42 @@
 
 This is a toy. Do not use for production.
 
-## Build
+## Prerequisites
 
-Install tools and build.
+Install Golang ([instructions](https://github.com/golang/go/wiki/Ubuntu)).
+```bash
+sudo add-apt-repository ppa:longsleep/golang-backports
+sudo apt-get update
+sudo apt-get install golang-go
+
+echo "export GOPATH=~/go" >> ~/.bashrc
+echo "export GOBIN=~/go/bin" >> ~/.bashrc
+echo "export PATH=$PATH:$GOBIN" >> ~/.bashrc
+. ~/.bashrc
+```
+
+Install tools.
 ```bash
 sudo apt-get install autoconf libtool libgmp3-dev
+```
+
+## Build and test
+
+```bash
+# TODO remove once repo becomes public
+export GOPRIVATE=github.com/olegabu/go-secp256k1-zkp
+
+# build and install
 make
+
+make test
 ```
 
 ## Demo offline wallet
 
-This demonstrates creation and validation of transactions by the wallet.
+This demonstrates creation and validation of Mimblewimble transactions by the wallet.
 
-Delete wallet databases (careful! demo and tests only).
+Cleanup: delete wallet databases (careful! demo and tests only).
 ```bash
 rm -rf ~/.mw*
 ``` 
@@ -32,7 +55,7 @@ mw info
 ```
 Receive 1 coin from yourself. This will create a `slate-receive-<transaction uuid>.json` file that needs to be returned 
 to the sender who will turn it into a transaction by `mw finalize` command. 
-Observe new `Unconfirmed` outputs and `Responded` slate in your wallet.
+Observe new `Unconfirmed` outputs and a new `Responded` slate.
 ```bash
 mw receive slate-send-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
@@ -44,31 +67,41 @@ In this offline scenario we'll skip this part and tell the wallet the transactio
 mw finalize slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
 ```
-Tell wallet the transaction has been confirmed by the network. 
+Tell our wallet the transaction has been confirmed by the network. 
 Observe new `Confirmed` outputs and a new transaction, as well as the input turned from `Locked` to `Spent` 
 in your wallet.
 ```bash
 mw confirm 8668319f-d8ae-4dda-be5b-e3fd1648565e
 mw info
 ```
+You can validate any transaction serialized in [Grin](https://github.com/mimblewimble/grin) format.
+```bash
+mw validate tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+mw validate 1_grin_repost.json
+```
 
 ## Demo consensus node and two online wallets
 
-Reset wallet and ledger (tendermint) databases.
+This demonstrates creation of Mimblewimble transactions by sender's and receiver's wallets connected to a consensus network of one Tendermint node that validates transactions.
+
+If running for the first time generate Tendermint keys.
+```bash
+mw tendermint init
+```
+Clean up: delete wallets and reset Tendermint ledger.
 ```bash
 mw tendermint unsafe_reset_all && rm -rf ~/.mw*
-``` 
-
-Start tendermint consensus node with Mimblewimble ABCI application.
+```
+Start Tendermint consensus node with a built in Mimblewimble ABCI application.
 ```bash
 mw node
-``` 
+```
 
 Start sender's wallet in another console listening for `transfer` transaction events from the consensus node.
+
 ```bash
 mw listen
 ```
-
 Start receiver's wallet in another console in listening mode.
 If you're running it on the same machine specify a separate database directory via a `--persist` flag 
 or `MW_PERSIST` env variable. 
@@ -123,12 +156,11 @@ See original Coinbase output turn to `Spent` in the sender's wallet, and a new `
 ## Issue multiple assets
 
 When an asset name is omitted the wallet issues a default asset: currency `¤`.
-Tokens of any asset can be issued and tracked separately by giving the asset's name.  
+Tokens of any asset can be issued and tracked separately by giving their asset's name.  
 
-Issue a stablecoin of 1 dollar, a peg of a bitcoin and a commodity token of an apple.
+Issue a stablecoin of 1 dollar and a commodity token of an apple.
 ```bash
 mw issue 1 $
-mw issue 1 ₿
 mw issue 1 🍎
 mw info
 ```
