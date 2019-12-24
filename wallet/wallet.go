@@ -6,10 +6,12 @@ import (
 	"strconv"
 
 	"github.com/blockcypher/libgrin/core"
-	"github.com/olegabu/go-mimblewimble/ledger"
-	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+
+	"github.com/olegabu/go-mimblewimble/ledger"
+	// "github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-secp256k1-zkp"
 )
 
 type Wallet struct {

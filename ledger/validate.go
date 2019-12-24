@@ -39,14 +39,14 @@ func ValidateTransaction(ledgerTx *Transaction) error {
 
 	tx := &ledgerTx.Transaction
 
-	err = validateCommitmentsSum(context, tx)
-	if err != nil {
-		return errors.Wrap(err, "cannot validateCommitmentsSum")
-	}
-
 	err = validateSignature(context, tx)
 	if err != nil {
 		return errors.Wrap(err, "cannot validateSignature")
+	}
+
+	err = validateCommitmentsSum(context, tx)
+	if err != nil {
+		return errors.Wrap(err, "cannot validateCommitmentsSum")
 	}
 
 	//err = validateBulletproofs(context, tx.Body.Outputs)
@@ -194,6 +194,10 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 
 	var zeroBlindingFactor [32]byte
 
+	if len(tx.Body.Kernels) == 0 {
+		return errors.New("no Kernel objects found in the slate")
+	}
+
 	// NB: FEE = Overage (grin core terminology)
 	fee := uint64(tx.Body.Kernels[0].Fee)
 	if fee != 0 {
@@ -298,11 +302,12 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 		scratch,
 		bulletproofGenerators,
 		proof,
-		[]uint64{0},
-		com,
+		nil,
+		[]*secp256k1.Commitment{com},
 		64,
 		&secp256k1.GeneratorH,
-		nil)
+		nil,
+	)
 	if err != nil {
 		return errors.New("cannot BulletproofRangeproofVerify")
 	}

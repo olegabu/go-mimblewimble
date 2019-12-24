@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"testing"
 
 	"github.com/blockcypher/libgrin/core"
@@ -55,16 +56,17 @@ func TestRound(t *testing.T) {
 
 var txPrinted bool
 
-func ReadSlate(t *testing.T, filename string) (slate *Slate) {
+func ReadSlate(filename string) (slate *Slate, err error) {
 	data, err := ioutil.ReadFile(filename)
-	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
 	if !txPrinted {
 		fmt.Printf("=====BEGIN OF SLATE [%s]=====\n%s\n=====END OF SLATE=====\n", filename, string(data))
 		txPrinted = true
 	}
 	slate = new(Slate)
 	err = json.Unmarshal(data, slate)
-	assert.NoError(t, err)
 	return
 }
 
@@ -72,7 +74,8 @@ func TestExcess(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	slate := ReadSlate(t, "../100mg_finalize.json")
+	slate, err := ReadSlate("../100mg_finalize.json")
+	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
 	kex, err := calculateExcess(context, slate.Transaction, fee)
@@ -85,22 +88,41 @@ func TestExcess(t *testing.T) {
 	assert.Equal(t, kex0, kex.Hex(context))
 }
 
-func TestGrinGen(t *testing.T) {
+func TestGrinTx(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	//slate := ReadSlate(t, "../1g_final.json")
+	files, err := ioutil.ReadDir("../")
+	if err != nil {
+		fmt.Println("No files found")
+		return
+	}
 
-	blind, _ := secret(context)
-	_, blindPublic, _ := secp256k1.EcPubkeyCreate(context, blind[:])
-	fmt.Printf("blindPublic: %s\n", blindPublic.Hex(context))
+	var valcnt int
+	for _, f := range files {
+		fn := "../" + f.Name()
+		if !strings.Contains(fn, ".json") {
+			continue
+		}
+		fmt.Printf(f.Name())
+		slate, err := ReadSlate(fn)
+		if err != nil {
+			fmt.Println(" - not a slate format file")
+			continue
+		}
+		tx := slate.Transaction
+		txBytes, err := json.Marshal(tx)
+		if err == nil {
+			_, err = ledger.ValidateTransactionBytes(txBytes)
+			if err == nil {
+				fmt.Printf(" - contains valid tx\n")
+				valcnt++
+			} else {
+				fmt.Printf("- contains no valid tx. %v\n", err)
+			}
+		}
+	}
 
-	blindCommit, _ := secp256k1.Commit(context, blind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
-	fmt.Printf("blindCommit: %s\n", blindCommit.Hex(context))
-
-	blindCommitPublic, _ := secp256k1.CommitmentToPublicKey(context, blindCommit)
-	fmt.Printf("blindCommitPublic: %s\n", blindCommitPublic.Hex(context))
-
-	assert.Equal(t, blindPublic, blindCommit)
+	fmt.Printf("Valid %d of %d", valcnt, len(files))
+	assert.True(t, valcnt > 0)
 }
-
