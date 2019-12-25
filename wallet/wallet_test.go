@@ -3,12 +3,14 @@ package wallet
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/olegabu/go-mimblewimble/ledger"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"os/user"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/olegabu/go-mimblewimble/ledger"
 )
 
 func testDbDir() string {

@@ -1,6 +1,8 @@
 module github.com/olegabu/go-mimblewimble
 
-go 1.12
+go 1.13
+
+replace github.com/olegabu/go-secp256k1-zkp => ../go-secp256k1-zkp
 
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
@@ -14,7 +16,7 @@ require (
 	github.com/klauspost/cpuid v1.2.1 // indirect
 	github.com/miekg/pkcs11 v1.0.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/olegabu/go-secp256k1-zkp v0.0.0-20191113113909-cc0ed62ae4db
+	github.com/olegabu/go-secp256k1-zkp v0.0.0-00010101000000-000000000000
 	github.com/olekukonko/tablewriter v0.0.2
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
 	github.com/pkg/errors v0.8.1
@@ -26,6 +28,5 @@ require (
 	github.com/sykesm/zap-logfmt v0.0.3 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	github.com/tendermint/tendermint v0.32.7
-	golang.org/x/crypto v0.0.0-20191112222119-e1110fd1c708
-	google.golang.org/appengine v1.4.0 // indirect
+	golang.org/x/crypto v0.0.0-20191122220453-ac88ee75c92c
 )

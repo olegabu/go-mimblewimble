@@ -2,13 +2,16 @@ package wallet
 
 import (
 	"encoding/json"
-	"github.com/blockcypher/libgrin/core"
-	"github.com/olegabu/go-mimblewimble/ledger"
-	"github.com/olegabu/go-secp256k1-zkp"
-	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 	"os"
 	"strconv"
+
+	"github.com/blockcypher/libgrin/core"
+	"github.com/olekukonko/tablewriter"
+	"github.com/pkg/errors"
+
+	"github.com/olegabu/go-mimblewimble/ledger"
+	// "github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-secp256k1-zkp"
 )
 
 type Wallet struct {
@@ -25,7 +28,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := CreateSlate(amount, asset, change, inputs)
+	slateBytes, changeOutput, senderSlate, err := CreateSlate(nil, amount, 0, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
@@ -114,7 +117,8 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 
 	defer secp256k1.ContextDestroy(context)
 
-	output, blind, err := output(context, value, core.CoinbaseOutput)
+	blind, _ := secret(context)
+	output, err := createOutput(context, blind[:], value, core.CoinbaseOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
