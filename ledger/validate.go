@@ -49,10 +49,10 @@ func ValidateTransaction(ledgerTx *Transaction) error {
 		return errors.Wrap(err, "cannot validateCommitmentsSum")
 	}
 
-	//err = validateBulletproofs(context, tx.Body.Outputs)
-	//if err != nil {
-	//	return errors.Wrap(err, "cannot validateBulletproofs")
-	//}
+	// err = validateBulletproofs(context, tx.Body.Outputs)
+	// if err != nil {
+	//    return errors.Wrap(err, "cannot validateBulletproofs")
+	// }
 
 	return nil
 }
@@ -309,15 +309,13 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 		return errors.Wrap(err, "cannot decode Commit from hex")
 	}
 
-	err = secp256k1.BulletproofRangeproofVerify(
+	err = secp256k1.BulletproofRangeproofVerifySingle(
 		context,
 		scratch,
 		bulletproofGenerators,
 		proof,
-		nil,
-		[]*secp256k1.Commitment{com},
-		64,
-		&secp256k1.GeneratorH,
+		0,
+		com,
 		nil,
 	)
 	if err != nil {

@@ -555,7 +555,17 @@ func createOutput(
 
 	//commit, err := secp256k1.CommitmentParse(context, commitment.Bytes(context))
 
-	proof, err := secp256k1.BulletproofRangeproofProveSingle(context, nil, nil, []uint64{value}, [][]byte{blind}, nil, &secp256k1.GeneratorH, 64, blind, nil, nil, nil)
+	proof, err := secp256k1.BulletproofRangeproofProveSingle(
+		context,
+		nil,
+		nil,
+		value,
+		blind,
+		blind,
+		nil,
+		nil,
+		nil,
+	)
 	if err != nil {
 		return core.Output{}, errors.Wrapf(err, "cannot create bullet proof")
 	}

@@ -70,19 +70,17 @@ func getTx(slateBytes []byte) (tx *Transaction, err error) {
 }
 
 func TestValidateSlate(t *testing.T) {
-	file := "../100mg_finalize.json"
-	tx := getTxBytes(file)
-	assert.NotEmpty(t, tx)
+	file := "../100mg_repost.json"
+	bytes := getTxBytes(file)
+	assert.NotEmpty(t, bytes)
 
-	//tx, err := getTx(bytes)
-	//assert.NotNil(t, tx)
-	//assert.Nil(t, err)
+	tx, err := getTx(bytes)
+	assert.NoError(t, err)
 
 	txBytes, err := json.Marshal(tx)
 
-	txVal, err := ValidateTransactionBytes(txBytes)
-	assert.NotNil(t, txVal)
-	assert.Nil(t, err)
+	_, err = ValidateTransactionBytes(txBytes)
+	assert.NoError(t, err)
 }
 
 func TestIssue(t *testing.T) {
