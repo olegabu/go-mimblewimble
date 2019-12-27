@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-secp256k1-zkp"
@@ -29,30 +30,33 @@ func Parse(bytes []byte) (tx *Transaction, issue *Issue, err error) {
 	}
 }
 
-func ValidateTransaction(ledgerTx *Transaction) error {
+func ValidateTransaction(ledgerTx *Transaction) (err error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return errors.Wrap(err, "cannot ContextCreate")
 	}
-
 	defer secp256k1.ContextDestroy(context)
 
 	tx := &ledgerTx.Transaction
 
-	err = validateSignature(context, tx)
-	if err != nil {
-		return errors.Wrap(err, "cannot validateSignature")
+	errSig := validateSignature(context, tx)
+	errPrf := validateBulletproofs(context, tx.Body.Outputs)
+	errSum := validateCommitmentsSum(context, tx)
+
+	var errs []string
+	if errSig != nil {
+		errs = append(errs, "validateSignature")
+	}
+	if errSum != nil {
+		errs = append(errs, "validateCommitmentsSum")
+	}
+	if errPrf != nil {
+		errs = append(errs, "validateBulletproofs")
 	}
 
-	err = validateCommitmentsSum(context, tx)
-	if err != nil {
-		return errors.Wrap(err, "cannot validateCommitmentsSum")
+	if len(errs) > 0 {
+		return errors.Errorf("Transaction validation failed [%s]", strings.Join(errs, ", "))
 	}
-
-	// err = validateBulletproofs(context, tx.Body.Outputs)
-	// if err != nil {
-	//    return errors.Wrap(err, "cannot validateBulletproofs")
-	// }
 
 	return nil
 }
@@ -291,20 +295,25 @@ func validateBulletproofs(
 	for i, output := range outputs {
 		err := validateBulletproof(context, output, scratch, bulletproofGenerators)
 		if err != nil {
-			return errors.Wrapf(err, "cannot validateBulletproof output %v", i)
+			return errors.Wrapf(err, "cannot validateBulletproof output #%d: %v", i, output)
 		}
 	}
 
 	return nil
 }
 
-func validateBulletproof(context *secp256k1.Context, output core.Output, scratch *secp256k1.ScratchSpace, bulletproofGenerators *secp256k1.BulletproofGenerators) error {
+func validateBulletproof(
+	context *secp256k1.Context,
+	output core.Output,
+	scratch *secp256k1.ScratchSpace,
+	generators *secp256k1.BulletproofGenerators,
+) error {
 	proof, err := hex.DecodeString(output.Proof)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode Proof from hex")
 	}
 
-	com, err := context.CommitmentFromHex(output.Commit)
+	commit, err := context.CommitmentFromHex(output.Commit)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode Commit from hex")
 	}
@@ -312,10 +321,9 @@ func validateBulletproof(context *secp256k1.Context, output core.Output, scratch
 	err = secp256k1.BulletproofRangeproofVerifySingle(
 		context,
 		scratch,
-		bulletproofGenerators,
+		generators,
 		proof,
-		0,
-		com,
+		commit,
 		nil,
 	)
 	if err != nil {

@@ -28,7 +28,7 @@ func getTxBytes(filename string) []byte {
 }
 
 func TestValidate(t *testing.T) {
-	file := "../1g_grin_repost_fix_kernel.json" // "../100mg_repost.json"
+	file := "../100mg_repost.json" // "../100mg_repost.json"
 	bytes := readFile(file)
 	assert.NotEmpty(t, bytes)
 
@@ -44,8 +44,10 @@ func TestValidate(t *testing.T) {
 	defer secp256k1.ContextDestroy(context)
 
 	err = validateSignature(context, &tx.Transaction)
-	//err = ValidateTransaction(tx)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
+
+	err = ValidateTransaction(tx)
+	assert.NoError(t, err)
 }
 
 func readFile(filename string) []byte {
