@@ -12,6 +12,7 @@ deps: $(LIBSECP)
 $(LIBSECP): modules
 	pushd $(LIBSECPSRCDIR) &&\
 	make && \
+#	pushd $(LIBSECPKGPDIR) &&\
 #	chmod +x secp256k1-zkp/autogen.sh  &&\
 #	find . -type d -exec chmod 777 {} \;  &&\
 #	CFLAGS="-fPIC -DPIC" make &&\
