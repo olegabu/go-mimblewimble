@@ -28,7 +28,7 @@ func getTxBytes(filename string) []byte {
 }
 
 func TestValidate(t *testing.T) {
-	file := "../1g_grin_repost_fix_kernel.json" // "../100mg_repost.json"
+	file := "../100mg_repost.json" // "../100mg_repost.json"
 	bytes := readFile(file)
 	assert.NotEmpty(t, bytes)
 
@@ -44,8 +44,10 @@ func TestValidate(t *testing.T) {
 	defer secp256k1.ContextDestroy(context)
 
 	err = validateSignature(context, &tx.Transaction)
-	//err = ValidateTransaction(tx)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
+
+	err = ValidateTransaction(tx)
+	assert.NoError(t, err)
 }
 
 func readFile(filename string) []byte {
@@ -70,19 +72,17 @@ func getTx(slateBytes []byte) (tx *Transaction, err error) {
 }
 
 func TestValidateSlate(t *testing.T) {
-	file := "../100mg_finalize.json"
-	tx := getTxBytes(file)
-	assert.NotEmpty(t, tx)
+	file := "../100mg_repost.json"
+	bytes := getTxBytes(file)
+	assert.NotEmpty(t, bytes)
 
-	//tx, err := getTx(bytes)
-	//assert.NotNil(t, tx)
-	//assert.Nil(t, err)
+	tx, err := getTx(bytes)
+	assert.NoError(t, err)
 
 	txBytes, err := json.Marshal(tx)
 
-	txVal, err := ValidateTransactionBytes(txBytes)
-	assert.NotNil(t, txVal)
-	assert.Nil(t, err)
+	_, err = ValidateTransactionBytes(txBytes)
+	assert.NoError(t, err)
 }
 
 func TestIssue(t *testing.T) {
