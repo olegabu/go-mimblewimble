@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strings"
 	"testing"
 
 	"github.com/blockcypher/libgrin/core"
@@ -25,7 +24,7 @@ func TestRound(t *testing.T) {
 
 	inputValue := uint64(300)
 	amount := uint64(200)
-	fee := uint64(10)
+	fee := uint64(0)
 
 	change := inputValue - amount - fee
 
@@ -54,17 +53,12 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-var txPrinted bool
-
 func ReadSlate(filename string) (slate *Slate, err error) {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return
 	}
-	if !txPrinted {
-		fmt.Printf("=====BEGIN OF SLATE [%s]=====\n%s\n=====END OF SLATE=====\n", filename, string(data))
-		txPrinted = true
-	}
+	fmt.Printf("=====BEGIN OF SLATE [%s]=====\n%s\n=====END OF SLATE=====\n", filename, string(data))
 	slate = new(Slate)
 	err = json.Unmarshal(data, slate)
 	return
@@ -74,7 +68,7 @@ func TestExcess(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	slate, err := ReadSlate("../100mg_finalize.json")
+	slate, err := ReadSlate("../../go-secp256k1-zkp/tests/100mg_finalize.json")
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
@@ -88,6 +82,7 @@ func TestExcess(t *testing.T) {
 	assert.Equal(t, kex0, kex.Hex(context))
 }
 
+/*
 func TestGrinTx(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
@@ -126,3 +121,4 @@ func TestGrinTx(t *testing.T) {
 	fmt.Printf("Valid %d of %d", valcnt, len(files))
 	assert.True(t, valcnt > 0)
 }
+*/

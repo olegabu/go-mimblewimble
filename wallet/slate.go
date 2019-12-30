@@ -30,7 +30,7 @@ func CreateSlate(
 ) {
 	// create a local context object if it's not provided in parameters
 	if context == nil {
-		if context, err = secp256k1.ContextCreate(secp256k1.ContextSign); err != nil {
+		if context, err = secp256k1.ContextCreate(secp256k1.ContextBoth); err != nil {
 			return nil, Output{}, SenderSlate{}, errors.Wrap(err, "ContextCreate failed")
 		}
 		defer secp256k1.ContextDestroy(context)
@@ -64,8 +64,6 @@ func CreateSlate(
 	var outputBlinds [][32]byte
 	var slateOutputs []core.Output
 	if change > 0 {
-		//outputBlinds = make([][32]byte, 1)
-		//copy(outputBlinds[0][:], blind)
 		outputBlinds = append(outputBlinds, blind)
 		slateOutputs = make([]core.Output, 1)
 		if slateOutputs[0], err = createOutput(context, blind[:], change, core.PlainOutput); err != nil {
@@ -536,24 +534,14 @@ func createOutput(
 	output core.Output,
 	err error,
 ) {
-	//valuegen, err := secp256k1.GeneratorGenerate(context, blind)
-	//if err != nil {
-	//	return core.Output{}, errors.Wrapf(err, "cannot create bullet proof generator for the blind")
-	//}
-	//commit, err := secp256k1.Commit(context, blind, value, valuegen, &secp256k1.GeneratorG)
+	// create commitment to value and blinding factor
+
 	commitment, err := secp256k1.Commit(context, blind, value, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return core.Output{}, errors.Wrap(err, "cannot create commitment to value")
 	}
 
 	// create bullet proof to value
-
-	//nonce, err := secret(context)
-	//if err != nil {
-	//	return core.Output{}, errors.Wrapf(err, "cannot create bullet proof")
-	//}
-
-	//commit, err := secp256k1.CommitmentParse(context, commitment.Bytes(context))
 
 	proof, err := secp256k1.BulletproofRangeproofProveSingle(
 		context,
@@ -600,54 +588,6 @@ func pubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (*secp256k1.Pu
 	return pk, nil
 }
 
-/*func stringPubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (pubkeystr string, pubkey *secp256k1.PublicKey, err error) {
-	pubkey, err = pubKeyFromSecretKey(context, sk32)
-	if err != nil {
-		return "", nil, errors.Wrap(err, "cannot create PublicKey")
-	}
-
-	pubkeystr, err = pubKeyToString(context, pubkey)
-	return
-}
-
-func pubKeyToString(context *secp256k1.Context, pk *secp256k1.PublicKey) (string, error) {
-	res, pkBytes, err := secp256k1.EcPubkeySerialize(context, pk, uint(secp256k1.EcCompressed))
-	if res != 1 || err != nil {
-		return "", errors.Wrap(err, "cannot serialize PublicKey")
-	}
-
-	pkString := hex.EncodeToString(pkBytes)
-	return pkString, nil
-}
-
-func stringToPubKey(context *secp256k1.Context, s string) (*secp256k1.PublicKey, error) {
-	bytes, err := hex.DecodeString(s)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot decode public key from hex string")
-	}
-
-	res, pk, err := secp256k1.EcPubkeyParse(context, bytes)
-	if res != 1 || err != nil {
-		return nil, errors.Wrap(err, "cannot parse public key from bytes")
-	}
-
-	return pk, nil
-}
-
-func stringToPubKeyBytes(context *secp256k1.Context, s string) ([]byte, error) {
-	pk, err := stringToPubKey(context, s)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot convert string to PubKey")
-	}
-
-	res, bytes, err := secp256k1.EcPubkeySerialize(context, pk, secp256k1.EcCompressed)
-	if res != 1 || err != nil {
-		return nil, errors.Wrap(err, "cannot serialize PubKey")
-	}
-
-	return bytes, nil
-}*/
-
 func sumPubKeys(
 	context *secp256k1.Context,
 	pubkeys []*secp256k1.PublicKey,
@@ -662,30 +602,6 @@ func sumPubKeys(
 
 	return
 }
-
-//
-// func schnorrChallenge(context *secp256k1.Context, msg []byte, senderPublicBlindExcess *secp256k1.PublicKey, senderPublicNonce *secp256k1.PublicKey, receiverPublicBlindExcess *secp256k1.PublicKey, receiverPublicNonce *secp256k1.PublicKey) ([]byte, error) {
-// 	hash, _ := blake2b.New256(nil)
-// 	hash.Write(msg)
-//
-// 	if senderPublicBlindExcess != nil && senderPublicNonce != nil && receiverPublicBlindExcess != nil && receiverPublicNonce != nil {
-// 		sumPublicBlindsBytes, _, err := sumPubKeys(context, []*secp256k1.PublicKey{senderPublicBlindExcess, receiverPublicBlindExcess})
-// 		if err != nil {
-// 			return nil, errors.Wrap(err, "cannot get sumPublicBlindsBytes")
-// 		}
-//
-// 		sumPublicNoncesBytes, _, err := sumPubKeysToBytes(context, []*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
-// 		if err != nil {
-// 			return nil, errors.Wrap(err, "cannot get sumPublicNoncesBytes")
-// 		}
-//
-// 		hash.Write(sumPublicNoncesBytes)
-// 		hash.Write(sumPublicBlindsBytes)
-// 	}
-//
-// 	return hash.Sum(nil), nil
-// }
-//
 
 func calculateExcess(
 	context *secp256k1.Context,
