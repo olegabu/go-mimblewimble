@@ -19,23 +19,30 @@ func TestRound(t *testing.T) {
 
 	defer secp256k1.ContextDestroy(context)
 
-	blind, err := secret(context)
-	assert.Nil(t, err)
-
 	inputValue := uint64(300)
 	amount := uint64(200)
 	fee := uint64(0)
 
 	change := inputValue - amount - fee
 
-	output, err := createOutput(context, blind[:], inputValue, core.CoinbaseOutput)
-	assert.Nil(t, err)
+	value1 := uint64(100)
+	blind1, _ := secret(context)
+	output1, _ := createOutput(context, blind1[:], value1, core.CoinbaseOutput)
+
+	value2 := inputValue - value1
+	blind2, _ := secret(context)
+	output2, _ := createOutput(context, blind2[:], value2, core.CoinbaseOutput)
 
 	inputs := []Output{{
-		Output: output,
-		Blind:  blind,
-		Value:  inputValue,
-	}}
+		Output: output1,
+		Blind:  blind1,
+		Value:  value1,
+	},
+		{
+			Output: output2,
+			Blind:  blind2,
+			Value:  value2,
+		}}
 
 	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, "cash", change, inputs)
 	assert.NoError(t, err)
@@ -68,7 +75,7 @@ func TestExcess(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	slate, err := ReadSlate("../../go-secp256k1-zkp/tests/100mg_finalize.json")
+	slate, err := ReadSlate("../../go-secp256k1-zkp/tests/1g_final.json")
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)

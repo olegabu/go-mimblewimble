@@ -40,10 +40,10 @@ func CreateSlate(
 	// collect input blinding factors (negative)
 	var inputsValue uint64
 	slateInputs := make([]core.Input, len(walletInputs))
-	inputBlinds := make([][32]byte, len(walletInputs))
+	inputBlinds := make([][]byte, len(walletInputs))
 	for index, input := range walletInputs {
 		inputsValue += input.Value
-		inputBlinds[index] = input.Blind
+		inputBlinds[index] = input.Blind[:]
 		slateInputs[index] = core.Input{
 			Features: input.Features,
 			Commit:   input.Commit,
@@ -57,16 +57,17 @@ func CreateSlate(
 	}
 
 	// create and remember blinding factor for change output
-	blind, err := secret(context)
+	changeBlind, err := secret(context)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get random blind")
 	}
-	var outputBlinds [][32]byte
+	var outputBlinds [][]byte
 	var slateOutputs []core.Output
 	if change > 0 {
-		outputBlinds = append(outputBlinds, blind)
+		outputBlinds = append(outputBlinds, changeBlind[:])
 		slateOutputs = make([]core.Output, 1)
-		if slateOutputs[0], err = createOutput(context, blind[:], change, core.PlainOutput); err != nil {
+		slateOutputs[0], err = createOutput(context, changeBlind[:], change, core.PlainOutput)
+		if err != nil {
 			return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create changeOutput")
 		}
 	}
@@ -84,13 +85,16 @@ func CreateSlate(
 	}
 
 	// generate random kernel offset
+	// sec, _ := hex.DecodeString("a8e55c6e74d24099008e00f7ae1e4b37c0242c7d3c9942035d666471b01aabe6")
+	// var kernelOffset [32]byte
+	// copy(kernelOffset[:], sec[:])
 	kernelOffset, err := secret(context)
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get random offset")
 	}
 
 	// Subtract kernel offset from blinding excess sum
-	blindExcess, err := secp256k1.BlindSum(context, [][32]byte{blindExcess1}, [][32]byte{kernelOffset})
+	blindExcess, err := secp256k1.BlindSum(context, [][]byte{blindExcess1[:]}, [][]byte{kernelOffset[:]})
 	if err != nil {
 		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get offset for blind")
 	}
@@ -147,7 +151,7 @@ func CreateSlate(
 	if change > 0 {
 		walletOutput = Output{
 			Output: slateOutputs[0],
-			Blind:  outputBlinds[0],
+			Blind:  changeBlind,
 			Value:  change,
 			Status: OutputUnconfirmed,
 			Asset:  asset,
@@ -647,11 +651,6 @@ func calculateExcess(
 			inputs = append(inputs, feecom)
 		}
 	}
-	// sum up the commitments
-	txExcess, err := secp256k1.CommitSum(context, outputs, inputs)
-	if err != nil {
-		return
-	}
 
 	// subtract the kernel_excess (built from kernel_offset)
 	kernelOffset, err := secp256k1.Commit(context,
@@ -660,9 +659,10 @@ func calculateExcess(
 	if err != nil {
 		return
 	}
-	kernelExcess, err = secp256k1.CommitSum(context,
-		[]*secp256k1.Commitment{txExcess},
-		[]*secp256k1.Commitment{kernelOffset})
+	inputs = append(inputs, kernelOffset)
+
+	// sum up the commitments
+	kernelExcess, err = secp256k1.CommitSum(context, outputs, inputs)
 	if err != nil {
 		return
 	}
