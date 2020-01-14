@@ -110,19 +110,21 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 
 	excessSigBytes, err := hex.DecodeString(tx.Body.Kernels[0].ExcessSig)
 	if err != nil {
-		return errors.Wrap(err, "cannot decode ExcessSig")
+		return errors.Wrap(err, "cannot decode hex ExcessSig")
+	}
+	excessSig, err := secp256k1.AggsigSignatureParse(context, excessSigBytes)
+	if err != nil {
+		return errors.Wrap(err, "cannot parse compact ExcessSig")
 	}
 
 	excessBytes, err := hex.DecodeString(tx.Body.Kernels[0].Excess)
 	if err != nil {
-		return errors.Wrap(err, "cannot decode Excess")
+		return errors.Wrap(err, "cannot decode hex Excess")
 	}
-
 	excessCommitment, err := secp256k1.CommitmentParse(context, excessBytes[:])
 	if err != nil {
 		return errors.Wrap(err, "CommitmentParse failed")
 	}
-
 	publicKey, err := secp256k1.CommitmentToPublicKey(context, excessCommitment)
 	if err != nil {
 		return errors.Wrap(err, "CommitmentToPublicKey failed")
@@ -132,7 +134,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 
 	err = secp256k1.AggsigVerifySingle(
 		context,
-		excessSigBytes,
+		excessSig,
 		msg,
 		nil,
 		publicKey,
@@ -271,7 +273,7 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 		return errors.New("cannot serialize kernelExcess")
 	}
 
-	if bytes.Compare(serializedKernelExcess, serializedCommitmentsSum) != 0 {
+	if bytes.Compare(serializedKernelExcess[:], serializedCommitmentsSum[:]) != 0 {
 		return errors.New("serializedKernelExcess not equal to serializedCommitmentsSum")
 	}
 

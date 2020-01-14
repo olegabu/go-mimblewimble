@@ -13,6 +13,10 @@ import (
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 
+func TestFinalize(t *testing.T) {
+
+}
+
 func TestRound(t *testing.T) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	assert.Nil(t, err)
@@ -25,24 +29,11 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	value1 := uint64(100)
-	blind1, _ := secret(context)
-	output1, _ := createOutput(context, blind1[:], value1, core.CoinbaseOutput)
-
-	value2 := inputValue - value1
-	blind2, _ := secret(context)
-	output2, _ := createOutput(context, blind2[:], value2, core.CoinbaseOutput)
-
-	inputs := []Output{{
-		Output: output1,
-		Blind:  blind1,
-		Value:  value1,
-	},
-		{
-			Output: output2,
-			Blind:  blind2,
-			Value:  value2,
-		}}
+	_, output1, err := createOutput(context, nil, uint64(120), core.CoinbaseOutput)
+	assert.NoError(t, err)
+	_, output2, err := createOutput(context, nil, inputValue-120, core.CoinbaseOutput)
+	assert.NoError(t, err)
+	inputs := []Output{*output1, *output2}
 
 	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, "cash", change, inputs)
 	assert.NoError(t, err)
@@ -52,12 +43,15 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, _, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
+	txBytes, tx, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
+	assert.NotNil(t, txBytes)
+	assert.NotNil(t, tx)
 	assert.NoError(t, err)
 	fmt.Printf("tran %s\n", string(txBytes))
 
-	_, err = ledger.ValidateTransactionBytes(txBytes)
+	tr, err := ledger.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
+	assert.NotNil(t, tr)
 }
 
 func ReadSlate(filename string) (slate *Slate, err error) {
@@ -79,7 +73,7 @@ func TestExcess(t *testing.T) {
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
-	kex, err := calculateExcess(context, slate.Transaction, fee)
+	kex, err := calculateExcess(context, &slate.Transaction, fee)
 	assert.NoError(t, err)
 	fmt.Printf("calculateExcess: %s\n", kex.Hex(context))
 

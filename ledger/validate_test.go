@@ -28,16 +28,26 @@ func getTxBytes(filename string) []byte {
 }
 
 func TestValidate(t *testing.T) {
-	file := "../../go-secp256k1-zkp/tests/test_tx.json" // "../100mg_repost.json"
+	files := []string{
+		"../../go-secp256k1-zkp/tests/1g_rep.json",
+		"../../go-secp256k1-zkp/tests/10_grin_repost.json",
+		"../../go-secp256k1-zkp/tests/1g_grin_repost_fix_kernel.json",
+		"../../go-secp256k1-zkp/tests/100mg_repost.json",
+	}
+	for _, file := range files {
+		testFile(t, file)
+	}
+}
+
+func testFile(t *testing.T, file string) {
+	log.Printf("Validating tx from file %s...\n", file)
 	bytes := readFile(file)
 	assert.NotEmpty(t, bytes)
 
 	var tx *Transaction
 	err := json.Unmarshal(bytes, &tx)
-
 	//	tx, err := getTx(bytes)
-	assert.Nil(t, err)
-	assert.NotNil(t, tx)
+	assert.NoError(t, err)
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	assert.NoError(t, err)
