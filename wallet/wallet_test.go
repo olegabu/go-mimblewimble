@@ -28,7 +28,7 @@ func TestWalletRound(t *testing.T) {
 	w := NewWallet(db)
 	defer db.Close()
 
-	for _, value := range []int{1, 5, 10} {
+	for _, value := range []int{3, 5, 10} {
 		_, err := w.Issue(uint64(value), "cash")
 		assert.NoError(t, err)
 	}
