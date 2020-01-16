@@ -47,7 +47,6 @@ func TestWalletRound(t *testing.T) {
 	err = w.Info()
 	assert.NoError(t, err)
 
-	// TODO: something needs to be fixed here
 	txBytes, err := w.Finalize(responseSlateBytes)
 	assert.NoError(t, err)
 	fmt.Println("tx   " + string(txBytes))

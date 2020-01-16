@@ -57,7 +57,7 @@ func ReadSlate(filename string) (slate *Slate, err error) {
 	if err != nil {
 		return
 	}
-	fmt.Printf("=====BEGIN OF SLATE [%s]=====\n%s\n=====END OF SLATE=====\n", filename, string(data))
+	//fmt.Printf("=====BEGIN OF SLATE [%s]=====\n%s\n=====END OF SLATE=====\n", filename, string(data))
 	slate = new(Slate)
 	err = json.Unmarshal(data, slate)
 	return
@@ -71,7 +71,7 @@ func TestExcess(t *testing.T) {
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
-	kex, err := CalculateExcess(context, &slate.Transaction, fee)
+	kex, err := ledger.CalculateExcess(context, &slate.Transaction, fee)
 	assert.NoError(t, err)
 	fmt.Printf("calculateExcess: %s\n", kex.Hex(context))
 

@@ -429,7 +429,7 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 
 	// calculate kernel excess as a sum of commitments of inputs, outputs and kernel offset
 	// that would produce a *Commitment type result
-	kernelExcess, err := CalculateExcess(context, &tx, uint64(slate.Fee))
+	kernelExcess, err := ledger.CalculateExcess(context, &tx, uint64(slate.Fee))
 	if err != nil {
 		return nil, Transaction{}, errors.Wrap(err, "cannot calculate final kernel excess")
 	}
@@ -575,65 +575,6 @@ func sumPubKeys(
 	res, sum, err := secp256k1.EcPubkeyCombine(context, pubkeys)
 	if res != 1 || err != nil {
 		return nil, errors.Wrap(err, "cannot sum public keys")
-	}
-
-	return
-}
-
-func CalculateExcess(
-	context *secp256k1.Context,
-	tx *core.Transaction,
-	fee uint64,
-) (
-	kernelExcess *secp256k1.Commitment,
-	err error,
-) {
-	var inputs, outputs []*secp256k1.Commitment
-
-	// collect input commitments
-	for _, input := range tx.Body.Inputs {
-		com, err := context.CommitmentFromHex(input.Commit) // secp256k1.CommitmentParse(context, secp256k1.Unhex(input.Commit))
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing input commitment")
-		}
-		inputs = append(inputs, com)
-	}
-
-	// collect output commitments
-	for _, output := range tx.Body.Outputs {
-		com, err := context.CommitmentFromHex(output.Commit)
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing output commitment")
-		}
-		outputs = append(outputs, com)
-	}
-	// add a fee commitment into appropriate collection
-	if fee != 0 {
-		var zblind [32]byte
-		com, err := secp256k1.Commit(context, zblind[:], fee, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
-		if err != nil {
-			return nil, errors.Wrap(err, "error calculating fee commitment")
-		}
-		if fee > 0 {
-			// add to outputs if positive
-			outputs = append(outputs, com)
-		} else {
-			// add to inputs if negative
-			inputs = append(inputs, com)
-		}
-	}
-
-	// subtract the kernel_excess (built from kernel_offset)
-	kernelOffset, err := secp256k1.Commit(context, secp256k1.Unhex(tx.Offset), 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
-	if err != nil {
-		return nil, errors.Wrap(err, "error calculating offset commitment")
-	}
-	inputs = append(inputs, kernelOffset)
-
-	// sum up the commitments
-	kernelExcess, err = secp256k1.CommitSum(context, outputs, inputs)
-	if err != nil {
-		return
 	}
 
 	return
