@@ -33,8 +33,8 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
 
-	if change > 0 {
-		err = t.db.PutOutput(changeOutput)
+	if changeOutput != nil {
+		err = t.db.PutOutput(*changeOutput)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot PutOutput")
 		}
