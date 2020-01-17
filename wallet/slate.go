@@ -24,14 +24,14 @@ func CreateSlate(
 	walletInputs []Output,
 ) (
 	slateBytes []byte,
-	walletOutput Output,
+	changeOutput *Output,
 	senderSlate SenderSlate,
 	err error,
 ) {
 	// create a local context object if it's not provided in parameters
 	if context == nil {
 		if context, err = secp256k1.ContextCreate(secp256k1.ContextBoth); err != nil {
-			return nil, Output{}, SenderSlate{}, errors.Wrap(err, "ContextCreate failed")
+			return nil, nil, SenderSlate{}, errors.Wrap(err, "ContextCreate failed")
 		}
 		defer secp256k1.ContextDestroy(context)
 	}
@@ -53,19 +53,19 @@ func CreateSlate(
 	}
 
 	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
-	if 0 != -inputsTotal+amount+fee+change {
-		err = errors.New("Amounts don't sum up (inputsValue - amount - fee - change != 0)")
+	if amount + change + fee != inputsTotal {
+		err = errors.New("Amounts don't sum up (amount + change + fee != inputsTotal)")
 		return
 	}
 
 	// create and remember blinding factor for change output
 	var outputBlinds [][]byte
 	var slateOutputs []core.Output
-	var changeOutput *Output
+	//var changeOutput *Output
 	if change > 0 {
 		_, changeOutput, err = createOutput(context, nil, change, core.PlainOutput, asset, OutputUnconfirmed)
 		if err != nil {
-			return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create changeOutput")
+			return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create changeOutput")
 		}
 		var blind [32]byte
 		copy(blind[:], changeOutput.Blind[:])
@@ -75,36 +75,36 @@ func CreateSlate(
 	// sum up inputs(-) and outputs(+) blinding factors and calculate sum's public key
 	blindExcess1, err := secp256k1.BlindSum(context, outputBlinds, inputBlinds)
 	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create blinding excess sum")
+		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create blinding excess sum")
 	}
 
 	// generate secret nonce and calculate its public key
 	nonce, err := secret(context)
 	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get secret for nonce")
+		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get secret for nonce")
 	}
 
 	// generate random kernel offset
 	kernelOffset, err := secret(context)
 	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get random offset")
+		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get random offset")
 	}
 
 	// Subtract kernel offset from blinding excess sum
 	blindExcess, err := secp256k1.BlindSum(context, [][]byte{blindExcess1[:]}, [][]byte{kernelOffset[:]})
 	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot get offset for blind")
+		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get offset for blind")
 	}
 
 	publicBlindExcess, err := pubKeyFromSecretKey(context, blindExcess[:])
 	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
+		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
 	// Create public curve points from blindExcess
 	publicNonce, err := pubKeyFromSecretKey(context, nonce[:])
 	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
+		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
 	}
 
 	// put these all into a slate and marshal it to json
@@ -152,7 +152,7 @@ func CreateSlate(
 
 	slateBytes, err = json.Marshal(walletSlate)
 	if err != nil {
-		return nil, Output{}, SenderSlate{}, errors.Wrap(err, "cannot marshal walletSlate to json")
+		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot marshal walletSlate to json")
 	}
 
 	senderSlate = SenderSlate{Slate: walletSlate}
@@ -160,7 +160,7 @@ func CreateSlate(
 	copy(senderSlate.SumSenderBlinds[:], blindExcess[:])
 	senderSlate.Status = SlateSent
 
-	return slateBytes, *changeOutput, senderSlate, nil
+	return slateBytes, changeOutput, senderSlate, nil
 }
 
 /// let secp = Secp256k1::with_caps(ContextFlag::Full);
