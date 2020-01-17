@@ -3,6 +3,7 @@ package wallet
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/blockcypher/libgrin/core"
@@ -15,7 +16,6 @@ import (
 func TestRound(t *testing.T) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	assert.Nil(t, err)
-
 	defer secp256k1.ContextDestroy(context)
 
 	inputValue := uint64(300)
@@ -31,6 +31,40 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 	inputs := []Output{*output1, *output2}
 
+	total := uint64(0)
+	count := uint64(rand.Int63n(1000))
+	coins := make(map[uint64][]Output, count)
+	for i := uint64(0); i < count; i++ {
+		value := uint64(rand.Int63n(int64(count)))
+		total += value
+		coins[value] = append(
+			coins[value],
+			func(o *core.Output, output *Output, err error) Output {
+				if err == nil {
+					return *output
+				}
+				return Output{}
+			}(createOutput(
+				context,
+				nil,
+				value,
+				core.CoinbaseOutput,
+				asset,
+				OutputConfirmed)))
+	}
+
+	amount := uint64(rand.Int63n(total))
+	inputs
+
+	c := rand.Int()
+	for i := 0; i < c; i++ {
+		runTestTx(context, amount, rand.Int63n(amount),  )
+	}
+
+
+}
+
+func runTestTx(context *secp256k1.Contest, amount uint64, fee uint64, inputs []Output, asset string) (err error) {
 	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(slateBytes))
@@ -55,7 +89,7 @@ func TestExcess(t *testing.T) {
 	defer secp256k1.ContextDestroy(context)
 
 	slate := new(Slate)
-	err := json.Unmarshal([]byte(slateFinal), slate)
+	err := json.Unmarshal(slateFinal, slate)
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
