@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"testing"
 
 	"github.com/blockcypher/libgrin/core"
@@ -19,25 +20,20 @@ func TestRound(t *testing.T) {
 
 	defer secp256k1.ContextDestroy(context)
 
-	blind, err := secret(context)
-	assert.Nil(t, err)
-
 	inputValue := uint64(300)
 	amount := uint64(200)
 	fee := uint64(0)
+	asset := "cash"
 
 	change := inputValue - amount - fee
 
-	output, err := createOutput(context, blind[:], inputValue, core.CoinbaseOutput)
-	assert.Nil(t, err)
+	_, output1, err := createOutput(context, nil, uint64(120), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	assert.NoError(t, err)
+	_, output2, err := createOutput(context, nil, inputValue-120, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	assert.NoError(t, err)
+	inputs := []Output{*output1, *output2}
 
-	inputs := []Output{{
-		Output: output,
-		Blind:  blind,
-		Value:  inputValue,
-	}}
-
-	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, "cash", change, inputs)
+	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(slateBytes))
 
@@ -45,12 +41,15 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, _, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
+	txBytes, tx, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
+	assert.NotNil(t, txBytes)
+	assert.NotNil(t, tx)
 	assert.NoError(t, err)
 	fmt.Printf("tran %s\n", string(txBytes))
 
-	_, err = ledger.ValidateTransactionBytes(txBytes)
+	tr, err := ledger.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
+	assert.NotNil(t, tr)
 }
 
 func ReadSlate(filename string) (slate *Slate, err error) {
@@ -58,7 +57,7 @@ func ReadSlate(filename string) (slate *Slate, err error) {
 	if err != nil {
 		return
 	}
-	fmt.Printf("=====BEGIN OF SLATE [%s]=====\n%s\n=====END OF SLATE=====\n", filename, string(data))
+	//fmt.Printf("=====BEGIN OF SLATE [%s]=====\n%s\n=====END OF SLATE=====\n", filename, string(data))
 	slate = new(Slate)
 	err = json.Unmarshal(data, slate)
 	return
@@ -68,11 +67,11 @@ func TestExcess(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	slate, err := ReadSlate("../../go-secp256k1-zkp/tests/100mg_finalize.json")
+	slate, err := ReadSlate("../../go-secp256k1-zkp/tests/1g_final.json")
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
-	kex, err := calculateExcess(context, slate.Transaction, fee)
+	kex, err := ledger.CalculateExcess(context, &slate.Transaction, fee)
 	assert.NoError(t, err)
 	fmt.Printf("calculateExcess: %s\n", kex.Hex(context))
 
@@ -82,12 +81,11 @@ func TestExcess(t *testing.T) {
 	assert.Equal(t, kex0, kex.Hex(context))
 }
 
-/*
 func TestGrinTx(t *testing.T) {
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	defer secp256k1.ContextDestroy(context)
 
-	files, err := ioutil.ReadDir("../")
+	files, err := ioutil.ReadDir("../../go-secp256k1-zkp/tests")
 	if err != nil {
 		fmt.Println("No files found")
 		return
@@ -95,7 +93,7 @@ func TestGrinTx(t *testing.T) {
 
 	var valcnt int
 	for _, f := range files {
-		fn := "../" + f.Name()
+		fn := "../../go-secp256k1-zkp/tests/" + f.Name()
 		if !strings.Contains(fn, ".json") {
 			continue
 		}
@@ -121,4 +119,3 @@ func TestGrinTx(t *testing.T) {
 	fmt.Printf("Valid %d of %d", valcnt, len(files))
 	assert.True(t, valcnt > 0)
 }
-*/

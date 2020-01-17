@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
@@ -8,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/olegabu/go-mimblewimble/ledger"
 )
 
 func testDbDir() string {
@@ -25,7 +28,7 @@ func TestWalletRound(t *testing.T) {
 	w := NewWallet(db)
 	defer db.Close()
 
-	for _, value := range []int{1, 5, 10} {
+	for _, value := range []int{3, 5, 10} {
 		_, err := w.Issue(uint64(value), "cash")
 		assert.NoError(t, err)
 	}
@@ -44,7 +47,6 @@ func TestWalletRound(t *testing.T) {
 	err = w.Info()
 	assert.NoError(t, err)
 
-	/*  // TODO: something needs to be fixed here
 	txBytes, err := w.Finalize(responseSlateBytes)
 	assert.NoError(t, err)
 	fmt.Println("tx   " + string(txBytes))
@@ -66,7 +68,6 @@ func TestWalletRound(t *testing.T) {
 
 	err = w.Info()
 	assert.NoError(t, err)
-	*/
 }
 
 func TestInfo(t *testing.T) {

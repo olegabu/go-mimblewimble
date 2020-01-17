@@ -1,7 +1,6 @@
 package ledger
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -110,19 +109,21 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 
 	excessSigBytes, err := hex.DecodeString(tx.Body.Kernels[0].ExcessSig)
 	if err != nil {
-		return errors.Wrap(err, "cannot decode ExcessSig")
+		return errors.Wrap(err, "cannot decode hex ExcessSig")
+	}
+	excessSig, err := secp256k1.AggsigSignatureParse(context, excessSigBytes)
+	if err != nil {
+		return errors.Wrap(err, "cannot parse compact ExcessSig")
 	}
 
 	excessBytes, err := hex.DecodeString(tx.Body.Kernels[0].Excess)
 	if err != nil {
-		return errors.Wrap(err, "cannot decode Excess")
+		return errors.Wrap(err, "cannot decode hex Excess")
 	}
-
 	excessCommitment, err := secp256k1.CommitmentParse(context, excessBytes[:])
 	if err != nil {
 		return errors.Wrap(err, "CommitmentParse failed")
 	}
-
 	publicKey, err := secp256k1.CommitmentToPublicKey(context, excessCommitment)
 	if err != nil {
 		return errors.Wrap(err, "CommitmentToPublicKey failed")
@@ -132,7 +133,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 
 	err = secp256k1.AggsigVerifySingle(
 		context,
-		excessSigBytes,
+		excessSig,
 		msg,
 		nil,
 		publicKey,
@@ -168,14 +169,67 @@ func KernelSignatureMessage(kernel core.TxKernel) []byte {
 	return hash.Sum(nil)
 }
 
-// Offset is a part of blinding factors sum, sometimes referred to as K1, that is
-// R*G = (K1+K2)*G. K1 is visible as offset field, K2 is published as commitment, i.e. K2*G = kernel_excess.
-// if transaction is valid, then
-// offset*G + kernel_excess === 0*H + R*G === (inputs - outputs - fee))*G === inputs*G - (outputs+Fee)*G ===
-// === InputCommitmentsSum - (OutputCommitments + FeeCommitments)
-func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) error {
-	// parse inputs and outputs
+func CalculateExcess(
+	context *secp256k1.Context,
+	tx *core.Transaction,
+	fee uint64,
+) (
+	kernelExcess *secp256k1.Commitment,
+	err error,
+) {
+	var inputCommitments, outputCommitments []*secp256k1.Commitment
 
+	// collect input commitments
+	for _, input := range tx.Body.Inputs {
+		com, err := context.CommitmentFromHex(input.Commit) // secp256k1.CommitmentParse(context, secp256k1.Unhex(input.Commit))
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing input commitment")
+		}
+		inputCommitments = append(inputCommitments, com)
+	}
+
+	// collect output commitments
+	for _, output := range tx.Body.Outputs {
+		com, err := context.CommitmentFromHex(output.Commit)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing output commitment")
+		}
+		outputCommitments = append(outputCommitments, com)
+	}
+
+	// add a fee commitment into appropriate collection
+	if fee != 0 {
+		var zblind [32]byte
+		com, err := secp256k1.Commit(context, zblind[:], fee, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+		if err != nil {
+			return nil, errors.Wrap(err, "error calculating fee commitment")
+		}
+		if fee > 0 {
+			// add to outputCommitments if positive
+			outputCommitments = append(outputCommitments, com)
+		} else {
+			// add to inputCommitments if negative
+			inputCommitments = append(inputCommitments, com)
+		}
+	}
+
+	// subtract the kernel_excess (built from kernel_offset)
+	kernelOffset, err := secp256k1.Commit(context, secp256k1.Unhex(tx.Offset), 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	if err != nil {
+		return nil, errors.Wrap(err, "error calculating offset commitment")
+	}
+	inputCommitments = append(inputCommitments, kernelOffset)
+
+	// sum up the commitments
+	kernelExcess, err = secp256k1.CommitSum(context, outputCommitments, inputCommitments)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+/*
 	var outputs, inputs []*secp256k1.Commitment
 
 	for i, input := range tx.Body.Inputs {
@@ -271,11 +325,36 @@ func validateCommitmentsSum(context *secp256k1.Context, tx *core.Transaction) er
 		return errors.New("cannot serialize kernelExcess")
 	}
 
-	if bytes.Compare(serializedKernelExcess, serializedCommitmentsSum) != 0 {
+	if bytes.Compare(serializedKernelExcess[:], serializedCommitmentsSum[:]) != 0 {
 		return errors.New("serializedKernelExcess not equal to serializedCommitmentsSum")
 	}
 
 	return nil
+}
+*/
+
+func validateCommitmentsSum(
+	context *secp256k1.Context,
+	tx *core.Transaction,
+) (
+	err error,
+) {
+	if len(tx.Body.Kernels) == 0 {
+		return errors.New("no kernels found in the slate")
+	}
+	kernel := tx.Body.Kernels[0]
+
+	kernelExcess, err := CalculateExcess(context, tx, uint64(kernel.Fee))
+	if err != nil {
+		return errors.Wrap(err, "cannot calculate kernel excess")
+	}
+
+	// compare calculated excess with the one stored in the tx kernel
+	if kernelExcess.Hex(context) != kernel.Excess {
+		return errors.Wrap(err, "kernel excess verification failed")
+	}
+
+	return nil // no errror
 }
 
 func validateBulletproofs(
@@ -332,3 +411,4 @@ func validateBulletproof(
 
 	return nil
 }
+
