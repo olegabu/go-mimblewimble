@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
+	"github.com/pkg/errors"
 
 	"github.com/blockcypher/libgrin/core"
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,37 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 )
+
+type TestData = struct {
+	inputs []int64
+	amount int64
+	fee int64
+	asset string
+	pass bool
+}
+
+var TESTDATA []TestData = []TestData{
+	{[]int64{100}, 100, 0, "cash", true},
+	{[]int64{100}, 100, 5, "cash", false},
+	{[]int64{100}, 90, 10, "cash", true},
+	{[]int64{100}, 90, 5, "cash", true},
+	{[]int64{100}, 90, 0, "cash", true},
+	{[]int64{100, 200}, 300, 100, "cash", false},
+	{[]int64{100, 200}, 300, 100, "cash", false},
+	{[]int64{100, 200}, 200, 100, "cash", true},
+	{[]int64{100, 200}, 300, 100, "cash", false},
+}
+
+func TestRound(t *testing.T) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	assert.Nil(t, err)
+	defer secp256k1.ContextDestroy(context)
+
+	for _, test := range TESTDATA {
+		err = runTestRound(t, context, &test)
+		assert.Equal(t, test.pass, err == nil)
+	}
+}
 
 func TestRounds(t *testing.T) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
@@ -30,12 +62,13 @@ func TestRounds(t *testing.T) {
 	assert.NoError(t, err)
 	inputs := []Output{*output1, *output2}
 */
-	ncount := rand.Intn(100)
+    nvalid := int64(0)
+	ncount := 10 // rand.Intn(100)
 	for n := 1; n <= ncount; n++ {
 
 		asset := "cash"
 		total := int64(0)
-		count := rand.Int63n(1000)
+		count := rand.Int63n(100)
 		outputs := make([]*Output, 0, count)
 		for i := int64(0); i < count; i++ {
 			value := rand.Int63n(count)
@@ -48,11 +81,17 @@ func TestRounds(t *testing.T) {
 			return outputs[i].Value < outputs[j].Value
 		})
 
-		amount := rand.Int63n(total)
-		fee := rand.Int63n(amount)
+		var spend, fee int64
+		if total > 0 {
+			spend = rand.Int63n(total)
+		}
+		if spend / 4 > 0 {
+			fee = rand.Int63n(int64(spend / 4))
+		}
+		amount := spend - fee
 
 		var inputsTotal int64
-		var inputValues []string
+		var inputValues []int64
 		inputs := make([]*Output, 0, count)
 		for _, output := range outputs {
 			if output.Status == OutputConfirmed {
@@ -60,86 +99,92 @@ func TestRounds(t *testing.T) {
 				output.Status = OutputLocked
 				inputs = append(inputs, output)
 				inputsTotal += int64(output.Value)
-				inputValues = append(inputValues, string(output.Value))
+				inputValues = append(inputValues, int64(output.Value))
 				if inputsTotal >= amount + fee {
 					break
 				}
 			}
 		}
 
-		assert.NoError(t, err)
-		if inputsTotal < amount {
-			assert.Fail(t, " === ERROR === Insufficient funds %v\n", err)
+		test := TestData{
+			inputValues,
+			 amount, fee,
+			 asset, true,
 		}
-
-		if inputsTotal >= amount {
-			err := runTestRound(t, context, asset, uint64(amount-fee), uint64(fee), inputs, true)
-			if err != nil {
-				fmt.Printf(" === ERROR === %v\n", err)
-			} else {
-				total -= amount + fee
-				fmt.Print(" === OK === \n")
-			}
+		fmt.Printf("\n %d/%d:", n, ncount)
+		err = runTestRound(t, context, &test)
+		if err != nil {
+			fmt.Printf(" === ERROR === %v\n", err)
+		} else {
+			nvalid++
+			fmt.Print(" === OK === \n")
 		}
-		assert.NoError(t, err)
 	}
+	fmt.Printf("\nDONE: success %d of %d, rate is %f %%", nvalid, ncount, float64(100) * float64(nvalid) / float64(ncount))
 }
 
-func TestRound(t *testing.T) {
-	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	assert.Nil(t, err)
-	defer secp256k1.ContextDestroy(context)
+func runTestRound(t *testing.T, context *secp256k1.Context, test *TestData) (err error) { // } asset string, amount uint64, fee uint64, inputs []*Output, pass bool) (err error) {
 
-	type TestData = struct {
-		inputs []uint64
-		amount uint64
-		fee uint64
-		asset string
-		pass bool
-	}
-	testData := []TestData{
-		{[]uint64{100, 200}, 200, 0, "cash", true},
-		{[]uint64{100, 200}, 200, 100, "cash", true},
-		{[]uint64{100, 200}, 300, 100, "cash", false},
-	}
-
-	for _, test := range testData {
-
-		inputs := []*Output{}
-		for _, value := range test.inputs {
-			_, input, err := createOutput(context, nil, value, core.CoinbaseOutput, test.asset, OutputConfirmed)
-			assert.NoError(t, err)
-			inputs = append(inputs, input)
+	var total int64
+	var inputs []*Output
+	for _, value := range test.inputs {
+		var input *Output
+		_, input, err = createOutput(context, nil, uint64(value), core.CoinbaseOutput, test.asset, OutputConfirmed)
+		if err != nil {
+			return errors.Wrap(err, "error creating an input object")
 		}
-		err = runTestRound(t, context, test.asset, test.amount, test.fee, inputs, test.pass)
-		assert.Equal(t, test.pass, err == nil)
+		inputs = append(inputs, input)
+		total += value
 	}
-}
+	change := total - test.amount - test.fee
 
-func runTestRound(t *testing.T, context *secp256k1.Context, asset string, amount uint64, fee uint64, inputs []*Output, pass bool) (err error) {
+	fmt.Printf("\n === SEND asset %s, inputs %d, amount %d, fee %d, change %d, should pass %v\n", test.asset, total, test.amount, test.fee, change, test.pass)
 
-	var total uint64
-	for _, input := range inputs {
-		total += input.Value
+	for {
+		if total < test.amount+test.fee {
+			fmt.Printf("  insufficient funds, available %d, required %d (amount %d + fee %d)\n", total, test.amount+test.fee, test.amount, test.fee)
+			err = errors.Errorf("  insufficient funds\n")
+			break
+		}
+
+		var bytes []byte
+		var senderSlate SenderSlate
+		bytes, _, senderSlate, err = CreateSlate(context, uint64(test.amount), uint64(test.fee), test.asset, uint64(change), inputs)
+		fmt.Print("  sent ")
+		if err != nil{
+			fmt.Printf("  ERROR: %v\n", err)
+			break
+		}
+		fmt.Printf("%s\n  resp ", string(bytes))
+
+		bytes, _, _, err = CreateResponse(bytes)
+		if err != nil{
+			fmt.Printf("  ERROR: %v\n", err)
+			break
+		}
+		fmt.Printf("%s\n  tran ", string(bytes))
+
+		bytes, _, err = CreateTransaction(bytes, senderSlate)
+		if err != nil{
+			fmt.Printf("  ERROR: %v\n", err)
+			break
+		}
+		fmt.Printf("%s\n", string(bytes))
+
+		_, err = ledger.ValidateTransactionBytes(bytes)
+		if err != nil{
+			fmt.Printf("  tx validation error: %v\n", err)
+			break
+		}
+
+		break
 	}
-	change := total - amount - fee
-	assert.True(t, change >= 0)
+	fmt.Printf("  pass %v", err == nil)
+	if test.pass == (err == nil) {
+		fmt.Print(" (as expected)")
+	}
+	fmt.Print("\n")
 
-	fmt.Printf("Sending %s, inputs: %d, amount: %d, fee: %d, change: %d, should pass: %v\n", asset, total, amount, fee, change, pass)
-
-	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, asset, change, inputs)
-	if err != nil { return }
-	fmt.Printf("  send %s\n", string(slateBytes))
-
-	responseSlateBytes, _, _, err := CreateResponse(slateBytes)
-	if err != nil { return }
-	fmt.Printf("  resp %s\n", string(responseSlateBytes))
-
-	txBytes, _, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
-	if err != nil { return }
-	fmt.Printf("  tran %s\n", string(txBytes))
-
-	_, err = ledger.ValidateTransactionBytes(txBytes)
 	return
 }
 
