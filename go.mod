@@ -14,7 +14,7 @@ require (
 	github.com/klauspost/cpuid v1.2.1 // indirect
 	github.com/miekg/pkcs11 v1.0.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/olegabu/go-secp256k1-zkp v0.0.0-20200117102842-826b551cb48e
+	github.com/olegabu/go-secp256k1-zkp v0.1.0
 	github.com/olekukonko/tablewriter v0.0.2
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
 	github.com/pkg/errors v0.8.1
