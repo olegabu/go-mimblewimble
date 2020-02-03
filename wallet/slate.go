@@ -53,7 +53,7 @@ func CreateSlate(
 	}
 
 	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
-	if amount + change + fee != inputsTotal {
+	if amount+change+fee != inputsTotal {
 		err = errors.New("Amounts don't sum up (amount + change + fee != inputsTotal)")
 		return
 	}
@@ -109,6 +109,7 @@ func CreateSlate(
 
 	// put these all into a slate and marshal it to json
 
+	f := &core.PlainKernel{Fee: fee}
 	slate := &libwallet.Slate{
 		VersionInfo: libwallet.VersionCompatInfo{
 			Version:            3,
@@ -123,7 +124,7 @@ func CreateSlate(
 				Inputs:  slateInputs,
 				Outputs: slateOutputs,
 				Kernels: []core.TxKernel{{
-					Features:   core.PlainKernel,
+					Features:   core.KernelFeatures(f),
 					Fee:        core.Uint64(fee),
 					LockHeight: 0,
 					Excess:     "000000000000000000000000000000000000000000000000000000000000000000",

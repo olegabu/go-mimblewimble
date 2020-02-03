@@ -1,7 +1,6 @@
 package ledger
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/blake2b"
 )
 
 func Parse(bytes []byte) (tx *Transaction, issue *Issue, err error) {
@@ -152,21 +150,22 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 //       hash(features || fee || lock_height) for height locked kernels
 func KernelSignatureMessage(kernel core.TxKernel) []byte {
 
-	featuresBytes := []byte{byte(kernel.Features)}
-	feeBytes := make([]byte, 8)
-	lockHeightBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(feeBytes, uint64(kernel.Fee))
-	binary.BigEndian.PutUint64(lockHeightBytes, uint64(kernel.LockHeight))
-
-	hash, _ := blake2b.New256(nil)
-	hash.Write(featuresBytes)
-	if kernel.Features == core.PlainKernel {
-		hash.Write(feeBytes)
-	} else if kernel.Features == core.HeightLockedKernel {
-		hash.Write(feeBytes)
-		hash.Write(lockHeightBytes)
-	}
-	return hash.Sum(nil)
+	return kernel.Features.Hash()
+	//featuresBytes := []byte{byte(kernel.Features)}
+	//feeBytes := make([]byte, 8)
+	//lockHeightBytes := make([]byte, 8)
+	//binary.BigEndian.PutUint64(feeBytes, uint64(kernel.Fee))
+	//binary.BigEndian.PutUint64(lockHeightBytes, uint64(kernel.LockHeight))
+	//
+	//hash, _ := blake2b.New256(nil)
+	//hash.Write(featuresBytes)
+	//if kernel.Features == core.PlainKernel {
+	//	hash.Write(feeBytes)
+	//} else if kernel.Features == core.HeightLockedKernel {
+	//	hash.Write(feeBytes)
+	//	hash.Write(lockHeightBytes)
+	//}
+	//return hash.Sum(nil)
 }
 
 func CalculateExcess(
@@ -411,4 +410,3 @@ func validateBulletproof(
 
 	return nil
 }
-

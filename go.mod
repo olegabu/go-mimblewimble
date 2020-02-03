@@ -2,7 +2,7 @@ module github.com/olegabu/go-mimblewimble
 
 go 1.13
 
-replace github.com/blockcypher/libgrin => ./vendor/github.com/blockcypher/libgrin
+replace github.com/blockcypher/libgrin => ./libgrin
 
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
@@ -28,5 +28,5 @@ require (
 	github.com/sykesm/zap-logfmt v0.0.3 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	github.com/tendermint/tendermint v0.32.7
-	golang.org/x/crypto v0.0.0-20191122220453-ac88ee75c92c
+	golang.org/x/crypto v0.0.0-20200128174031-69ecbb4d6d5d
 )

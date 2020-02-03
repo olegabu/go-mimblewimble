@@ -16,8 +16,10 @@ package core
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"golang.org/x/crypto/blake2b"
 	"strconv"
 )
 
@@ -54,50 +56,109 @@ func (u *Uint64) UnmarshalJSON(bs []byte) error {
 }
 
 // KernelFeatures is an enum of various supported kernels "features".
-type KernelFeatures int
-
-const (
-	// PlainKernel kernel (the default for Grin txs).
-	PlainKernel KernelFeatures = iota
-	// CoinbaseKernel is a coinbase kernel.
-	CoinbaseKernel
-	// HeightLockedKernel is a kernel with an explicit lock height.
-	HeightLockedKernel
-)
-
-func (s KernelFeatures) String() string {
-	return toStringKernelFeatures[s]
+type KernelFeatures interface {
+	String() string
+	Hash() []byte
 }
 
-var toStringKernelFeatures = map[KernelFeatures]string{
-	PlainKernel:        "Plain",
-	CoinbaseKernel:     "Coinbase",
-	HeightLockedKernel: "HeightLocked",
+//const (
+//	// PlainKernel kernel (the default for Grin txs).
+//	PlainKernel KernelFeatures = iota
+//	// CoinbaseKernel is a coinbase kernel.
+//	CoinbaseKernel
+//	// HeightLockedKernel is a kernel with an explicit lock height.
+//	HeightLockedKernel
+//)
+
+//func (s KernelFeatures) String() string {
+//	return toStringKernelFeatures[s]
+//}
+
+func (kernel *PlainKernel) Hash() []byte {
+	hash, _ := blake2b.New256(nil)
+
+	feeBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(feeBytes, kernel.Fee)
+	hash.Write(append([]byte{byte(0)}, feeBytes...))
+
+	return hash.Sum(nil)
+}
+func (kernel *CoinbaseKernel) Hash() []byte {
+	hash, _ := blake2b.New256(nil)
+
+	hash.Write([]byte{byte(1)})
+
+	return hash.Sum(nil)
 }
 
-var toIDKernelFeatures = map[string]KernelFeatures{
-	"Plain":        PlainKernel,
-	"Coinbase":     CoinbaseKernel,
-	"HeightLocked": HeightLockedKernel,
+func (kernel *ExtraKernelType) Hash() []byte {
+	hash, _ := blake2b.New256(nil)
+	dataBytes := []byte(kernel.Data)
+	hash.Write(append([]byte{byte(1)}, dataBytes...))
+	return hash.Sum(nil)
 }
 
+func (kernel *HeightLockedKernel) Hash() []byte {
+	hash, _ := blake2b.New256(nil)
+
+	feeBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(feeBytes, kernel.Fee)
+	lockHeightBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(lockHeightBytes, uint64(kernel.LockHeight))
+	hash.Write(
+		append(
+			append([]byte{byte(0)}, feeBytes...),
+			lockHeightBytes...))
+
+	return hash.Sum(nil)
+}
+
+type PlainKernel struct {
+	Fee uint64 `json:"fee"`
+}
+type CoinbaseKernel struct{}
+
+type HeightLockedKernel struct {
+	Fee        uint64 `json:"fee"`
+	LockHeight Uint64 `json:"lock_height"`
+}
+
+type ExtraKernelType struct {
+	Data string `json:"data"`
+}
+
+func (p *PlainKernel) String() string {
+	return string(p.Fee)
+}
+
+//var toStringKernelFeatures = map[KernelFeatures]string{
+//	PlainKernel:        "Plain",
+//	CoinbaseKernel:     "Coinbase",
+//	HeightLockedKernel: "HeightLocked",
+//}
+//
+//var toIDKernelFeatures = map[string]KernelFeatures{
+//	"Plain":        PlainKernel,
+//	"Coinbase":     CoinbaseKernel,
+//	"HeightLocked": HeightLockedKernel,
+//}
+//
 // MarshalJSON marshals the enum as a quoted json string
-func (s KernelFeatures) MarshalJSON() ([]byte, error) {
+func (s PlainKernel) MarshalJSON() ([]byte, error) {
 	buffer := bytes.NewBufferString(`"`)
-	buffer.WriteString(toStringKernelFeatures[s])
+	buffer.WriteString("Plain")
 	buffer.WriteString(`"`)
 	return buffer.Bytes(), nil
 }
 
+//
 // UnmarshalJSON unmarshals a quoted json string to the enum value
-func (s *KernelFeatures) UnmarshalJSON(b []byte) error {
-	var j string
-	err := json.Unmarshal(b, &j)
+func (p *PlainKernel) UnmarshalJSON(b []byte) error {
+
+	err := json.Unmarshal(b, &p)
 	if err != nil {
 		return err
 	}
-	// Note that if the string cannot be found then it will be set to the zero value, 'Created' in this case.
-	*s = toIDKernelFeatures[j]
 	return nil
 }
 
@@ -121,6 +182,15 @@ type TxKernel struct {
 	// The signature proving the excess is a valid public key, which signs
 	// the transaction fee.
 	ExcessSig string `json:"excess_sig"`
+}
+
+func (k *KernelFeatures) UnmarshalJSON(b []byte) {
+
+	//plain := &PlainKernel{}
+	//if json.Unmarshal(b,plain)==nil {
+	//	return nil
+	//}
+
 }
 
 // TransactionBody is a common abstraction for transaction and block

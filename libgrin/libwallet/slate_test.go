@@ -19,7 +19,6 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/blockcypher/libgrin/libwallet/slateversions"
 
 	"github.com/stretchr/testify/assert"
@@ -44,14 +43,14 @@ func TestMarshalV2(t *testing.T) {
 
 func TestUnmarshalV3(t *testing.T) {
 	slateV3JSON, _ := ioutil.ReadFile("slateversions/test_data/v3.slate")
-	var slateV3 libwallet.Slate
+	var slateV3 Slate
 	err := json.Unmarshal(slateV3JSON, &slateV3)
 	assert.Nil(t, err)
 }
 
 func TestMarshalV3(t *testing.T) {
 	slateV3JSON, _ := ioutil.ReadFile("slateversions/test_data/v3_raw.slate")
-	var slateV3 libwallet.Slate
+	var slateV3 Slate
 	err := json.Unmarshal(slateV3JSON, &slateV3)
 	assert.Nil(t, err)
 

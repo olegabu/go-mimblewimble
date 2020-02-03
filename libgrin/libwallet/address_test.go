@@ -16,19 +16,18 @@ package libwallet_test
 
 import (
 	"fmt"
-	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestOnionV3Conversion(t *testing.T) {
 	onionAddress := "2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid"
-	key, err := libwallet.PubKeyFromOnionV3(onionAddress)
+	key, err := PubKeyFromOnionV3(onionAddress)
 	assert.Nil(t, err)
 	assert.NotNil(t, key)
 	fmt.Printf("Key: %q\n", key)
 
-	outAddress, err := libwallet.OnionV3FromPubKey(key)
+	outAddress, err := OnionV3FromPubKey(key)
 	assert.Nil(t, err)
 	fmt.Printf("Address: %s", outAddress)
 	assert.Equal(t, onionAddress, outAddress)
