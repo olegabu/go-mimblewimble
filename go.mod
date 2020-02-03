@@ -2,6 +2,8 @@ module github.com/olegabu/go-mimblewimble
 
 go 1.13
 
+replace github.com/blockcypher/libgrin => ./vendor/github.com/blockcypher/libgrin
+
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
 	github.com/Shopify/sarama v1.24.1 // indirect
