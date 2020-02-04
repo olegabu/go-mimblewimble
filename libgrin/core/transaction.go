@@ -74,11 +74,11 @@ type KernelFeatures interface {
 //	return toStringKernelFeatures[s]
 //}
 
-func (kernel *PlainKernel) Hash() []byte {
+func (p *PlainKernel) Hash() []byte {
 	hash, _ := blake2b.New256(nil)
 
 	feeBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(feeBytes, kernel.Fee)
+	binary.BigEndian.PutUint64(feeBytes, p.Fee)
 	hash.Write(append([]byte{byte(0)}, feeBytes...))
 
 	return hash.Sum(nil)
@@ -118,6 +118,10 @@ type PlainKernel struct {
 }
 type CoinbaseKernel struct{}
 
+func (kernel *CoinbaseKernel) String() string {
+	return "{}"
+}
+
 type HeightLockedKernel struct {
 	Fee        uint64 `json:"fee"`
 	LockHeight Uint64 `json:"lock_height"`
@@ -125,6 +129,10 @@ type HeightLockedKernel struct {
 
 type ExtraKernelType struct {
 	Data string `json:"data"`
+}
+
+func (kernel *ExtraKernelType) String() string {
+	return kernel.Data
 }
 
 func (p *PlainKernel) String() string {
@@ -144,7 +152,7 @@ func (p *PlainKernel) String() string {
 //}
 //
 // MarshalJSON marshals the enum as a quoted json string
-func (s PlainKernel) MarshalJSON() ([]byte, error) {
+func (p PlainKernel) MarshalJSON() ([]byte, error) {
 	buffer := bytes.NewBufferString(`"`)
 	buffer.WriteString("Plain")
 	buffer.WriteString(`"`)
@@ -184,13 +192,35 @@ type TxKernel struct {
 	ExcessSig string `json:"excess_sig"`
 }
 
-func (k *KernelFeatures) UnmarshalJSON(b []byte) {
+func (k *TxKernel) UnmarshalJSON(b []byte) (err error) {
 
-	//plain := &PlainKernel{}
-	//if json.Unmarshal(b,plain)==nil {
-	//	return nil
-	//}
+	raw := make(map[string]interface{})
 
+	if err = json.Unmarshal(b, &raw); err != nil {
+		return
+	}
+	featuresRaw := raw["features"]
+
+	//f1:=f.(PlainKernel)
+	*k = TxKernel{
+		Features:   nil,
+		Fee:        0,
+		LockHeight: (raw["lock_height"]).(Uint64),
+		Excess:     (raw["excess"]).(string),
+		ExcessSig:  (raw["excess_sig"]).(string),
+	}
+	switch featuresType := (featuresRaw).(type) {
+	case PlainKernel:
+		var p PlainKernel
+		err = json.Unmarshal([]byte(featuresRaw), &p)
+	case HeightLockedKernel:
+	case ExtraKernelType:
+	case CoinbaseKernel:
+
+		(*k).Features = &featuresType
+
+	}
+	return
 }
 
 // TransactionBody is a common abstraction for transaction and block
