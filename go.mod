@@ -4,6 +4,8 @@ go 1.13
 
 replace github.com/olegabu/go-secp256k1-zkp => ../go-secp256k1-zkp
 
+replace github.com/blockcypher/libgrin => ./libgrin
+
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
 	github.com/Shopify/sarama v1.24.1 // indirect
