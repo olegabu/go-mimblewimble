@@ -53,7 +53,7 @@ func CreateSlate(
 	}
 
 	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
-	if amount + change + fee != inputsTotal {
+	if amount+change+fee != inputsTotal {
 		err = errors.New("Amounts don't sum up (amount + change + fee != inputsTotal)")
 		return
 	}
@@ -79,13 +79,13 @@ func CreateSlate(
 	}
 
 	// generate secret nonce and calculate its public key
-	nonce, err := secret(context)
+	nonce, err := Secret(context)
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get secret for nonce")
 	}
 
 	// generate random kernel offset
-	kernelOffset, err := secret(context)
+	kernelOffset, err := Secret(context)
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get random offset")
 	}
@@ -96,13 +96,13 @@ func CreateSlate(
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get offset for blind")
 	}
 
-	publicBlindExcess, err := pubKeyFromSecretKey(context, blindExcess[:])
+	publicBlindExcess, err := PubKeyFromSecretKey(context, blindExcess[:])
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
 	// Create public curve points from blindExcess
-	publicNonce, err := pubKeyFromSecretKey(context, nonce[:])
+	publicNonce, err := PubKeyFromSecretKey(context, nonce[:])
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
 	}
@@ -211,17 +211,17 @@ func CreateResponse(
 	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot create receiver output")
 	}
-	receiverPublicBlind, err := pubKeyFromSecretKey(context, outerOutput.Blind[:])
+	receiverPublicBlind, err := PubKeyFromSecretKey(context, outerOutput.Blind[:])
 	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
 	// choose receiver nonce and calculate its public key
-	receiverNonce, err := secret(context)
+	receiverNonce, err := Secret(context)
 	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot get random for nonce")
 	}
-	receiverPublicNonce, err := pubKeyFromSecretKey(context, receiverNonce[:])
+	receiverPublicNonce, err := PubKeyFromSecretKey(context, receiverNonce[:])
 	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot create publicNonce")
 	}
@@ -305,8 +305,8 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 	senderBlind := senderSlate.SumSenderBlinds[:]
 	senderNonce := senderSlate.SenderNonce[:]
 	// calculate public keys from secret keys
-	senderPublicBlind_, _ := pubKeyFromSecretKey(context, senderBlind)
-	senderPublicNonce_, _ := pubKeyFromSecretKey(context, senderNonce)
+	senderPublicBlind_, _ := PubKeyFromSecretKey(context, senderBlind)
+	senderPublicNonce_, _ := PubKeyFromSecretKey(context, senderNonce)
 
 	// parse slate
 
@@ -494,7 +494,7 @@ func createOutput(
 	err error,
 ) {
 	if blind == nil {
-		blind_, err_ := secret(context)
+		blind_, err_ := Secret(context)
 		if err_ != nil {
 			return nil, nil, err_
 		}
@@ -550,13 +550,13 @@ func blake256(data []byte) (digest []byte) {
 	return hash.Sum(nil)
 }
 
-func secret(context *secp256k1.Context) (rnd32 [32]byte, err error) {
+func Secret(context *secp256k1.Context) (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
 	rnd32, err = secp256k1.AggsigGenerateSecureNonce(context, seed32[:])
 	return
 }
 
-func pubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (*secp256k1.PublicKey, error) {
+func PubKeyFromSecretKey(context *secp256k1.Context, sk32 []byte) (*secp256k1.PublicKey, error) {
 	res, pk, err := secp256k1.EcPubkeyCreate(context, sk32)
 	if res != 1 || pk == nil || err != nil {
 		return nil, errors.Wrap(err, "cannot create Public key from Secret key")

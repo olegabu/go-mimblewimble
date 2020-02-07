@@ -5,13 +5,25 @@ import (
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/wallet"
-	"github.com/olegabu/go-secp256k1-zkp"
+	"golang.org/x/crypto/blake2b"
 )
 
 type Asset struct {
-	id        string
-	generator secp256k1.Generator
+	Id   [32]byte
+	name string
 }
+
+func newAsset(name string) Asset {
+	hash, _ := blake2b.New256(nil)
+	hash.Write([]byte(name))
+	var id [32]byte
+	copy(id[:], hash.Sum(nil)[:32])
+	return Asset{
+		Id:   id,
+		name: name,
+	}
+}
+
 type publicOutput struct {
 	Input
 	Proof           string `json:"proof"`
@@ -27,10 +39,26 @@ type privateOutput struct {
 	Asset      Asset               `json:"asset,omitempty"`
 }
 
+type TxKernel struct {
+	// Options for a kernel's structure or use
+	Features core.KernelFeatures `json:"features"`
+	// Fee originally included in the transaction this proof is for.
+	Fee AssetBalance `json:"fee"`
+	// This kernel is not valid earlier than lock_height blocks
+	// The max lock_height of all *inputs* to this transaction
+	LockHeight core.Uint64 `json:"lock_height"`
+	// Remainder of the sum of all transaction commitments. If the transaction
+	// is well formed, amounts components should sum to zero and the excess
+	// is hence a valid public key.
+	Excess string `json:"excess"`
+	// The signature proving the excess is a valid public key, which signs
+	// the transaction fee.
+	ExcessSig string `json:"excess_sig"`
+}
 type TransactionBody struct {
-	Inputs  []Input         `json:"inputs"`
-	Outputs []publicOutput  `json:"outputs"`
-	Kernels []core.TxKernel `json:"kernels"`
+	Inputs  []Input        `json:"inputs"`
+	Outputs []publicOutput `json:"outputs"`
+	Kernels []TxKernel     `json:"kernels"`
 }
 
 type LedgerTransaction struct {
@@ -57,7 +85,7 @@ type Input struct {
 	// The commit referencing the output being spent.
 	Commit Commitment `json:"commit"`
 }
-type GrinSlate struct {
+type publicSlate struct {
 	// Versioning info
 	VersionInfo libwallet.VersionCompatInfo `json:"version_info"`
 	// The number of participants intended to take part in this transaction
@@ -68,9 +96,9 @@ type GrinSlate struct {
 	// inputs, outputs, kernels, kernel offset
 	Transaction LedgerTransaction `json:"tx"`
 	// base amount (excluding fee)
-	Amount core.Uint64 `json:"amount"`
+	Amount []AssetBalance `json:"amount"`
 	// fee amount
-	Fee core.Uint64 `json:"fee"`
+	Fee AssetBalance `json:"fee"`
 	// Block height for the transaction
 	Height core.Uint64 `json:"height"`
 	// Lock height
@@ -87,8 +115,7 @@ type GrinSlate struct {
 	PaymentProof *libwallet.PaymentInfo `json:"payment_proof"`
 }
 type Slate struct {
-	GrinSlate
-	Asset  string             `json:"asset,omitempty"`
+	publicSlate
 	Status wallet.SlateStatus `json:"status,omitempty"`
 }
 
