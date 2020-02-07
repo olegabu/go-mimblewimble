@@ -53,7 +53,7 @@ func CreateSlate(
 		}
 	}
 
-	inputsToBeSpent := make(map[string]privateOutput)
+	inputsToBeSpent := make(map[string]*privateOutput)
 
 	for _, offer := range offers {
 		remainder := offer.amount
@@ -64,7 +64,7 @@ func CreateSlate(
 				continue
 			}
 
-			inputsToBeSpent[input.Commit.ValueCommitment] = input
+			inputsToBeSpent[input.Commit.ValueCommitment] = &input
 
 			if input.Value-remainder > 0 {
 				input.Value = input.Value - remainder
@@ -227,7 +227,7 @@ func createOutput(context *secp256k1.Context, asset Asset, value uint64, inputs 
 
 	var fixedOutputAssetTag *secp256k1.FixedAssetTag
 
-	fixedOutputAssetTag, err = secp256k1.FixedAssetTagParse(output.Asset.Id[:])
+	fixedOutputAssetTag, err = secp256k1.FixedAssetTagParse(asset.Id[:])
 
 	for _, input := range inputs {
 		var fixedAssetTag *secp256k1.FixedAssetTag
@@ -239,7 +239,7 @@ func createOutput(context *secp256k1.Context, asset Asset, value uint64, inputs 
 	}
 
 	seed32 := secp256k1.Random256()
-	_, _, _, err = secp256k1.SurjectionproofAllocateInitialized(context, fixedInputAssetTags, len(fixedInputAssetTags), fixedOutputAssetTag, 10, seed32[:])
+	_, _, _, err = secp256k1.SurjectionproofAllocateInitialized(context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
 	output = privateOutput{
 		publicOutput: publicOutput{
 			Input: Input{
