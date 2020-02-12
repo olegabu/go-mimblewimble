@@ -265,7 +265,7 @@ func createOutput(context *secp256k1.Context, balance AssetBalance, inputs []pri
 		var proof *secp256k1.Surjectionproof
 		var inputIndex int
 		var inputBlindingKeys [][]byte
-		var outputBlindingKey []byte
+		//var outputBlindingKey []byte
 		var fixedOutputAssetTag *secp256k1.FixedAssetTag
 		var ephemeralInputTags []secp256k1.Generator
 		var ephemeralOutputTag *secp256k1.Generator
@@ -282,7 +282,7 @@ func createOutput(context *secp256k1.Context, balance AssetBalance, inputs []pri
 			}
 			fixedInputAssetTags = append(fixedInputAssetTags, *fixedAssetTag)
 
-			tokenCommitment, err = secp256k1.GeneratorParse(context, []byte(input.Commit.AssetCommitment))
+			tokenCommitment, err = secp256k1.GeneratorGenerateBlinded(context, input.Asset.Id[:], input.AssetBlind[:])
 			if err != nil {
 				return
 			}
@@ -291,7 +291,7 @@ func createOutput(context *secp256k1.Context, balance AssetBalance, inputs []pri
 			inputBlindingKeys = append(inputBlindingKeys, input.AssetBlind[:])
 		}
 
-		ephemeralOutputTag, err = secp256k1.GeneratorParse(context, []byte(changeCommitment.AssetCommitment))
+		ephemeralOutputTag, err = secp256k1.GeneratorGenerateBlinded(context, output.Asset.Id[:], output.AssetBlind[:])
 
 		if err != nil {
 			return
@@ -301,7 +301,7 @@ func createOutput(context *secp256k1.Context, balance AssetBalance, inputs []pri
 
 		_, proof, inputIndex, err = secp256k1.SurjectionproofAllocateInitialized(context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
 
-		err = secp256k1.SurjectionproofGenerate(context, proof, ephemeralInputTags[:], *ephemeralOutputTag, inputIndex, inputBlindingKeys[inputIndex][:], outputBlindingKey[:])
+		err = secp256k1.SurjectionproofGenerate(context, proof, ephemeralInputTags[:], *ephemeralOutputTag, inputIndex, inputBlindingKeys[inputIndex][:], output.AssetBlind[:])
 		if err != nil {
 			return
 		}
