@@ -20,7 +20,8 @@ func TestCreateSlate(t *testing.T) {
 	dummySecret := secp256k1.Random256()
 	sbercoin := newAsset("sbercoin")
 	dummyToken := newAsset("dummyToken")
-
+	H, _ := secp256k1.GeneratorGenerateBlinded(context, sbercoin.Id[:], dummySecret[:])
+	assetCommitment, _ := secp256k1.Commit(context, dummySecret[:], 1, H, &secp256k1.GeneratorG)
 	tests := []struct {
 		name            string
 		args            args
@@ -38,7 +39,13 @@ func TestCreateSlate(t *testing.T) {
 
 			walletInputs: []privateOutput{
 				{publicOutput: publicOutput{
-					Input:           Input{},
+					Input: Input{
+						Features: 0,
+						Commit: Commitment{
+							ValueCommitment: "",
+							AssetCommitment: (*assetCommitment).Hex(context),
+						},
+					},
 					Proof:           "",
 					SurjectionProof: "",
 				},

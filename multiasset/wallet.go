@@ -13,9 +13,9 @@ import (
 func CreateSlate(
 	context *secp256k1.Context,
 	fee AssetBalance,
-	walletInputs []privateOutput,
-	purchases []AssetBalance,
-	offers []AssetBalance) (
+	walletInputs []privateOutput, // the assets Alice owns hence pays with
+	purchases []AssetBalance, // the assets Alice buys
+	spends []AssetBalance) ( //the assets Alice pays with
 	slateBytes []byte,
 	outputs []privateOutput,
 	senderSlate SenderSlate,
@@ -29,16 +29,22 @@ func CreateSlate(
 		defer secp256k1.ContextDestroy(context)
 	}
 
+	// Group all spends by asset id to make the tallying easier
 	offerBalance := make(map[string]uint64)
+
+	// Group all owned inputs by asset id to make the tallying easier
 	inputsByAsset := make(map[string][]privateOutput)
+
 	inputsById := make(map[string]privateOutput)
 
 	offerBalance[fee.asset.name] += fee.amount
 
-	for _, offer := range offers {
-		offerBalance[offer.asset.name] += offer.amount
+	//initialize output helper map
+	for _, spend := range spends {
+		offerBalance[spend.asset.name] += spend.amount
 	}
 
+	//initialize inputs helper maps
 	myBalance := make(map[string]uint64)
 	for _, input := range walletInputs {
 		myBalance[input.Asset.name] += input.Value
@@ -46,6 +52,7 @@ func CreateSlate(
 		inputsById[input.Commit.ValueCommitment] = input
 	}
 
+	//check for any overspending
 	for assetId, value := range offerBalance {
 		if myBalance[assetId] < value {
 			err = errors.New("insufficient funds")
@@ -55,46 +62,61 @@ func CreateSlate(
 
 	inputsToBeSpent := make(map[string]*privateOutput)
 
-	for _, offer := range offers {
-		remainder := offer.amount
+	//for every asset output Alice wishes to create by spending her funds
+	for _, spend := range spends {
+		//get the value of output
+		remainder := spend.amount
+		//loop through inputs and mark those that are about to used in this transaction
+		//
+		for _, input := range inputsByAsset[spend.asset.name] {
 
-		for _, input := range inputsByAsset[offer.asset.name] {
-
+			//this input is already spent, proceed to the next one
 			if input.Value == 0 {
 				continue
 			}
-
+			//since this input was not spent before, remember it
 			inputsToBeSpent[input.Commit.ValueCommitment] = &input
 
-			if input.Value-remainder > 0 {
+			//if we have not less than we need, decrease the value and go to the next spend
+			if input.Value-remainder >= 0 {
 				input.Value = input.Value - remainder
 				remainder = 0
 				break
 			}
-
+			//since this specific input has insufficient funds, decrease the value and go to the next
 			input.Value = 0
 			remainder = remainder - input.Value
 
 		}
 
 	}
-
+	//helper map for change outputs
 	changeAmountsToBeCreated := make(map[Asset]uint64)
+
+	//loop through inputs about to be spent
+	//we couldn't do it while looping through spends, because there could be duplicate assets both among owned assets and spends
 	for id, input := range inputsToBeSpent {
 		if inputsById[id].Value > input.Value {
 			changeAmountsToBeCreated[input.Asset] = inputsById[id].Value - input.Value
 		}
 	}
 
-	//output := privateOutput{}
 	var output privateOutput
+
 	var outputBlinds, inputBlinds [][]byte
+
 	for _, input := range walletInputs {
 		inputBlinds = append(inputBlinds, input.ValueBlind[:])
 	}
+
+	//create change outputs with token commitment surjection proof
 	for asset, changeValue := range changeAmountsToBeCreated {
 
-		output, err = createOutput(context, asset, changeValue, walletInputs)
+		output, err = createOutputForPayment(context, AssetBalance{
+			asset:  asset,
+			amount: changeValue,
+		}, walletInputs)
+
 		if err != nil {
 			return
 		}
@@ -102,8 +124,9 @@ func CreateSlate(
 		outputBlinds = append(outputBlinds, output.ValueBlind[:])
 	}
 
+	//create purchase outputs without token commitments surjection proof
 	for _, purchase := range purchases {
-		output, err = createOutput(context, purchase.asset, purchase.amount, walletInputs)
+		output, err = createOutputForPurchase(context, purchase)
 		if err != nil {
 			return
 		}
@@ -173,7 +196,7 @@ func CreateSlate(
 					},
 					ID: uuid.New(),
 				},
-				Amount:          offers,
+				Amount:          spends,
 				Fee:             fee,
 				Height:          0,
 				LockHeight:      0,
@@ -195,11 +218,18 @@ func CreateSlate(
 	}
 	return
 }
+func createOutputForPayment(ctx *secp256k1.Context, balance AssetBalance, inputs []privateOutput) (output privateOutput, err error) {
+	return createOutput(ctx, balance, inputs)
+}
 
-func createOutput(context *secp256k1.Context, asset Asset, value uint64, inputs []privateOutput) (output privateOutput, err error) {
+func createOutputForPurchase(ctx *secp256k1.Context, balance AssetBalance) (output privateOutput, err error) {
+	return createOutput(ctx, balance, []privateOutput{})
+}
+func createOutput(context *secp256k1.Context, balance AssetBalance, inputs []privateOutput) (output privateOutput, err error) {
 	valueBlind, _ := wallet.Secret(context)
 	assetBlind, _ := wallet.Secret(context)
 
+	asset, value := balance.asset, balance.amount
 	H, err := secp256k1.GeneratorGenerateBlinded(context, asset.Id[:], assetBlind[:])
 	assetCommitment, _ := secp256k1.Commit(context, assetBlind[:], 1, H, &secp256k1.GeneratorG)
 	valueCommitment, _ := secp256k1.Commit(context, valueBlind[:], value, H, &secp256k1.GeneratorG)
@@ -223,23 +253,60 @@ func createOutput(context *secp256k1.Context, asset Asset, value uint64, inputs 
 		return
 	}
 
-	var fixedInputAssetTags []secp256k1.FixedAssetTag
+	surjectionProof := ""
 
-	var fixedOutputAssetTag *secp256k1.FixedAssetTag
+	/*
+		The surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
+		The sender must create both change outputs and outputs which she wishes to acquire as a result of this transaction,
+		because she must generate blinding factors for them to be available for later spending.
+	*/
+	if len(inputs) > 0 {
+		var fixedInputAssetTags []secp256k1.FixedAssetTag
+		var proof *secp256k1.Surjectionproof
+		var inputIndex int
+		var inputBlindingKeys [][]byte
+		var outputBlindingKey []byte
+		var fixedOutputAssetTag *secp256k1.FixedAssetTag
+		var ephemeralInputTags []secp256k1.Generator
+		var ephemeralOutputTag *secp256k1.Generator
 
-	fixedOutputAssetTag, err = secp256k1.FixedAssetTagParse(asset.Id[:])
+		fixedOutputAssetTag, err = secp256k1.FixedAssetTagParse(asset.Id[:])
 
-	for _, input := range inputs {
-		var fixedAssetTag *secp256k1.FixedAssetTag
-		fixedAssetTag, err = secp256k1.FixedAssetTagParse(input.Asset.Id[:])
+		for _, input := range inputs {
+			var fixedAssetTag *secp256k1.FixedAssetTag
+			var tokenCommitment *secp256k1.Generator
+			fixedAssetTag, err = secp256k1.FixedAssetTagParse(input.Asset.Id[:])
+
+			if err != nil {
+				return
+			}
+			fixedInputAssetTags = append(fixedInputAssetTags, *fixedAssetTag)
+
+			tokenCommitment, err = secp256k1.GeneratorParse(context, []byte(input.Commit.AssetCommitment))
+			if err != nil {
+				return
+			}
+			ephemeralInputTags = append(ephemeralInputTags, *tokenCommitment)
+
+			inputBlindingKeys = append(inputBlindingKeys, input.AssetBlind[:])
+		}
+
+		ephemeralOutputTag, err = secp256k1.GeneratorParse(context, []byte(changeCommitment.AssetCommitment))
+
 		if err != nil {
 			return
 		}
-		fixedInputAssetTags = append(fixedInputAssetTags, *fixedAssetTag)
+
+		seed32 := secp256k1.Random256()
+
+		_, proof, inputIndex, err = secp256k1.SurjectionproofAllocateInitialized(context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
+
+		err = secp256k1.SurjectionproofGenerate(context, proof, ephemeralInputTags[:], *ephemeralOutputTag, inputIndex, inputBlindingKeys[inputIndex][:], outputBlindingKey[:])
+		if err != nil {
+			return
+		}
 	}
 
-	seed32 := secp256k1.Random256()
-	_, _, _, err = secp256k1.SurjectionproofAllocateInitialized(context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
 	output = privateOutput{
 		publicOutput: publicOutput{
 			Input: Input{
@@ -247,7 +314,7 @@ func createOutput(context *secp256k1.Context, asset Asset, value uint64, inputs 
 				Commit:   changeCommitment,
 			},
 			Proof:           hex.EncodeToString(proof),
-			SurjectionProof: "",
+			SurjectionProof: surjectionProof,
 		},
 		ValueBlind: valueBlind,
 		AssetBlind: assetBlind,
