@@ -1,6 +1,7 @@
 package multiasset
 
 import (
+	"encoding/hex"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
@@ -9,31 +10,45 @@ import (
 )
 
 type Asset struct {
-	Id   [32]byte
-	name string
+	Id   string `json:"id"`
+	Name string `json:"name"`
 }
 
-func newAsset(name string) Asset {
+func (asset Asset) seed() (seed []byte) {
+	seed, _ = hex.DecodeString(asset.Id)
+	return seed
+}
+
+func newAsset(name string) (Asset, []byte) {
 	hash, _ := blake2b.New256(nil)
 	hash.Write([]byte(name))
 	var id [32]byte
 	copy(id[:], hash.Sum(nil)[:32])
+	encodedId := hex.EncodeToString(id[:])
+
+	test, _ := hex.DecodeString(encodedId)
 	return Asset{
-		Id:   id,
-		name: name,
-	}
+		Id:   encodedId,
+		Name: name,
+	}, test
 }
 
-type publicOutput struct {
+type PublicOutput struct {
 	Input
 	Proof           string `json:"proof"`
 	SurjectionProof string `json:"surjection_proof"`
 }
 
-type privateOutput struct {
-	publicOutput
+type SlateOutput struct {
+	PublicOutput
+	AssetBlind string `json:"asset_blind,omitempty"`
+	Asset      Asset  `json:"asset,omitempty"`
+}
+
+type PrivateOutput struct {
+	PublicOutput
 	ValueBlind [32]byte            `json:"value_blind,omitempty"`
-	AssetBlind [32]byte            `json:"value_blind,omitempty"`
+	AssetBlind [32]byte            `json:"asset_blind,omitempty"`
 	Value      uint64              `json:"value,omitempty"`
 	Status     wallet.OutputStatus `json:"status,omitempty"`
 	Asset      Asset               `json:"asset,omitempty"`
@@ -55,20 +70,9 @@ type TxKernel struct {
 	// the transaction fee.
 	ExcessSig string `json:"excess_sig"`
 }
-type TransactionBody struct {
-	Inputs  []Input        `json:"inputs"`
-	Outputs []publicOutput `json:"outputs"`
-	Kernels []TxKernel     `json:"kernels"`
-}
 
-type LedgerTransaction struct {
-	Offset string `json:"offset"`
-	// The transaction body - inputs/outputs/kernels
-	Body TransactionBody `json:"body"`
-	ID   uuid.UUID       `json:"id,omitempty"`
-}
 type WalletTransaction struct {
-	LedgerTransaction
+	Transaction
 	Status wallet.TransactionStatus `json:"status,omitempty"`
 	Asset  string                   `json:"asset,omitempty"`
 }
@@ -94,7 +98,7 @@ type publicSlate struct {
 	ID uuid.UUID `json:"id"`
 	// The core transaction data:
 	// inputs, outputs, kernels, kernel offset
-	Transaction LedgerTransaction `json:"tx"`
+	Transaction Transaction `json:"tx"`
 	// base amount (excluding fee)
 	Amount []AssetBalance `json:"amount"`
 	// fee amount

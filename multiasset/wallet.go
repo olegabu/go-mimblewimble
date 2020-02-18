@@ -13,11 +13,11 @@ import (
 func CreateSlate(
 	context *secp256k1.Context,
 	fee AssetBalance,
-	walletInputs []privateOutput, // the assets Alice owns hence pays with
+	walletInputs []PrivateOutput, // the assets Alice owns hence pays with
 	purchases []AssetBalance, // the assets Alice buys
 	spends []AssetBalance) ( //the assets Alice pays with
 	slateBytes []byte,
-	outputs []privateOutput,
+	outputs []PrivateOutput,
 	senderSlate SenderSlate,
 	err error,
 ) {
@@ -33,22 +33,22 @@ func CreateSlate(
 	offerBalance := make(map[string]uint64)
 
 	// Group all owned inputs by asset id to make the tallying easier
-	inputsByAsset := make(map[string][]privateOutput)
+	inputsByAsset := make(map[string][]PrivateOutput)
 
-	inputsById := make(map[string]privateOutput)
+	inputsById := make(map[string]PrivateOutput)
 
-	offerBalance[fee.asset.name] += fee.amount
+	offerBalance[fee.asset.Name] += fee.amount
 
 	//initialize output helper map
 	for _, spend := range spends {
-		offerBalance[spend.asset.name] += spend.amount
+		offerBalance[spend.asset.Name] += spend.amount
 	}
 
 	//initialize inputs helper maps
 	myBalance := make(map[string]uint64)
 	for _, input := range walletInputs {
-		myBalance[input.Asset.name] += input.Value
-		inputsByAsset[input.Asset.name] = append(inputsByAsset[input.Asset.name], input)
+		myBalance[input.Asset.Name] += input.Value
+		inputsByAsset[input.Asset.Name] = append(inputsByAsset[input.Asset.Name], input)
 		inputsById[input.Commit.ValueCommitment] = input
 	}
 
@@ -60,7 +60,7 @@ func CreateSlate(
 		}
 	}
 
-	inputsToBeSpent := make(map[string]*privateOutput)
+	spentInputMap := make(map[string]*PrivateOutput)
 
 	//for every asset output Alice wishes to create by spending her funds
 	for _, spend := range spends {
@@ -68,14 +68,14 @@ func CreateSlate(
 		remainder := spend.amount
 		//loop through inputs and mark those that are about to used in this transaction
 		//
-		for _, input := range inputsByAsset[spend.asset.name] {
+		for _, input := range inputsByAsset[spend.asset.Name] {
 
 			//this input is already spent, proceed to the next one
 			if input.Value == 0 {
 				continue
 			}
 			//since this input was not spent before, remember it
-			inputsToBeSpent[input.Commit.ValueCommitment] = &input
+			spentInputMap[input.Commit.ValueCommitment] = &input
 
 			//if we have not less than we need, decrease the value and go to the next spend
 			if input.Value-remainder >= 0 {
@@ -90,18 +90,21 @@ func CreateSlate(
 		}
 
 	}
+	var spentInputs []Input
 	//helper map for change outputs
 	changeAmountsToBeCreated := make(map[Asset]uint64)
 
 	//loop through inputs about to be spent
 	//we couldn't do it while looping through spends, because there could be duplicate assets both among owned assets and spends
-	for id, input := range inputsToBeSpent {
+	for id, input := range spentInputMap {
 		if inputsById[id].Value > input.Value {
 			changeAmountsToBeCreated[input.Asset] = inputsById[id].Value - input.Value
 		}
+		spentInputs = append(spentInputs, (*input).PublicOutput.Input)
 	}
 
-	var output privateOutput
+	var privateOutput PrivateOutput
+	var slateOutput SlateOutput
 
 	var outputBlinds, inputBlinds [][]byte
 
@@ -109,33 +112,34 @@ func CreateSlate(
 		inputBlinds = append(inputBlinds, input.ValueBlind[:])
 	}
 
-	//create change outputs with token commitment surjection proof
+	//create change outputs with token commitment and surjection proof
+	var slateOutputs []SlateOutput
 	for asset, changeValue := range changeAmountsToBeCreated {
 
-		output, err = createOutputForPayment(context, AssetBalance{
+		privateOutput, slateOutput, err = createOutput(context, AssetBalance{
 			asset:  asset,
 			amount: changeValue,
-		}, walletInputs)
+		})
 
 		if err != nil {
 			return
 		}
-		outputs = append(outputs, output)
-		outputBlinds = append(outputBlinds, output.ValueBlind[:])
+		slateOutputs = append(slateOutputs, slateOutput)
+		outputs = append(outputs, privateOutput)
+		outputBlinds = append(outputBlinds, privateOutput.ValueBlind[:])
 	}
 
-	//create purchase outputs without token commitments surjection proof
+	//create purchase outputs with token commitment. We can't create
 	for _, purchase := range purchases {
-		output, err = createOutputForPurchase(context, purchase)
+		privateOutput, slateOutput, err = createOutput(context, purchase)
 		if err != nil {
 			return
 		}
-		outputs = append(outputs, output)
+		outputs = append(outputs, privateOutput)
 	}
 
 	var nonce, kernelOffset [32]byte
 	var publicBlindExcess, publicNonce *secp256k1.PublicKey
-	//nonce, err = wallet.Secret(context)
 
 	blindExcess1, err := secp256k1.BlindSum(context, outputBlinds, inputBlinds)
 	if err != nil {
@@ -170,7 +174,9 @@ func CreateSlate(
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
 	}
-
+	//copy(senderSlate.SenderNonce[:], nonce[:])
+	//copy(senderSlate.SumSenderBlinds[:], blindExcess[:])
+	//senderSlate.Status = SlateSent
 	senderSlate = SenderSlate{
 		Slate: Slate{
 			publicSlate: publicSlate{
@@ -181,11 +187,11 @@ func CreateSlate(
 				},
 				NumParticipants: 2,
 				ID:              uuid.New(),
-				Transaction: LedgerTransaction{
+				Transaction: Transaction{
 					Offset: hex.EncodeToString(kernelOffset[:]),
 					Body: TransactionBody{
-						Inputs:  nil,
-						Outputs: nil,
+						Inputs:  spentInputs,
+						Outputs: slateOutputs,
 						Kernels: []TxKernel{{
 							Features:   core.PlainKernel,
 							Fee:        fee,
@@ -213,29 +219,36 @@ func CreateSlate(
 			},
 			Status: 0,
 		},
-		SumSenderBlinds: [32]byte{},
+		SumSenderBlinds: blindExcess,
 		SenderNonce:     nonce,
 	}
 	return
 }
-func createOutputForPayment(ctx *secp256k1.Context, balance AssetBalance, inputs []privateOutput) (output privateOutput, err error) {
-	return createOutput(ctx, balance, inputs)
-}
 
-func createOutputForPurchase(ctx *secp256k1.Context, balance AssetBalance) (output privateOutput, err error) {
-	return createOutput(ctx, balance, []privateOutput{})
-}
-func createOutput(context *secp256k1.Context, balance AssetBalance, inputs []privateOutput) (output privateOutput, err error) {
-	valueBlind, _ := wallet.Secret(context)
-	assetBlind, _ := wallet.Secret(context)
-
+func createOutput(context *secp256k1.Context, balance AssetBalance) (privateOutput PrivateOutput, slateOutput SlateOutput, err error) {
+	var assetCommitment *secp256k1.Generator
+	var serializedAssetCommitment [33]byte
+	var valueBlind, assetBlind [32]byte
+	valueBlind, err = wallet.Secret(context)
+	if err != nil {
+		return
+	}
+	assetBlind, err = wallet.Secret(context)
+	if err != nil {
+		return
+	}
 	asset, value := balance.asset, balance.amount
-	H, err := secp256k1.GeneratorGenerateBlinded(context, asset.Id[:], assetBlind[:])
-	assetCommitment, _ := secp256k1.Commit(context, assetBlind[:], 1, H, &secp256k1.GeneratorG)
-	valueCommitment, _ := secp256k1.Commit(context, valueBlind[:], value, H, &secp256k1.GeneratorG)
-	changeCommitment := Commitment{
+
+	assetCommitment, err = secp256k1.GeneratorGenerateBlinded(context, asset.seed(), assetBlind[:])
+	if err != nil {
+		return
+	}
+	serializedAssetCommitment = secp256k1.GeneratorSerialize(context, assetCommitment)
+
+	valueCommitment, _ := secp256k1.Commit(context, valueBlind[:], value, assetCommitment, &secp256k1.GeneratorG)
+	outputCommitment := Commitment{
 		ValueCommitment: valueCommitment.Hex(context),
-		AssetCommitment: assetCommitment.Hex(context),
+		AssetCommitment: hex.EncodeToString(serializedAssetCommitment[:]),
 	}
 
 	proof, err := secp256k1.BulletproofRangeproofProveSingle(
@@ -254,73 +267,27 @@ func createOutput(context *secp256k1.Context, balance AssetBalance, inputs []pri
 	}
 
 	surjectionProof := ""
-
-	/*
-		The surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
-		The sender must create both change outputs and outputs which she wishes to acquire as a result of this transaction,
-		because she must generate blinding factors for them to be available for later spending.
-	*/
-	if len(inputs) > 0 {
-		var fixedInputAssetTags []secp256k1.FixedAssetTag
-		var proof *secp256k1.Surjectionproof
-		var inputIndex int
-		var inputBlindingKeys [][]byte
-		//var outputBlindingKey []byte
-		var fixedOutputAssetTag *secp256k1.FixedAssetTag
-		var ephemeralInputTags []secp256k1.Generator
-		var ephemeralOutputTag *secp256k1.Generator
-
-		fixedOutputAssetTag, err = secp256k1.FixedAssetTagParse(asset.Id[:])
-
-		for _, input := range inputs {
-			var fixedAssetTag *secp256k1.FixedAssetTag
-			var tokenCommitment *secp256k1.Generator
-			fixedAssetTag, err = secp256k1.FixedAssetTagParse(input.Asset.Id[:])
-
-			if err != nil {
-				return
-			}
-			fixedInputAssetTags = append(fixedInputAssetTags, *fixedAssetTag)
-
-			tokenCommitment, err = secp256k1.GeneratorGenerateBlinded(context, input.Asset.Id[:], input.AssetBlind[:])
-			if err != nil {
-				return
-			}
-			ephemeralInputTags = append(ephemeralInputTags, *tokenCommitment)
-
-			inputBlindingKeys = append(inputBlindingKeys, input.AssetBlind[:])
-		}
-
-		ephemeralOutputTag, err = secp256k1.GeneratorGenerateBlinded(context, output.Asset.Id[:], output.AssetBlind[:])
-
-		if err != nil {
-			return
-		}
-
-		seed32 := secp256k1.Random256()
-
-		_, proof, inputIndex, err = secp256k1.SurjectionproofAllocateInitialized(context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
-
-		err = secp256k1.SurjectionproofGenerate(context, proof, ephemeralInputTags[:], *ephemeralOutputTag, inputIndex, inputBlindingKeys[inputIndex][:], output.AssetBlind[:])
-		if err != nil {
-			return
-		}
+	publicOutput := PublicOutput{
+		Input: Input{
+			Features: core.PlainOutput,
+			Commit:   outputCommitment,
+		},
+		Proof:           hex.EncodeToString(proof),
+		SurjectionProof: surjectionProof,
 	}
 
-	output = privateOutput{
-		publicOutput: publicOutput{
-			Input: Input{
-				Features: core.PlainOutput,
-				Commit:   changeCommitment,
-			},
-			Proof:           hex.EncodeToString(proof),
-			SurjectionProof: surjectionProof,
-		},
-		ValueBlind: valueBlind,
-		AssetBlind: assetBlind,
-		Value:      value,
-		Status:     0,
-		Asset:      asset,
+	privateOutput = PrivateOutput{
+		PublicOutput: publicOutput,
+		ValueBlind:   valueBlind,
+		AssetBlind:   assetBlind,
+		Value:        value,
+		Status:       0,
+		Asset:        asset,
+	}
+	slateOutput = SlateOutput{
+		PublicOutput: publicOutput,
+		AssetBlind:   hex.EncodeToString(assetBlind[:]),
+		Asset:        asset,
 	}
 	return
 }
