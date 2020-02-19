@@ -46,12 +46,10 @@ type SlateOutput struct {
 }
 
 type PrivateOutput struct {
-	PublicOutput
+	SlateOutput
 	ValueBlind [32]byte            `json:"value_blind,omitempty"`
-	AssetBlind [32]byte            `json:"asset_blind,omitempty"`
 	Value      uint64              `json:"value,omitempty"`
 	Status     wallet.OutputStatus `json:"status,omitempty"`
-	Asset      Asset               `json:"asset,omitempty"`
 }
 
 type TxKernel struct {
@@ -123,11 +121,11 @@ type Slate struct {
 	Status wallet.SlateStatus `json:"status,omitempty"`
 }
 
-type SenderSlate struct {
-	Slate
-	SumSenderBlinds [32]byte `json:"sumSenderBlinds,omitempty"`
-	SenderNonce     [32]byte `json:"senderNonce,omitempty"`
-}
+//type SenderSlate struct {
+//	Slate
+//	SumSenderBlinds [32]byte `json:"sumSenderBlinds,omitempty"`
+//	SenderNonce     [32]byte `json:"senderNonce,omitempty"`
+//}
 
 type ReceiverSlate struct {
 	Slate

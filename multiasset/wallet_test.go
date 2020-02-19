@@ -1,8 +1,7 @@
 package multiasset
 
 import (
-	"encoding/json"
-	"fmt"
+	"encoding/hex"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"testing"
@@ -30,7 +29,7 @@ func TestCreateSlate(t *testing.T) {
 		args            args
 		wantSlateBytes  []byte
 		wantOutputs     []PrivateOutput
-		wantSenderSlate SenderSlate
+		wantSenderSlate Slate
 		wantErr         bool
 	}{
 		{name: "dummy", args: args{
@@ -41,33 +40,33 @@ func TestCreateSlate(t *testing.T) {
 			},
 
 			walletInputs: []PrivateOutput{
-				{PublicOutput: PublicOutput{
-					Input: Input{
-						Features: 0,
-						Commit: Commitment{
-							ValueCommitment: valueCommitment.Hex(context),
-							AssetCommitment: assetCommitment.String(),
+
+				{SlateOutput: SlateOutput{
+					PublicOutput: PublicOutput{
+						Input: Input{
+							Features: 0,
+							Commit: Commitment{
+								ValueCommitment: valueCommitment.Hex(context),
+								AssetCommitment: assetCommitment.String(),
+							},
 						},
+						Proof:           "",
+						SurjectionProof: "",
 					},
-					Proof:           "",
-					SurjectionProof: "",
-				},
-					ValueBlind: dummySecret,
-					AssetBlind: dummySecret,
-					Value:      myInputValue,
-					Status:     wallet.OutputConfirmed,
-					Asset:      sbercoin},
+					AssetBlind: hex.EncodeToString(dummySecret[:]),
+					Asset:      sbercoin,
+				}, ValueBlind: dummySecret, Value: myInputValue, Status: wallet.OutputConfirmed},
 			},
 			purchases: []AssetBalance{{asset: dummyToken, amount: 10}},
 			offers:    []AssetBalance{{asset: sbercoin, amount: uint64(20)}},
-		}, wantSlateBytes: nil, wantOutputs: nil, wantSenderSlate: SenderSlate{}, wantErr: false},
+		}, wantSlateBytes: nil, wantOutputs: nil, wantSenderSlate: Slate{}, wantErr: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, slate, err := CreateSlate(tt.args.context, tt.args.fee, tt.args.walletInputs, tt.args.purchases, tt.args.offers)
-			slateBytes, err := json.Marshal(slate)
-			fmt.Printf("%v", string(slateBytes))
+			_, _, err := CreateSlate(tt.args.context, tt.args.fee, tt.args.walletInputs, tt.args.purchases, tt.args.offers)
+			//slateBytes, err := json.Marshal(slate)
+			//fmt.Printf("%v", string(slateBytes))
 			//e := json.NewEncoder( log.Writer())
 			//_ = e.Encode(slate)
 			if (err != nil) != tt.wantErr {

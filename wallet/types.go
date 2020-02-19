@@ -75,7 +75,8 @@ type ReceiverSlate struct {
 type SlateStatus int
 
 const (
-	SlateSent = iota
+	Slatecreated = iota
+	SlateSent
 	SlateResponded
 	SlateFinalized
 )
