@@ -12,7 +12,7 @@ func calculateOutputValues(
 	fee AssetBalance,
 	walletInputs []PrivateOutput, // the assets Alice owns hence pays with
 	spends []AssetBalance) ( //the assets Alice pays with
-	spentInputs []Input,
+	spentInputs []SlateOutput,
 	inputBlinds [][]byte,
 	changeValues map[Asset]uint64, //helper map for change outputs
 	err error,
@@ -86,7 +86,7 @@ func calculateOutputValues(
 		if inputsById[id].Value > input.Value {
 			changeValues[input.Asset] = inputsById[id].Value - input.Value
 		}
-		spentInputs = append(spentInputs, (*input).PublicOutput.Input)
+		spentInputs = append(spentInputs, (*input).SlateOutput)
 		inputBlinds = append(inputBlinds, input.ValueBlind[:])
 	}
 	return

@@ -58,7 +58,7 @@ func (slate *Slate) processSlate(
 	var outputBlinds, inputBlinds [][]byte
 
 	//create change privateOutputs with token commitment and surjection proof
-	var spentInputs []Input
+	var spentInputs []SlateOutput
 
 	var changeValues map[Asset]uint64
 
@@ -230,7 +230,19 @@ func (slate *Slate) processSlate(
 	return
 }
 
-func (slate *Slate) generateSurjectionProof(context *secp256k1.Context, inputs []SlateOutput, output SlateOutput) (proof *secp256k1.Surjectionproof, err error) {
+func (slate *Slate) finalize(context *secp256k1.Context) (err error) {
+	if slate.Status != wallet.SlateResponded {
+		err = errors.New("wrong slate status")
+		return
+	}
+	transactionBody := slate.Transaction.Body
+	for _, output := range transactionBody.Outputs {
+		_ = (&output).addSurjectionProof(context, transactionBody.Inputs)
+	}
+	return
+}
+
+func (output *SlateOutput) addSurjectionProof(context *secp256k1.Context, inputs []SlateOutput) (err error) {
 	/*
 		The surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
 		The sender must create both change outputs and outputs which she wishes to acquire as a result of this transaction,
@@ -280,17 +292,20 @@ func (slate *Slate) generateSurjectionProof(context *secp256k1.Context, inputs [
 	}
 
 	seed32 := secp256k1.Random256()
-
+	var proof *secp256k1.Surjectionproof
 	_, proof, inputIndex, err = secp256k1.SurjectionproofAllocateInitialized(context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
 
 	if len(inputBlindingKeys) < inputIndex {
-		return nil, errors.Wrap(nil, "input not found")
+		return errors.Wrap(nil, "input not found")
 	}
 	err = secp256k1.SurjectionproofGenerate(context, proof, ephemeralInputTags[:], *ephemeralOutputTag, inputIndex, inputBlindingKeys[inputIndex][:], outputAssetBlind[:])
 	if err != nil {
 		return
 	}
 
-	return proof, nil
+	var proofBytes []byte
+	proofBytes, err = secp256k1.SurjectionproofSerialize(context, proof)
+	(*output).SurjectionProof = hex.EncodeToString(proofBytes)
+	return nil
 
 }

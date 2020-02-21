@@ -119,6 +119,8 @@ type publicSlate struct {
 type Slate struct {
 	publicSlate
 	Status wallet.SlateStatus `json:"status,omitempty"`
+	Nonce  [32]byte
+	SkSum  [32]byte
 }
 
 //type SenderSlate struct {
@@ -127,10 +129,10 @@ type Slate struct {
 //	SenderNonce     [32]byte `json:"senderNonce,omitempty"`
 //}
 
-type ReceiverSlate struct {
-	Slate
-	ReceiverNonce [32]byte `json:"receiverNonce,omitempty"`
-}
+//type ReceiverSlate struct {
+//	Slate
+//	ReceiverNonce [32]byte `json:"receiverNonce,omitempty"`
+//}
 
 type AssetBalance struct {
 	asset  Asset
