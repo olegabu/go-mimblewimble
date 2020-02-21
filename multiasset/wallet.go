@@ -133,14 +133,13 @@ func createOutput(context *secp256k1.Context, balance AssetBalance) (privateOutp
 		return
 	}
 
-	surjectionProof := ""
 	publicOutput := PublicOutput{
 		Input: Input{
 			Features: core.PlainOutput,
 			Commit:   outputCommitment,
 		},
 		Proof:           hex.EncodeToString(proof),
-		SurjectionProof: surjectionProof,
+		SurjectionProof: nil,
 	}
 	slateOutput = SlateOutput{
 		PublicOutput: publicOutput,

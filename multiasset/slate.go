@@ -10,13 +10,36 @@ import (
 	"github.com/pkg/errors"
 )
 
-func CreateSlate(
+func createSlate(purchases []AssetBalance, expenses []AssetBalance, fee AssetBalance) (slate Slate) {
+	amount := append(expenses, purchases...)
+	slate = Slate{
+		publicSlate: publicSlate{
+			VersionInfo: libwallet.VersionCompatInfo{
+				Version:            0,
+				OrigVersion:        0,
+				BlockHeaderVersion: 0,
+			},
+			NumParticipants: 2,
+			ID:              uuid.New(),
+			Transaction:     nil,
+			Amount:          amount,
+			Fee:             fee,
+			Height:          0,
+			LockHeight:      0,
+			TTLCutoffHeight: nil,
+			ParticipantData: []libwallet.ParticipantData{},
+			PaymentProof:    nil,
+		},
+		Status: wallet.Slatecreated,
+	}
+	return
+}
+func (slate *Slate) processSlate(
 	context *secp256k1.Context,
-	fee AssetBalance,
 	walletInputs []PrivateOutput, // the tokens you have
 	purchases []AssetBalance, // the tokens you buy
 	expenses []AssetBalance) ( //the tokens  you spend
-	slate Slate,
+	//slate Slate,
 	privateOutputs []PrivateOutput,
 	err error,
 ) {
@@ -39,7 +62,7 @@ func CreateSlate(
 
 	var changeValues map[Asset]uint64
 
-	spentInputs, inputBlinds, changeValues, err = calculateOutputValues(fee, walletInputs, expenses)
+	spentInputs, inputBlinds, changeValues, err = calculateOutputValues(slate.Fee, walletInputs, expenses)
 	if err != nil {
 		return
 	}
@@ -86,11 +109,13 @@ func CreateSlate(
 	if err != nil {
 		return
 	}
+	var pubNonceBytes []byte
+	_, pubNonceBytes, err = secp256k1.EcPubkeySerialize(context, publicNonce, secp256k1.EcCompressed)
+	pubNonceString := hex.EncodeToString(pubNonceBytes)
 
 	switch slate.Status {
 	case wallet.Slatecreated:
 
-		amount := append(expenses, purchases...)
 		var kernelOffset [32]byte
 		kernelOffset, err = wallet.Secret(context)
 		if err != nil {
@@ -114,7 +139,7 @@ func CreateSlate(
 				Outputs: slateOutputs,
 				Kernels: []TxKernel{{
 					Features:   core.PlainKernel,
-					Fee:        fee,
+					Fee:        slate.Fee,
 					LockHeight: 0,
 					Excess:     "000000000000000000000000000000000000000000000000000000000000000000",
 					ExcessSig:  "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -123,99 +148,88 @@ func CreateSlate(
 			ID: uuid.UUID{},
 		}
 
-		var pubNonceBytes []byte
-		_, pubNonceBytes, err = secp256k1.EcPubkeySerialize(context, publicNonce, secp256k1.EcCompressed)
-		slate = Slate{
-			publicSlate: publicSlate{
-				VersionInfo: libwallet.VersionCompatInfo{
-					Version:            0,
-					OrigVersion:        0,
-					BlockHeaderVersion: 0,
-				},
-				NumParticipants: 2,
-				ID:              uuid.New(),
-				Transaction:     *transaction,
-				Amount:          amount,
-				Fee:             fee,
-				Height:          0,
-				LockHeight:      0,
-				TTLCutoffHeight: nil,
-				ParticipantData: []libwallet.ParticipantData{{
-					ID:                0,
-					PublicBlindExcess: publicBlindExcess.Hex(context),
-					PublicNonce:       hex.EncodeToString(pubNonceBytes),
-					PartSig:           nil,
-					Message:           nil,
-					MessageSig:        nil,
-				}},
-				PaymentProof: nil,
-			},
-			Status: wallet.SlateSent,
-		}
-		return
+		slate.ParticipantData = append(slate.ParticipantData, libwallet.ParticipantData{
+			ID:                0,
+			PublicBlindExcess: publicBlindExcess.Hex(context),
+			PublicNonce:       pubNonceString,
+			PartSig:           nil,
+			Message:           nil,
+			MessageSig:        nil,
+		})
+		slate.Transaction = *transaction
+
 	case wallet.SlateSent:
 		//generate secret nonce and calculate its public key
 
-		var serializedExcess []byte
+		var excessBytes, otherPublicBlindBytes []byte
 		transaction := slate.Transaction
 		kernel := transaction.Body.Kernels[0]
 
 		// Combine public blinds and nonces
-		var senderPublicBlind, receiverPublicBlind, sumPublicBlinds *secp256k1.PublicKey
-		_, sumPublicBlinds, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{senderPublicBlind, receiverPublicBlind})
-		if err != nil {
-			return
-		}
-		_, serializedExcess, err = secp256k1.EcPubkeySerialize(context, sumPublicBlinds, secp256k1.EcCompressed)
+		var myPublicBlind, otherPublicBlind, kernelExcess *secp256k1.PublicKey
+
+		_, myPublicBlind, err = secp256k1.EcPubkeyCreate(context, blindExcess1[:])
 		if err != nil {
 			return
 		}
 
-		var senderPublicNonceBytes []byte
-		senderPublicNonceBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicNonce)
-		_, senderPublicNonce, _ := secp256k1.EcPubkeyParse(context, senderPublicNonceBytes)
-
-		_, sumPublicNonces, err := secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{senderPublicNonce, publicNonce})
+		otherPublicBlindBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicBlindExcess)
 		if err != nil {
 			return
 		}
-		kernel.Excess = hex.EncodeToString(serializedExcess)
 
-		_, _ = secp256k1.AggsigSignPartial(context, blindExcess1[:], nonce[:], sumPublicNonces, sumPublicBlinds, []byte{})
+		_, otherPublicBlind, err = secp256k1.EcPubkeyParse(context, otherPublicBlindBytes)
+		if err != nil {
+			return
+		}
+
+		_, kernelExcess, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{myPublicBlind, otherPublicBlind})
+		if err != nil {
+			return
+		}
+
+		_, excessBytes, err = secp256k1.EcPubkeySerialize(context, kernelExcess, secp256k1.EcCompressed)
+		if err != nil {
+			return
+		}
+
+		var otherPubNonceBytes []byte
+		otherPubNonceBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicNonce)
+		_, otherPubNonce, _ := secp256k1.EcPubkeyParse(context, otherPubNonceBytes)
+
+		_, pubNonceSum, err := secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{otherPubNonce, publicNonce})
+		if err != nil {
+			return
+		}
+		kernel.Excess = hex.EncodeToString(excessBytes)
+
+		var sig secp256k1.AggsigSignaturePartial
+		sig, err = secp256k1.AggsigSignPartial(context, blindExcess1[:], nonce[:], pubNonceSum, kernelExcess, []byte{})
+		if err != nil {
+			return
+		}
+
+		sigBytes := secp256k1.AggsigSignaturePartialSerialize(&sig)
+		partSig := hex.EncodeToString(sigBytes[:])
+
+		participantData := &libwallet.ParticipantData{
+			ID:                1,
+			PublicBlindExcess: myPublicBlind.Hex(context),
+			PublicNonce:       pubNonceString,
+			PartSig:           &partSig,
+			Message:           nil,
+			MessageSig:        nil,
+		}
+
+		slate.ParticipantData = append(slate.ParticipantData, *participantData)
+		transaction.Body.Outputs = append(transaction.Body.Outputs, slateOutputs...)
+		transaction.Body.Inputs = append(transaction.Body.Inputs, spentInputs...)
+		slate.Status = wallet.SlateResponded
 
 	}
-	if slate.Status == wallet.Slatecreated {
-
-	}
-
-	// Subtract kernel offset from blinding excess sum
-
-	// Create public curve points from blindExcess
-	//var publicNonce [32]byte
-	//publicNonce, err = wallet.PubKeyFromSecretKey(context, nonce[:])
-	//if err != nil {
-	//	return
-	//}
-	//copy(slate.SenderNonce[:], nonce[:])
-	//copy(slate.SumSenderBlinds[:], blindExcess[:])
-	//slate.Status = SlateSent
-
 	return
 }
 
-func (slate *Slate) receive(context *secp256k1.Context,
-	fee AssetBalance,
-	walletInputs []PrivateOutput, // the assets Alice owns hence pays with
-	purchases []AssetBalance, // the assets Alice buys
-	spends []AssetBalance) ( //the assets Alice pays with
-	slateBytes []byte,
-	outputs []PrivateOutput,
-
-	err error,
-) {
-
-	return nil, nil, nil
-}
 func (slate *Slate) generateSurjectionProof(context *secp256k1.Context, inputs []SlateOutput, output SlateOutput) (proof *secp256k1.Surjectionproof, err error) {
 	/*
 		The surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
