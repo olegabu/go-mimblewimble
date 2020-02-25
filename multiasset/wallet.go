@@ -12,7 +12,7 @@ func calculateOutputValues(
 	fee AssetBalance,
 	walletInputs []PrivateOutput, // the assets Alice owns hence pays with
 	spends []AssetBalance) ( //the assets Alice pays with
-	spentInputs []SlateOutput,
+	spentInputs []SlateInput,
 	inputBlinds [][]byte,
 	changeValues map[Asset]uint64, //helper map for change outputs
 	err error,
@@ -25,11 +25,11 @@ func calculateOutputValues(
 
 	inputsById := make(map[string]PrivateOutput)
 
-	offerBalance[fee.asset.Name] += fee.amount
+	offerBalance[fee.Asset.Name] += fee.Amount
 
 	//initialize output helper map
 	for _, spend := range spends {
-		offerBalance[spend.asset.Name] += spend.amount
+		offerBalance[spend.Asset.Name] += spend.Amount
 	}
 
 	//initialize inputs helper maps
@@ -53,10 +53,10 @@ func calculateOutputValues(
 	//for every asset output Alice wishes to create by spending her funds
 	for _, spend := range spends {
 		//get the value of output
-		remainder := spend.amount
+		remainder := spend.Amount
 		//loop through inputs and mark those that are about to used in this transaction
 		//
-		for _, input := range inputsByAsset[spend.asset.Name] {
+		for _, input := range inputsByAsset[spend.Asset.Name] {
 
 			//this input is already spent, proceed to the next one
 			if input.Value == 0 {
@@ -86,7 +86,11 @@ func calculateOutputValues(
 		if inputsById[id].Value > input.Value {
 			changeValues[input.Asset] = inputsById[id].Value - input.Value
 		}
-		spentInputs = append(spentInputs, (*input).SlateOutput)
+		spentInputs = append(spentInputs, SlateInput{
+			Input:      input.Input,
+			Asset:      input.Asset,
+			AssetBlind: input.AssetBlind,
+		})
 		inputBlinds = append(inputBlinds, input.ValueBlind[:])
 	}
 	return
@@ -104,7 +108,7 @@ func createOutput(context *secp256k1.Context, balance AssetBalance) (privateOutp
 	if err != nil {
 		return
 	}
-	asset, value := balance.asset, balance.amount
+	asset, value := balance.Asset, balance.Amount
 
 	assetCommitment, err = secp256k1.GeneratorGenerateBlinded(context, asset.seed(), assetBlind[:])
 	if err != nil {
@@ -139,7 +143,7 @@ func createOutput(context *secp256k1.Context, balance AssetBalance) (privateOutp
 			Commit:   outputCommitment,
 		},
 		Proof:           hex.EncodeToString(proof),
-		SurjectionProof: nil,
+		SurjectionProof: "",
 	}
 	slateOutput = SlateOutput{
 		PublicOutput: publicOutput,

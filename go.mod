@@ -14,6 +14,7 @@ require (
 	github.com/hyperledger/fabric v1.4.4
 	github.com/hyperledger/fabric-amcl v0.0.0-20190902191507-f66264322317 // indirect
 	github.com/klauspost/cpuid v1.2.1 // indirect
+	github.com/magiconair/properties v1.8.1
 	github.com/miekg/pkcs11 v1.0.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/olegabu/go-secp256k1-zkp v0.0.0-00010101000000-000000000000

@@ -10,10 +10,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-func createSlate(purchases []AssetBalance, expenses []AssetBalance, fee AssetBalance) (slate Slate) {
+func CreateSlate(purchases []AssetBalance, expenses []AssetBalance, fee AssetBalance) (slate Slate) {
 	amount := append(expenses, purchases...)
 	slate = Slate{
-		publicSlate: publicSlate{
+		PublicSlate: PublicSlate{
 			VersionInfo: libwallet.VersionCompatInfo{
 				Version:            0,
 				OrigVersion:        0,
@@ -21,7 +21,7 @@ func createSlate(purchases []AssetBalance, expenses []AssetBalance, fee AssetBal
 			},
 			NumParticipants: 2,
 			ID:              uuid.New(),
-			Transaction:     nil,
+			Transaction:     Transaction{},
 			Amount:          amount,
 			Fee:             fee,
 			Height:          0,
@@ -34,12 +34,12 @@ func createSlate(purchases []AssetBalance, expenses []AssetBalance, fee AssetBal
 	}
 	return
 }
-func (slate *Slate) processSlate(
+func (slate *Slate) Process(
 	context *secp256k1.Context,
 	walletInputs []PrivateOutput, // the tokens you have
 	purchases []AssetBalance, // the tokens you buy
 	expenses []AssetBalance) ( //the tokens  you spend
-	//slate Slate,
+	//publicSlate PublicSlate,
 	privateOutputs []PrivateOutput,
 	err error,
 ) {
@@ -58,7 +58,7 @@ func (slate *Slate) processSlate(
 	var outputBlinds, inputBlinds [][]byte
 
 	//create change privateOutputs with token commitment and surjection proof
-	var spentInputs []SlateOutput
+	var spentInputs []SlateInput
 
 	var changeValues map[Asset]uint64
 
@@ -72,8 +72,8 @@ func (slate *Slate) processSlate(
 	for asset, changeValue := range changeValues {
 
 		privateOutput, slateOutput, err = createOutput(context, AssetBalance{
-			asset:  asset,
-			amount: changeValue,
+			Asset:  asset,
+			Amount: changeValue,
 		})
 
 		if err != nil {
@@ -122,7 +122,8 @@ func (slate *Slate) processSlate(
 			return
 		}
 
-		blindExcess, err := secp256k1.BlindSum(context, [][]byte{blindExcess1[:]}, [][]byte{kernelOffset[:]})
+		var blindExcess [32]byte
+		blindExcess, err = secp256k1.BlindSum(context, [][]byte{blindExcess1[:]}, [][]byte{kernelOffset[:]})
 		if err != nil {
 			return
 		}
@@ -197,7 +198,8 @@ func (slate *Slate) processSlate(
 		otherPubNonceBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicNonce)
 		_, otherPubNonce, _ := secp256k1.EcPubkeyParse(context, otherPubNonceBytes)
 
-		_, pubNonceSum, err := secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{otherPubNonce, publicNonce})
+		var pubNonceSum *secp256k1.PublicKey
+		_, pubNonceSum, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{otherPubNonce, publicNonce})
 		if err != nil {
 			return
 		}
@@ -230,7 +232,7 @@ func (slate *Slate) processSlate(
 	return
 }
 
-func (slate *Slate) finalize(context *secp256k1.Context) (err error) {
+func (slate *Slate) Finalize(context *secp256k1.Context) (err error) {
 	if slate.Status != wallet.SlateResponded {
 		err = errors.New("wrong slate status")
 		return
@@ -242,11 +244,12 @@ func (slate *Slate) finalize(context *secp256k1.Context) (err error) {
 	return
 }
 
-func (output *SlateOutput) addSurjectionProof(context *secp256k1.Context, inputs []SlateOutput) (err error) {
+func (output *SlateOutput) addSurjectionProof(context *secp256k1.Context, inputs []SlateInput) (err error) {
 	/*
 		The surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
-		The sender must create both change outputs and outputs which she wishes to acquire as a result of this transaction,
+		The sender must create both change outputs and outputs for tokens she wishes to acquire as a result of this transaction,
 		because she must generate blinding factors for them to be available for later spending.
+		Furthermore it is the sender who also generates surjection proof for the tokens she pays with (aka expenses)
 	*/
 	var fixedInputAssetTags []secp256k1.FixedAssetTag
 

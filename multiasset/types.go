@@ -87,7 +87,13 @@ type Input struct {
 	// The commit referencing the output being spent.
 	Commit Commitment `json:"commit"`
 }
-type publicSlate struct {
+
+type SlateInput struct {
+	Input
+	Asset      Asset  `json:"asset"`
+	AssetBlind string `json:"asset_blind,omitempty"`
+}
+type PublicSlate struct {
 	// Versioning info
 	VersionInfo libwallet.VersionCompatInfo `json:"version_info"`
 	// The number of participants intended to take part in this transaction
@@ -117,7 +123,7 @@ type publicSlate struct {
 	PaymentProof *libwallet.PaymentInfo `json:"payment_proof"`
 }
 type Slate struct {
-	publicSlate
+	PublicSlate
 	Status wallet.SlateStatus `json:"status,omitempty"`
 	Nonce  [32]byte
 	SkSum  [32]byte
@@ -135,8 +141,8 @@ type Slate struct {
 //}
 
 type AssetBalance struct {
-	asset  Asset
-	amount uint64
+	Asset  Asset  `json:"asset"`
+	Amount uint64 `json:"amount"`
 }
 
 //type Transaction struct {

@@ -27,7 +27,7 @@ type TransactionBodyBlinded struct {
 }
 
 type TransactionBody struct {
-	Inputs  []SlateOutput `json:"inputs"`
+	Inputs  []SlateInput  `json:"inputs"`
 	Outputs []SlateOutput `json:"outputs"`
 	Kernels []TxKernel    `json:"kernels"`
 }

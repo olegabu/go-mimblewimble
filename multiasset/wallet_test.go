@@ -2,6 +2,9 @@ package multiasset
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"github.com/magiconair/properties/assert"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"testing"
@@ -13,7 +16,7 @@ func TestCreateSlate(t *testing.T) {
 		fee          AssetBalance
 		walletInputs []PrivateOutput
 		purchases    []AssetBalance
-		offers       []AssetBalance
+		expenses     []AssetBalance
 	}
 
 	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
@@ -35,8 +38,8 @@ func TestCreateSlate(t *testing.T) {
 		{name: "dummy", args: args{
 			context: context,
 			fee: AssetBalance{
-				asset:  sbercoin,
-				amount: 10,
+				Asset:  sbercoin,
+				Amount: 10,
 			},
 
 			walletInputs: []PrivateOutput{
@@ -57,35 +60,32 @@ func TestCreateSlate(t *testing.T) {
 					Asset:      sbercoin,
 				}, ValueBlind: dummySecret, Value: myInputValue, Status: wallet.OutputConfirmed},
 			},
-			purchases: []AssetBalance{{asset: dummyToken, amount: 10}},
-			offers:    []AssetBalance{{asset: sbercoin, amount: uint64(20)}},
+			purchases: []AssetBalance{{Asset: dummyToken, Amount: 10}},
+			expenses:  []AssetBalance{{Asset: sbercoin, Amount: uint64(20)}},
 		}, wantSlateBytes: nil, wantOutputs: nil, wantSenderSlate: Slate{}, wantErr: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := CreateSlate(tt.args.context, tt.args.fee, tt.args.walletInputs, tt.args.purchases, tt.args.offers)
-			//slateBytes, err := json.Marshal(slate)
-			//fmt.Printf("%v", string(slateBytes))
-			//e := json.NewEncoder( log.Writer())
-			//_ = e.Encode(slate)
+			slate := CreateSlate(tt.args.purchases, tt.args.expenses, tt.args.fee)
+
+			outputs, err := slate.Process(context, tt.args.walletInputs, tt.args.purchases, tt.args.expenses)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateSlate() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
-			//if  {
-			//
-			//}
-			//if !reflect.DeepEqual(gotSlateBytes, tt.wantSlateBytes) {
-			//	t.Errorf("CreateSlate() gotSlateBytes = %v, want %v", gotSlateBytes, tt.wantSlateBytes)
-			//}
-			//if !reflect.DeepEqual(gotOutputs, tt.wantOutputs) {
-			//	t.Errorf("CreateSlate() gotOutputs = %v, want %v", gotOutputs, tt.wantOutputs)
-			//}
-			//if !reflect.DeepEqual(gotSenderSlate, tt.wantSenderSlate) {
-			//	t.Errorf("CreateSlate() gotSenderSlate = %v, want %v", gotSenderSlate, tt.wantSenderSlate)
-			//}
+			slateBytes, err := json.Marshal(slate.PublicSlate)
+			fmt.Println(string(slateBytes))
+
+			sbercoinOutput := outputs[0]
+			assert.Equal(t, sbercoinOutput.Asset.Id, sbercoin.Id)
+			assert.Equal(t, sbercoinOutput.Value, 70)
+
+			purchaseOutput := outputs[1]
+			assert.Equal(t, purchaseOutput.Value, 10)
+			assert.Equal(t, purchaseOutput.Asset.Id, dummyToken.Id)
+
 		})
 	}
 }
