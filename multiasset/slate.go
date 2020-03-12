@@ -39,11 +39,16 @@ func (slate *Slate) Process(
 	walletInputs []PrivateOutput, // the tokens you have
 	purchases []AssetBalance, // the tokens you buy
 	expenses []AssetBalance) ( //the tokens  you spend
-	//publicSlate PublicSlate,
+	publicSlate PublicSlate,
 	privateOutputs []PrivateOutput,
 	err error,
 ) {
-	// create a local context object if it's not provided in parameters
+	/*
+		This is a common part of slate processing both for Alice and Bob.
+		Since the transaction is bidirectional, both participant do the same stuff:
+		1. Check purchases and expenses against available assets
+		2. Generate outputs for change and purchases
+	*/
 	if context == nil {
 		if context, err = secp256k1.ContextCreate(secp256k1.ContextBoth); err != nil {
 			err = errors.Wrap(err, "ContextCreate failed")
@@ -57,12 +62,15 @@ func (slate *Slate) Process(
 
 	var outputBlinds, inputBlinds [][]byte
 
-	//create change privateOutputs with token commitment and surjection proof
 	var spentInputs []SlateInput
 
 	var changeValues map[Asset]uint64
 
-	spentInputs, inputBlinds, changeValues, err = calculateOutputValues(slate.Fee, walletInputs, expenses)
+	fee := slate.Fee
+	if slate.Status == wallet.SlateSent {
+		fee.Value = 0
+	}
+	spentInputs, inputBlinds, changeValues, err = calculateOutputValues(fee, walletInputs, expenses)
 	if err != nil {
 		return
 	}
@@ -72,8 +80,8 @@ func (slate *Slate) Process(
 	for asset, changeValue := range changeValues {
 
 		privateOutput, slateOutput, err = createOutput(context, AssetBalance{
-			Asset:  asset,
-			Amount: changeValue,
+			Asset: asset,
+			Value: changeValue,
 		})
 
 		if err != nil {
@@ -84,13 +92,14 @@ func (slate *Slate) Process(
 		outputBlinds = append(outputBlinds, privateOutput.ValueBlind[:])
 	}
 
-	//create purchase privateOutputs with token commitment. We can't create
+	//create purchase privateOutputs with token commitment.
 	for _, purchase := range purchases {
 		privateOutput, slateOutput, err = createOutput(context, purchase)
 		if err != nil {
 			return
 		}
 		privateOutputs = append(privateOutputs, privateOutput)
+		slateOutputs = append(slateOutputs, slateOutput)
 	}
 
 	var publicBlindExcess *secp256k1.PublicKey
@@ -158,33 +167,43 @@ func (slate *Slate) Process(
 			MessageSig:        nil,
 		})
 		slate.Transaction = *transaction
+		slate.Status = wallet.SlateSent
 
 	case wallet.SlateSent:
-		//generate secret nonce and calculate its public key
+		/*
+			Bob receives slate and
+			1. Parses data from Alice: public nonce ( Ka = ka * G), public blinded excess ( sum(Ra) = sum (ra*G))
+			2. Calculates so called "overage" ( commitment to fee value) with respect to the fee token type
+			3. Generates his signature
+		*/
 
-		var excessBytes, otherPublicBlindBytes []byte
+		var excessBytes, alicePubBlindExcessBytes []byte
 		transaction := slate.Transaction
 		kernel := transaction.Body.Kernels[0]
 
 		// Combine public blinds and nonces
-		var myPublicBlind, otherPublicBlind, kernelExcess *secp256k1.PublicKey
+		var bobPublicBlindExcess, alicePublicBlindExcess, kernelExcess *secp256k1.PublicKey
 
-		_, myPublicBlind, err = secp256k1.EcPubkeyCreate(context, blindExcess1[:])
+		_, bobPublicBlindExcess, err = secp256k1.EcPubkeyCreate(context, blindExcess1[:])
 		if err != nil {
 			return
 		}
 
-		otherPublicBlindBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicBlindExcess)
+		alicePubBlindExcessBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicBlindExcess)
 		if err != nil {
 			return
 		}
 
-		_, otherPublicBlind, err = secp256k1.EcPubkeyParse(context, otherPublicBlindBytes)
+		_, alicePublicBlindExcess, err = secp256k1.EcPubkeyParse(context, alicePubBlindExcessBytes)
 		if err != nil {
 			return
 		}
 
-		_, kernelExcess, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{myPublicBlind, otherPublicBlind})
+		//feeGenerator, _ := secp256k1.GeneratorGenerate(context, slate.Fee.Asset.seed()) //TODO: use when validating transaction
+		//var zeroBlind [32]byte
+		//feeExcess, _ := secp256k1.Commit(context, zeroBlind[:], slate.Fee.Value, feeGenerator, &secp256k1.GeneratorG)
+
+		_, kernelExcess, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{bobPublicBlindExcess, alicePublicBlindExcess})
 		if err != nil {
 			return
 		}
@@ -194,19 +213,21 @@ func (slate *Slate) Process(
 			return
 		}
 
-		var otherPubNonceBytes []byte
-		otherPubNonceBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicNonce)
-		_, otherPubNonce, _ := secp256k1.EcPubkeyParse(context, otherPubNonceBytes)
+		var alicePubNonceBytes []byte
+		alicePubNonceBytes, err = hex.DecodeString(slate.ParticipantData[0].PublicNonce)
+		_, alicePubNonce, _ := secp256k1.EcPubkeyParse(context, alicePubNonceBytes)
 
 		var pubNonceSum *secp256k1.PublicKey
-		_, pubNonceSum, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{otherPubNonce, publicNonce})
+		_, pubNonceSum, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{alicePubNonce, publicNonce})
 		if err != nil {
 			return
 		}
 		kernel.Excess = hex.EncodeToString(excessBytes)
 
 		var sig secp256k1.AggsigSignaturePartial
-		sig, err = secp256k1.AggsigSignPartial(context, blindExcess1[:], nonce[:], pubNonceSum, kernelExcess, []byte{})
+
+		msg := kernel.sigMsg()
+		sig, err = secp256k1.AggsigSignPartial(context, blindExcess1[:], nonce[:], pubNonceSum, kernelExcess, msg)
 		if err != nil {
 			return
 		}
@@ -216,7 +237,7 @@ func (slate *Slate) Process(
 
 		participantData := &libwallet.ParticipantData{
 			ID:                1,
-			PublicBlindExcess: myPublicBlind.Hex(context),
+			PublicBlindExcess: bobPublicBlindExcess.Hex(context),
 			PublicNonce:       pubNonceString,
 			PartSig:           &partSig,
 			Message:           nil,
@@ -227,12 +248,13 @@ func (slate *Slate) Process(
 		transaction.Body.Outputs = append(transaction.Body.Outputs, slateOutputs...)
 		transaction.Body.Inputs = append(transaction.Body.Inputs, spentInputs...)
 		slate.Status = wallet.SlateResponded
-
+		//TODO: store the slate with private data
+		publicSlate = slate.PublicSlate // to be shared with the counterparty
 	}
 	return
 }
 
-func (slate *Slate) Finalize(context *secp256k1.Context) (err error) {
+func (slate *Slate) Finalize(context *secp256k1.Context) (tx Transaction, err error) {
 	if slate.Status != wallet.SlateResponded {
 		err = errors.New("wrong slate status")
 		return
@@ -241,15 +263,65 @@ func (slate *Slate) Finalize(context *secp256k1.Context) (err error) {
 	for _, output := range transactionBody.Outputs {
 		_ = (&output).addSurjectionProof(context, transactionBody.Inputs)
 	}
+
+	bobPubNonce := context.PublicKeyFromHex(slate.ParticipantData[1].PublicNonce) //Kb
+	//bobPubBlindExcess := context.PublicKeyFromHex(slate.ParticipantData[1].PublicBlindExcess)//Rb
+	bobPartialSigBytes, _ := hex.DecodeString(*slate.ParticipantData[1].PartSig)
+	bobPartialSig, _ := secp256k1.AggsigSignaturePartialParse(bobPartialSigBytes)
+
+	//
+	alicePubNonce := context.PublicKeyFromHex(slate.ParticipantData[0].PublicNonce) //Ka
+	//alicePubBlindExcess := context.PublicKeyFromHex(slate.ParticipantData[0].PublicBlindExcess)//Ra
+
+	alicePrivateNonce := slate.Nonce  //ka
+	alicePrivateExcess := slate.SkSum //ra
+
+	var pubNonceSum *secp256k1.PublicKey
+	_, pubNonceSum, err = secp256k1.EcPubkeyCombine(context, []*secp256k1.PublicKey{alicePubNonce, bobPubNonce})
+	if err != nil {
+		return
+	}
+	kernel := slate.Transaction.Body.Kernels[0]
+	excessBytes, _ := hex.DecodeString(kernel.Excess)
+	_, excess, _ := secp256k1.EcPubkeyParse(context, excessBytes)
+
+	var aliceSig secp256k1.AggsigSignaturePartial
+	//msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
+	msg := kernel.sigMsg()
+	aliceSig, err = secp256k1.AggsigSignPartial(context, alicePrivateExcess[:], alicePrivateNonce[:], pubNonceSum, excess, msg)
+	if err != nil {
+		return
+	}
+
+	finalSig, err := secp256k1.AggsigAddSignaturesSingle(
+		context,
+		[]*secp256k1.AggsigSignaturePartial{
+			&aliceSig,
+			&bobPartialSig,
+		},
+		pubNonceSum)
+	if err != nil {
+		return
+	}
+
+	aggsigSignatureSerialize := secp256k1.AggsigSignatureSerialize(context, &finalSig)
+	kernel.ExcessSig = hex.EncodeToString(aggsigSignatureSerialize[:])
+
+	//sigBytes := secp256k1.AggsigSignaturePartialSerialize(&sig)
+	//partSig := hex.EncodeToString(sigBytes[:])
+
 	return
 }
 
 func (output *SlateOutput) addSurjectionProof(context *secp256k1.Context, inputs []SlateInput) (err error) {
 	/*
-		The surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
-		The sender must create both change outputs and outputs for tokens she wishes to acquire as a result of this transaction,
-		because she must generate blinding factors for them to be available for later spending.
-		Furthermore it is the sender who also generates surjection proof for the tokens she pays with (aka expenses)
+			The surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
+			The Alice creates all of the proofs:
+			1. her change outputs
+			2. the outputs she acquires ("purchases" from Alice's perspective, i.e. spent by Bob)
+			3. the outputs created by Bob ("expenses" from Alice's perspective, i.e. spent by Alice)
+			4. the Bob's change
+		This is done as a part of transaction finalization due to the fact that one needs all of the transaction inputs asset blinding factors to generate a proof (i.e. each output gets a proof against the whole set of inputs)
 	*/
 	var fixedInputAssetTags []secp256k1.FixedAssetTag
 

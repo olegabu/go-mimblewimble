@@ -5,6 +5,7 @@ import (
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/wallet"
 	"golang.org/x/crypto/blake2b"
 )
@@ -19,18 +20,17 @@ func (asset Asset) seed() (seed []byte) {
 	return seed
 }
 
-func newAsset(name string) (Asset, []byte) {
+func newAsset(name string) Asset {
 	hash, _ := blake2b.New256(nil)
 	hash.Write([]byte(name))
 	var id [32]byte
 	copy(id[:], hash.Sum(nil)[:32])
 	encodedId := hex.EncodeToString(id[:])
 
-	test, _ := hex.DecodeString(encodedId)
 	return Asset{
 		Id:   encodedId,
 		Name: name,
-	}, test
+	}
 }
 
 type PublicOutput struct {
@@ -67,6 +67,16 @@ type TxKernel struct {
 	// The signature proving the excess is a valid public key, which signs
 	// the transaction fee.
 	ExcessSig string `json:"excess_sig"`
+}
+
+func (kernel *TxKernel) sigMsg() []byte {
+	return ledger.KernelSignatureMessage(core.TxKernel{
+		Features:   kernel.Features,
+		Fee:        core.Uint64(kernel.Fee.Value),
+		LockHeight: kernel.LockHeight,
+		Excess:     kernel.Excess,
+		ExcessSig:  kernel.ExcessSig,
+	})
 }
 
 type WalletTransaction struct {
@@ -141,8 +151,8 @@ type Slate struct {
 //}
 
 type AssetBalance struct {
-	Asset  Asset  `json:"asset"`
-	Amount uint64 `json:"amount"`
+	Asset Asset  `json:"asset"`
+	Value uint64 `json:"value"`
 }
 
 //type Transaction struct {

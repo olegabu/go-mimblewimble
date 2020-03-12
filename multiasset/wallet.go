@@ -11,88 +11,62 @@ import (
 func calculateOutputValues(
 	fee AssetBalance,
 	walletInputs []PrivateOutput, // the assets Alice owns hence pays with
-	spends []AssetBalance) ( //the assets Alice pays with
+	expenses []AssetBalance) ( //the assets Alice pays with
 	spentInputs []SlateInput,
 	inputBlinds [][]byte,
 	changeValues map[Asset]uint64, //helper map for change outputs
 	err error,
 ) {
-	// Group all spends by asset id to make the tallying easier
-	offerBalance := make(map[string]uint64)
-
-	// Group all owned inputs by asset id to make the tallying easier
-	inputsByAsset := make(map[string][]PrivateOutput)
-
-	inputsById := make(map[string]PrivateOutput)
-
-	offerBalance[fee.Asset.Name] += fee.Amount
-
+	// Group all expenses by asset id to make the tallying easier
+	totalExpenseByAsset := make(map[Asset]uint64)
 	//initialize output helper map
-	for _, spend := range spends {
-		offerBalance[spend.Asset.Name] += spend.Amount
+	for _, expense := range expenses {
+		totalExpenseByAsset[expense.Asset] += expense.Value
+	}
+	if totalExpenseByAsset[fee.Asset] > 0 {
+		totalExpenseByAsset[fee.Asset] += fee.Value
 	}
 
+	// Group all owned inputs by asset id to make the tallying easier
+
 	//initialize inputs helper maps
-	myBalance := make(map[string]uint64)
+	myBalance := make(map[Asset]uint64)
 	for _, input := range walletInputs {
-		myBalance[input.Asset.Name] += input.Value
-		inputsByAsset[input.Asset.Name] = append(inputsByAsset[input.Asset.Name], input)
-		inputsById[input.Commit.ValueCommitment] = input
+		myBalance[input.Asset] += input.Value
 	}
 
 	//check for any overspending
-	for assetId, value := range offerBalance {
-		if myBalance[assetId] < value {
+	for asset, value := range totalExpenseByAsset {
+		if myBalance[asset] < value {
 			err = errors.New("insufficient funds")
 			return
 		}
 	}
 
-	spentInputMap := make(map[string]*PrivateOutput)
+	//spentInputMap := make(map[string]*PrivateOutput)
+	changeValues = make(map[Asset]uint64)
 
-	//for every asset output Alice wishes to create by spending her funds
-	for _, spend := range spends {
-		//get the value of output
-		remainder := spend.Amount
-		//loop through inputs and mark those that are about to used in this transaction
-		//
-		for _, input := range inputsByAsset[spend.Asset.Name] {
+	for asset, value := range totalExpenseByAsset {
+		remainder := value
+		for _, input := range walletInputs {
+			//spentInputMap[input.Commit.ValueCommitment] = &input
+			spentInputs = append(spentInputs, SlateInput{
+				Input:      input.Input,
+				Asset:      asset,
+				AssetBlind: input.AssetBlind,
+			})
 
-			//this input is already spent, proceed to the next one
-			if input.Value == 0 {
-				continue
-			}
-			//since this input was not spent before, remember it
-			spentInputMap[input.Commit.ValueCommitment] = &input
-
-			//if we have not less than we need, decrease the value and go to the next spend
-			if input.Value-remainder >= 0 {
-				input.Value = input.Value - remainder
+			inputBlinds = append(inputBlinds, input.ValueBlind[:])
+			if input.Value >= remainder {
+				changeValues[asset] = input.Value - remainder
 				remainder = 0
 				break
+			} else {
+				remainder = remainder - input.Value
 			}
-			//since this specific input has insufficient funds, decrease the value and go to the next
-			input.Value = 0
-			remainder = remainder - input.Value
-
 		}
-
 	}
 
-	changeValues = make(map[Asset]uint64)
-	//loop through inputs about to be spent
-	//we couldn't do it while looping through spends, because there could be duplicate assets both among owned assets and spends
-	for id, input := range spentInputMap {
-		if inputsById[id].Value > input.Value {
-			changeValues[input.Asset] = inputsById[id].Value - input.Value
-		}
-		spentInputs = append(spentInputs, SlateInput{
-			Input:      input.Input,
-			Asset:      input.Asset,
-			AssetBlind: input.AssetBlind,
-		})
-		inputBlinds = append(inputBlinds, input.ValueBlind[:])
-	}
 	return
 }
 
@@ -108,7 +82,7 @@ func createOutput(context *secp256k1.Context, balance AssetBalance) (privateOutp
 	if err != nil {
 		return
 	}
-	asset, value := balance.Asset, balance.Amount
+	asset, value := balance.Asset, balance.Value
 
 	assetCommitment, err = secp256k1.GeneratorGenerateBlinded(context, asset.seed(), assetBlind[:])
 	if err != nil {
