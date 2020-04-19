@@ -21,7 +21,7 @@ func CreateSlate(
 	fee uint64,
 	asset string,
 	change uint64,
-	walletInputs []Output,
+	walletInputs []*Output,
 ) (
 	slateBytes []byte,
 	changeOutput *Output,
@@ -489,27 +489,18 @@ func createOutput(
 	asset string,
 	status OutputStatus,
 ) (
-	output *core.Output,
-	outputOuter *Output,
+	coreOutput *core.Output,
+	output *Output,
 	err error,
 ) {
+	var blind32 [32]byte
 	if blind == nil {
-		blind_, err_ := secret(context)
-		if err_ != nil {
-			return nil, nil, err_
+		blind32, err = secret(context)
+		if err != nil {
+			return
 		}
-		blind = blind_[:]
-	}
-
-	// create commitment to value and blinding factor
-	commitment, err := secp256k1.Commit(
-		context,
-		blind,
-		value,
-		&secp256k1.GeneratorH,
-		&secp256k1.GeneratorG)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "cannot create commitment to value")
+	} else {
+		copy(blind32[:], blind)
 	}
 
 	// create bullet proof to value
@@ -518,30 +509,40 @@ func createOutput(
 		nil,
 		nil,
 		value,
-		blind,
-		blind,
+		blind32[:],
+		blind32[:],
 		nil,
 		nil,
 		nil)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "cannot create bullet proof")
+		return
 	}
 
-	output = &core.Output{
-		Features: features,
-		Commit:   commitment.Hex(context),
-		Proof:    hex.EncodeToString(proof),
+	// create commitment to value and blinding factor
+	commit, err := secp256k1.Commit(
+		context,
+		blind32[:],
+		value,
+		&secp256k1.GeneratorH,
+		&secp256k1.GeneratorG)
+	if err != nil {
+		return
 	}
 
-	outputOuter = &Output{
-		Output: *output,
-		Value:  value,
-		Asset:  asset,
+	output = &Output{
+		Output: core.Output{
+			Features: features,
+			Commit: commit.Hex(context),
+			Proof: hex.EncodeToString(proof),
+		},
+		Value: value,
+		Blind: blind32,
+		Asset: asset,
 		Status: status,
 	}
-	copy(outputOuter.Blind[:], blind)
+	coreOutput = &output.Output
 
-	return output, outputOuter, nil
+	return
 }
 
 func blake256(data []byte) (digest []byte) {

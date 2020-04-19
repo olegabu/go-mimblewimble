@@ -130,7 +130,7 @@ func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate SenderSlate, err erro
 	return slate, nil
 }
 
-func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error) {
+func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []*Output, change uint64, err error) {
 	// collect valid outputs whose amount is less or equal to the amount to send
 
 	outputs := make([]Output, 0)
@@ -155,13 +155,13 @@ func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Outpu
 
 	// loop thru outputs and collect into inputs only enough to cover the amount
 
-	inputs = make([]Output, 0)
+	inputs = make([]*Output, 0)
 
 	var sumValues uint64
 
 	for _, output := range outputs {
 		sumValues += output.Value
-		inputs = append(inputs, output)
+		inputs = append(inputs, &output)
 
 		if sumValues >= amount {
 			break
@@ -180,7 +180,7 @@ func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Outpu
 
 	for _, input := range inputs {
 		input.Status = OutputLocked
-		err = t.PutOutput(input)
+		err = t.PutOutput(*input)
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "cannot lock input")
 		}
