@@ -53,7 +53,7 @@ func CreateSlate(
 	}
 
 	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
-	if amount + change + fee != inputsTotal {
+	if amount+change+fee != inputsTotal {
 		err = errors.New("Amounts don't sum up (amount + change + fee != inputsTotal)")
 		return
 	}
@@ -79,13 +79,13 @@ func CreateSlate(
 	}
 
 	// generate secret nonce and calculate its public key
-	nonce, err := secret(context)
+	nonce, err := nonce(context)
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get secret for nonce")
 	}
 
 	// generate random kernel offset
-	kernelOffset, err := secret(context)
+	kernelOffset, err := nonce(context)
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get random offset")
 	}
@@ -217,7 +217,7 @@ func CreateResponse(
 	}
 
 	// choose receiver nonce and calculate its public key
-	receiverNonce, err := secret(context)
+	receiverNonce, err := nonce(context)
 	if err != nil {
 		return nil, Output{}, ReceiverSlate{}, errors.Wrap(err, "cannot get random for nonce")
 	}
@@ -494,7 +494,7 @@ func createOutput(
 	err error,
 ) {
 	if blind == nil {
-		blind_, err_ := secret(context)
+		blind_, err_ := nonce(context)
 		if err_ != nil {
 			return nil, nil, err_
 		}
@@ -550,8 +550,22 @@ func blake256(data []byte) (digest []byte) {
 	return hash.Sum(nil)
 }
 
-func secret(context *secp256k1.Context) (rnd32 [32]byte, err error) {
+func nonce(context *secp256k1.Context) (rnd32 [32]byte, err error) {
+	return nonceFromRandom(context)
+}
+
+func nonceFromRandom(context *secp256k1.Context) (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
+	rnd32, err = secretToNonce(context, seed32[:])
+	return
+}
+
+func nonceFromHDWallet(context *secp256k1.Context) (rnd32 [32]byte, err error) {
+	seed32 := secp256k1.Random256()
+
+}
+
+func secretToNonce(context *secp256k1.Context, seed32 [32]byte) (rnd32 [32]byte, err error) {
 	rnd32, err = secp256k1.AggsigGenerateSecureNonce(context, seed32[:])
 	return
 }

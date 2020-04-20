@@ -219,3 +219,7 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	}
 	return id, nil
 }
+
+func (t *Wallet) NextSecret() error {
+	return t.db.Confirm(transactionID)
+}
