@@ -24,9 +24,8 @@ func TestWalletRound(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	db := NewLeveldbDatabase(dir)
-	w := NewWallet(db)
-	defer db.Close()
+	w := NewWallet(dir)
+	defer w.Close()
 
 	for _, value := range []int{1} {
 		_, err := w.Issue(uint64(value), "cash")
@@ -72,9 +71,8 @@ func TestWalletRound(t *testing.T) {
 
 func TestInfo(t *testing.T) {
 	dir := testDbDir()
-	db := NewLeveldbDatabase(dir)
-	w := NewWallet(db)
-	defer db.Close()
+	w := NewWallet(dir)
+	defer w.Close()
 	err := w.Info()
 	assert.NoError(t, err)
 }

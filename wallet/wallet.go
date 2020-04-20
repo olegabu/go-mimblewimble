@@ -10,16 +10,21 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/olegabu/go-mimblewimble/ledger"
-	// "github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 
 type Wallet struct {
-	db Database
+	persistDir string
+	db         Database
 }
 
-func NewWallet(db Database) *Wallet {
-	return &Wallet{db: db}
+func NewWallet(persistDir string /*db Database*/) *Wallet {
+	db := NewLeveldbDatabase(persistDir)
+	return &Wallet{persistDir: persistDir, db: db}
+}
+
+func (t *Wallet) Close() {
+	t.db.Close()
 }
 
 func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error) {
@@ -28,7 +33,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := CreateSlate(nil, amount, 0, asset, change, inputs)
+	slateBytes, changeOutput, senderSlate, err := t.CreateSlate(nil, amount, 0, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
@@ -49,7 +54,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 }
 
 func (t *Wallet) Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
-	responseSlateBytes, receiverOutput, receiverSlate, err := CreateResponse(slateBytes)
+	responseSlateBytes, receiverOutput, receiverSlate, err := t.CreateResponse(slateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateResponse")
 	}
@@ -96,7 +101,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	txBytes, tx, err := CreateTransaction(responseSlateBytes, senderSlate)
+	txBytes, tx, err := t.CreateTransaction(responseSlateBytes, senderSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateTransaction")
 	}
@@ -117,8 +122,8 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 
 	defer secp256k1.ContextDestroy(context)
 
-	blind, _ := secret(context)
-	output, walletOutput, err := createOutput(context, blind[:], value, core.CoinbaseOutput, asset, OutputConfirmed)
+	blind, _ := t.secret(context)
+	output, walletOutput, err := t.createOutput(context, blind[:], value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
@@ -218,8 +223,4 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 		return nil, errors.Wrap(err, "cannot marshal from uuid")
 	}
 	return id, nil
-}
-
-func (t *Wallet) NextSecret() error {
-	return t.db.Confirm(transactionID)
 }

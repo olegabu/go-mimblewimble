@@ -3,6 +3,7 @@ package wallet
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/blockcypher/libgrin/core"
@@ -13,6 +14,14 @@ import (
 )
 
 func TestRound(t *testing.T) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w := NewWallet(dir)
+	defer w.Close()
+
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	assert.Nil(t, err)
 
@@ -25,21 +34,21 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	_, output1, err := createOutput(context, nil, uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	_, output1, err := w.createOutput(context, nil, uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	_, output2, err := createOutput(context, nil, inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	_, output2, err := w.createOutput(context, nil, inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*output1, *output2}
 
-	slateBytes, _, senderWalletSlate, err := CreateSlate(context, amount, fee, asset, change, inputs)
+	slateBytes, _, senderWalletSlate, err := w.CreateSlate(context, amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(slateBytes))
 
-	responseSlateBytes, _, _, err := CreateResponse(slateBytes)
+	responseSlateBytes, _, _, err := w.CreateResponse(slateBytes)
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, tx, err := CreateTransaction(responseSlateBytes, senderWalletSlate)
+	txBytes, tx, err := w.CreateTransaction(responseSlateBytes, senderWalletSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)

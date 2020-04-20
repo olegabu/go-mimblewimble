@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/pkg/errors"
@@ -345,4 +346,35 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 	}
 
 	return nil
+}
+
+const indexKey = "index"
+
+func (t *leveldbDatabase) NextIndex() (uint32, error) {
+	exists, err := t.db.Has([]byte(indexKey), nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "cannot check if Has index")
+	}
+
+	var index uint32 = 0
+	var indexBytes = make([]byte, 4)
+
+	if exists {
+		indexBytes, err := t.db.Get([]byte(indexKey), nil)
+		if err != nil {
+			return 0, errors.Wrap(err, "cannot Get index")
+		}
+
+		index = binary.BigEndian.Uint32(indexBytes)
+		index++
+	}
+
+	binary.BigEndian.PutUint32(indexBytes, index)
+
+	err = t.db.Put([]byte(indexKey), indexBytes, nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "cannot Put index")
+	}
+
+	return index, nil
 }

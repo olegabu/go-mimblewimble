@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
+	tendermintCmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/cli"
 	"io/ioutil"
@@ -82,9 +82,8 @@ func main() {
 				asset = args[1]
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w := wallet.NewWallet(flagPersist)
+			defer w.Close()
 
 			txBytes, err := w.Issue(uint64(amount), asset)
 			if err != nil {
@@ -115,9 +114,8 @@ func main() {
 				asset = args[1]
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w := wallet.NewWallet(flagPersist)
+			defer w.Close()
 
 			slateBytes, err := w.Send(uint64(amount), asset)
 			if err != nil {
@@ -149,9 +147,8 @@ func main() {
 				return errors.Wrap(err, "cannot read sender slate file "+slateFileName)
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w := wallet.NewWallet(flagPersist)
+			defer w.Close()
 
 			responseSlateBytes, err := w.Receive(slateBytes)
 			if err != nil {
@@ -183,9 +180,8 @@ func main() {
 				return errors.Wrap(err, "cannot read receiver slate file "+slateFileName)
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w := wallet.NewWallet(flagPersist)
+			defer w.Close()
 
 			txBytes, err := w.Finalize(slateBytes)
 			if err != nil {
@@ -212,9 +208,8 @@ func main() {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w := wallet.NewWallet(flagPersist)
+			defer w.Close()
 
 			err := w.Confirm([]byte(args[0]))
 			if err != nil {
@@ -250,9 +245,8 @@ func main() {
 		Long:  `Prints out outputs, slates, transactions stored in the wallet.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w := wallet.NewWallet(flagPersist)
+			defer w.Close()
 
 			err := w.Info()
 			if err != nil {
@@ -332,9 +326,8 @@ func main() {
 
 			err = client.ListenForSuccessfulTxEvents(func(transactionId []byte) {
 
-				db := wallet.NewLeveldbDatabase(flagPersist)
-				w := wallet.NewWallet(db)
-				defer db.Close()
+				w := wallet.NewWallet(flagPersist)
+				defer w.Close()
 
 				err := w.Confirm(transactionId)
 				if err != nil {
@@ -391,21 +384,21 @@ func main() {
 
 	// Tendermint commands
 
-	tendermintRootCmd := cmd.RootCmd
+	tendermintRootCmd := tendermintCmd.RootCmd
 	tendermintRootCmd.AddCommand(
-		cmd.GenValidatorCmd,
-		cmd.InitFilesCmd,
-		cmd.ProbeUpnpCmd,
-		cmd.LiteCmd,
-		cmd.ReplayCmd,
-		cmd.ReplayConsoleCmd,
-		cmd.ResetAllCmd,
-		cmd.ResetPrivValidatorCmd,
-		cmd.ShowValidatorCmd,
-		cmd.TestnetFilesCmd,
-		cmd.ShowNodeIDCmd,
-		cmd.GenNodeKeyCmd,
-		cmd.VersionCmd)
+		tendermintCmd.GenValidatorCmd,
+		tendermintCmd.InitFilesCmd,
+		tendermintCmd.ProbeUpnpCmd,
+		tendermintCmd.LiteCmd,
+		tendermintCmd.ReplayCmd,
+		tendermintCmd.ReplayConsoleCmd,
+		tendermintCmd.ResetAllCmd,
+		tendermintCmd.ResetPrivValidatorCmd,
+		tendermintCmd.ShowValidatorCmd,
+		tendermintCmd.TestnetFilesCmd,
+		tendermintCmd.ShowNodeIDCmd,
+		tendermintCmd.GenNodeKeyCmd,
+		tendermintCmd.VersionCmd)
 
 	tendermintBaseCmd := cli.PrepareBaseCmd(tendermintRootCmd, "TM", os.ExpandEnv(filepath.Join("$HOME", cfg.DefaultTendermintDir)))
 
