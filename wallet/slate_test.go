@@ -199,12 +199,12 @@ func TestExcess(t *testing.T) {
 	fee := uint64(slate.Fee)
 	kex, err := ledger.CalculateExcess(context, &slate.Transaction, fee)
 	assert.NoError(t, err)
-	fmt.Printf("calculateExcess: %s\n", kex.Hex(context))
+	fmt.Printf("calculateExcess: %s\n", kex)
 
 	kex0 := slate.Transaction.Body.Kernels[0].Excess
 	fmt.Printf("calculateExcess: %s\n", kex0)
 
-	assert.Equal(t, kex0, kex.Hex(context))
+	assert.Equal(t, kex0, kex.String())
 }
 
 var slateFinal []byte = []byte(`{
