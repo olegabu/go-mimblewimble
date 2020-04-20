@@ -60,5 +60,23 @@ func TestSecretFromHDWallet(t *testing.T) {
 
 		assert.EqualValues(t, secret, secrets[i])
 	}
+}
 
+func TestNonce(t *testing.T) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w := NewWallet(dir)
+	defer w.Close()
+
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	assert.NoError(t, err)
+
+	nonceBytes, err := w.nonce(context)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, nonceBytes)
+
+	fmt.Printf("nonce %v\n", nonceBytes)
 }

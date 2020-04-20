@@ -9,11 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) secret(context *secp256k1.Context) (rnd32 [32]byte, err error) {
-	return t.secretFromRandom(context)
-}
-
-func (t *Wallet) secretFromRandom(context *secp256k1.Context) (rnd32 [32]byte, err error) {
+func (t *Wallet) nonce(context *secp256k1.Context) (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
 	rnd32, err = secp256k1.AggsigGenerateSecureNonce(context, seed32[:])
 	return

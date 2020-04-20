@@ -26,8 +26,7 @@ type Database interface {
 
 type Output struct {
 	core.Output
-	Blind [32]byte `json:"blind,omitempty"`
-	//BlindIndex uint32       `json:"blind,omitempty"`
+	Index  uint32       `json:"index,omitempty"`
 	Value  uint64       `json:"value,omitempty"`
 	Status OutputStatus `json:"status,omitempty"`
 	Asset  string       `json:"asset,omitempty"`

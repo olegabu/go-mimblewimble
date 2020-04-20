@@ -59,7 +59,7 @@ func (t *Wallet) Receive(slateBytes []byte) (responseSlateBytes []byte, err erro
 		return nil, errors.Wrap(err, "cannot CreateResponse")
 	}
 
-	err = t.db.PutOutput(receiverOutput)
+	err = t.db.PutOutput(*receiverOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
@@ -122,8 +122,7 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 
 	defer secp256k1.ContextDestroy(context)
 
-	blind, _ := t.secret(context)
-	output, walletOutput, err := t.createOutput(context, blind[:], value, core.CoinbaseOutput, asset, OutputConfirmed)
+	output, walletOutput, _, err := t.createOutput(context, value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}

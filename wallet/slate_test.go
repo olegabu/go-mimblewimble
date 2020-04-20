@@ -34,9 +34,9 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	_, output1, err := w.createOutput(context, nil, uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	_, output1, _, err := w.createOutput(context, uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	_, output2, err := w.createOutput(context, nil, inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	_, output2, _, err := w.createOutput(context, inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*output1, *output2}
 
@@ -64,7 +64,7 @@ func TestExcess(t *testing.T) {
 	defer secp256k1.ContextDestroy(context)
 
 	slate := new(Slate)
-	err := json.Unmarshal([]byte(slateFinal), slate)
+	err := json.Unmarshal(slateFinal, slate)
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
