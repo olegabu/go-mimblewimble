@@ -459,7 +459,7 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 
 	excessSig := secp256k1.AggsigSignatureSerialize(context, &finalSig)
 
-	tx.Body.Kernels[0].Excess = kernelExcess.Hex(context)
+	tx.Body.Kernels[0].Excess = kernelExcess.String()
 	tx.Body.Kernels[0].ExcessSig = hex.EncodeToString(excessSig[:])
 
 	ledgerTx := ledger.Transaction{
@@ -532,7 +532,7 @@ func createOutput(
 	output = &Output{
 		Output: core.Output{
 			Features: features,
-			Commit: commit.Hex(context),
+			Commit: commit.String(),
 			Proof: hex.EncodeToString(proof),
 		},
 		Value: value,

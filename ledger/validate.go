@@ -181,7 +181,7 @@ func CalculateExcess(
 
 	// collect input commitments
 	for _, input := range tx.Body.Inputs {
-		com, err := context.CommitmentFromHex(input.Commit) // secp256k1.CommitmentParse(context, secp256k1.Unhex(input.Commit))
+		com, err := secp256k1.CommitmentFromString(input.Commit) // secp256k1.CommitmentParse(context, secp256k1.Unhex(input.Commit))
 		if err != nil {
 			return nil, errors.Wrap(err, "error parsing input commitment")
 		}
@@ -190,7 +190,7 @@ func CalculateExcess(
 
 	// collect output commitments
 	for _, output := range tx.Body.Outputs {
-		com, err := context.CommitmentFromHex(output.Commit)
+		com, err := secp256k1.CommitmentFromString(output.Commit)
 		if err != nil {
 			return nil, errors.Wrap(err, "error parsing output commitment")
 		}
@@ -214,7 +214,8 @@ func CalculateExcess(
 	}
 
 	// subtract the kernel_excess (built from kernel_offset)
-	kernelOffset, err := secp256k1.Commit(context, secp256k1.Unhex(tx.Offset), 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+        offsetbytes, _ := hex.DecodeString(tx.Offset)
+	kernelOffset, err := secp256k1.Commit(context, offsetbytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return nil, errors.Wrap(err, "error calculating offset commitment")
 	}
@@ -350,7 +351,7 @@ func validateCommitmentsSum(
 	}
 
 	// compare calculated excess with the one stored in the tx kernel
-	if kernelExcess.Hex(context) != kernel.Excess {
+	if kernelExcess.String() != kernel.Excess {
 		return errors.Wrap(err, "kernel excess verification failed")
 	}
 
@@ -392,7 +393,7 @@ func validateBulletproof(
 		return errors.Wrap(err, "cannot decode Proof from hex")
 	}
 
-	commit, err := context.CommitmentFromHex(output.Commit)
+	commit, err := secp256k1.CommitmentFromString(output.Commit)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode Commit from hex")
 	}
