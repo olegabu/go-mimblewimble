@@ -2,7 +2,6 @@ package wallet
 
 import (
 	"fmt"
-	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -41,13 +40,10 @@ func TestSecretFromHDWallet(t *testing.T) {
 	assert.NoError(t, err)
 	defer w.Close()
 
-	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	assert.NoError(t, err)
-
 	secrets := map[uint32][32]byte{}
 
 	for i := 0; i < 3; i++ {
-		secret, index, err := w.newSecret(context)
+		secret, index, err := w.newSecret()
 		assert.NoError(t, err)
 		fmt.Printf("created i %d index %d secret %v\n", i, index, secret)
 		secrets[index] = secret
@@ -56,7 +52,7 @@ func TestSecretFromHDWallet(t *testing.T) {
 	fmt.Printf("created secrets %v\n", secrets)
 
 	for i := uint32(0); i < 3; i++ {
-		secret, err := w.secret(context, i)
+		secret, err := w.secret(i)
 		assert.NoError(t, err)
 		fmt.Printf("got i %d secret %v\n", i, secret)
 
@@ -74,10 +70,7 @@ func TestNonce(t *testing.T) {
 	assert.NoError(t, err)
 	defer w.Close()
 
-	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	assert.NoError(t, err)
-
-	nonceBytes, err := w.nonce(context)
+	nonceBytes, err := w.nonce()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nonceBytes)
 

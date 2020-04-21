@@ -9,9 +9,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) nonce(context *secp256k1.Context) (rnd32 [32]byte, err error) {
+func (t *Wallet) nonce() (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
-	rnd32, err = secp256k1.AggsigGenerateSecureNonce(context, seed32[:])
+	rnd32, err = secp256k1.AggsigGenerateSecureNonce(t.context, seed32[:])
 	return
 }
 
@@ -79,13 +79,13 @@ func (t *Wallet) createMasterKeyIfDoesntExist() (err error) {
 	return
 }
 
-func (t *Wallet) newSecret(context *secp256k1.Context) (secret [32]byte, index uint32, err error) {
+func (t *Wallet) newSecret() (secret [32]byte, index uint32, err error) {
 	index, err = t.db.NextIndex()
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get NextIndex from db")
 	}
 
-	secret, err = t.secret(context, index)
+	secret, err = t.secret(index)
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get secretFromIndex")
 	}
@@ -93,7 +93,7 @@ func (t *Wallet) newSecret(context *secp256k1.Context) (secret [32]byte, index u
 	return
 }
 
-func (t *Wallet) secret(context *secp256k1.Context, index uint32) (secret [32]byte, err error) {
+func (t *Wallet) secret(index uint32) (secret [32]byte, err error) {
 	childKey, err := t.masterKey.NewChildKey(index)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot get NewChildKey")
@@ -104,7 +104,7 @@ func (t *Wallet) secret(context *secp256k1.Context, index uint32) (secret [32]by
 		return [32]byte{}, errors.Wrap(err, "cannot Serialize childKey")
 	}
 
-	secret, err = secp256k1.AggsigGenerateSecureNonce(context, childKeyBytes)
+	secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot AggsigGenerateSecureNonce from childKeyBytes")
 	}

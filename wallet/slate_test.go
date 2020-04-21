@@ -23,11 +23,6 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 	defer w.Close()
 
-	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	assert.Nil(t, err)
-
-	defer secp256k1.ContextDestroy(context)
-
 	inputValue := uint64(300)
 	amount := uint64(200)
 	fee := uint64(0)
@@ -35,13 +30,13 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	_, output1, _, err := w.createOutput(context, uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	_, output1, _, err := w.createOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	_, output2, _, err := w.createOutput(context, inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	_, output2, _, err := w.createOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*output1, *output2}
 
-	slateBytes, _, senderWalletSlate, err := w.CreateSlate(context, amount, fee, asset, change, inputs)
+	slateBytes, _, senderWalletSlate, err := w.CreateSlate(amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(slateBytes))
 

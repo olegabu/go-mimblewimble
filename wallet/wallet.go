@@ -18,19 +18,29 @@ type Wallet struct {
 	persistDir string
 	db         Database
 	masterKey  *bip32.Key
+	context    *secp256k1.Context
 }
 
 func NewWallet(persistDir string /*db Database*/) (w *Wallet, err error) {
 	db := NewLeveldbDatabase(persistDir)
 	w = &Wallet{persistDir: persistDir, db: db}
+
 	if err = w.createMasterKeyIfDoesntExist(); err != nil {
 		return
 	}
+
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		return
+	}
+	w.context = context
+
 	return
 }
 
 func (t *Wallet) Close() {
 	t.db.Close()
+	secp256k1.ContextDestroy(t.context)
 }
 
 func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error) {
@@ -39,7 +49,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := t.CreateSlate(nil, amount, 0, asset, change, inputs)
+	slateBytes, changeOutput, senderSlate, err := t.CreateSlate(amount, 0, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
@@ -121,14 +131,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot ContextCreate")
-	}
-
-	defer secp256k1.ContextDestroy(context)
-
-	output, walletOutput, _, err := t.createOutput(context, value, core.CoinbaseOutput, asset, OutputConfirmed)
+	output, walletOutput, _, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
