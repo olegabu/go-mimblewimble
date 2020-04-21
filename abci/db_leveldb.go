@@ -18,18 +18,19 @@ type leveldbDatabase struct {
 	currentBatch *leveldb.Batch
 }
 
-func NewLeveldbDatabase(dbDir string) ledger.Database {
+func NewLeveldbDatabase(dbDir string) (d ledger.Database, err error) {
 	dbFilename = filepath.Join(dbDir, "abci")
 
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
-		log.Fatalf("cannot open leveldb at %v: %v", dbFilename, err)
+		err = errors.Wrapf(err, "cannot open leveldb at %v", dbFilename)
+		return
 	}
 	log.Printf("opened abci db at %v\n", dbFilename)
 
-	var d ledger.Database = &leveldbDatabase{db: ldb}
+	d = &leveldbDatabase{db: ldb}
 
-	return d
+	return
 }
 
 func (t *leveldbDatabase) Close() {

@@ -55,7 +55,6 @@ func (t *Wallet) CreateSlate(
 	// create and remember blinding factor for change output
 	var outputBlinds [][]byte
 	var slateOutputs []core.Output
-	//var changeOutput *Output
 	if change > 0 {
 		_, changeOutput, changeBlind, err := t.createOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
 		if err != nil {
@@ -64,13 +63,13 @@ func (t *Wallet) CreateSlate(
 		outputBlinds = append(outputBlinds, changeBlind)
 		slateOutputs = append(slateOutputs, changeOutput.Output)
 	}
-	// sum up inputs(-) and outputs(+) blinding factors and calculate sum's public key
+	// sum up inputs(-) and outputs(+) blinding factors and calculate their sum's public key
 	blindExcess1, err := secp256k1.BlindSum(t.context, outputBlinds, inputBlinds)
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create blinding excess sum")
 	}
 
-	// generate secret nonce and calculate its public key
+	// generate secret nonce
 	nonce, err := t.nonce()
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get nonce")
@@ -93,7 +92,6 @@ func (t *Wallet) CreateSlate(
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
 	}
 
-	// Create public curve points from blindExcess
 	publicNonce, err := t.pubKeyFromSecretKey(nonce[:])
 	if err != nil {
 		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
@@ -154,25 +152,6 @@ func (t *Wallet) CreateSlate(
 
 	return slateBytes, changeOutput, senderSlate, nil
 }
-
-/// let secp = Secp256k1::with_caps(ContextFlag::Full);
-/// let secret_nonce = aggsig::create_secnonce(&secp).unwrap();
-/// let secret_key = SecretKey::new(&secp, &mut thread_rng());
-/// let pub_nonce_sum = PublicKey::from_secret_key(&secp, &secret_nonce).unwrap();
-/// // ... Add all other participating nonces
-/// let pub_key_sum = PublicKey::from_secret_key(&secp, &secret_key).unwrap();
-/// // ... Add all other participating keys
-/// let mut msg_bytes = [0; 32];
-/// // ... Encode message
-/// let message = Message::from_slice(&msg_bytes).unwrap();
-/// let sig_part = aggsig::calculate_partial_sig(
-///		&secp,
-///		&secret_key,
-///		&secret_nonce,
-///		&pub_nonce_sum,
-///		Some(&pub_key_sum),
-///		&message,
-///).unwrap();
 
 func (t *Wallet) CreateResponse(
 	slateBytes []byte,
@@ -310,7 +289,7 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 	// parse out public blinds and nonces for both sender and receiver from the slate
 
 	if len(slate.ParticipantData) != 2 {
-		err = errors.New("missing entries in ParticipantData")
+		err = errors.New("expected 2 entries in ParticipantData")
 		return
 	}
 
@@ -442,9 +421,6 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 		err = errors.Wrap(err, "excessPublicKey: CommitmentToPublicKey failed")
 		return
 	}
-
-	kernelExcess2 := sumPublicBlinds.Bytes(t.context)
-	kernelExcess2[0] += 6
 
 	// Verify final sig with pk from excess
 

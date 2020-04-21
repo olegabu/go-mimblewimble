@@ -33,7 +33,11 @@ func init() {
 }
 
 func Start(dbDir string) error {
-	db := NewLeveldbDatabase(dbDir)
+	db, err := NewLeveldbDatabase(dbDir)
+	if err != nil {
+		return errors.Wrap(err, "cannot create NewLeveldbDatabase")
+	}
+
 	app := NewMWApplication(db)
 	defer db.Close()
 

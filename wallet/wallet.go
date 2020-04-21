@@ -142,9 +142,6 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot create output")
 	}
 
-	// walletOutput.Status = OutputConfirmed
-	// walletOutput.Asset = asset
-
 	err = t.db.PutOutput(*walletOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutOutput")
