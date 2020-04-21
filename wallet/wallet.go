@@ -22,18 +22,24 @@ type Wallet struct {
 }
 
 func NewWallet(persistDir string /*db Database*/) (w *Wallet, err error) {
-	db := NewLeveldbDatabase(persistDir)
-	w = &Wallet{persistDir: persistDir, db: db}
-
-	if err = w.createMasterKeyIfDoesntExist(); err != nil {
+	db, err := NewLeveldbDatabase(persistDir)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create NewLeveldbDatabase")
 		return
 	}
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
 		return
 	}
-	w.context = context
+
+	w = &Wallet{persistDir: persistDir, db: db, context: context}
+
+	if err = w.createMasterKeyIfDoesntExist(); err != nil {
+		err = errors.Wrap(err, "cannot createMasterKeyIfDoesntExist")
+		return
+	}
 
 	return
 }

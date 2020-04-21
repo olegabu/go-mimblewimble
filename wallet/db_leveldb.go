@@ -16,17 +16,18 @@ type leveldbDatabase struct {
 	db *leveldb.DB
 }
 
-func NewLeveldbDatabase(dbDir string) Database {
+func NewLeveldbDatabase(dbDir string) (d Database, err error) {
 	dbFilename := filepath.Join(dbDir, "wallet")
 
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
-		log.Fatalf("cannot open leveldb at %v: %v", dbFilename, err)
+		err = errors.Wrapf(err, "cannot open leveldb at %v", dbFilename)
+		return
 	}
-	log.Printf("opened wallet db at %v\n", dbFilename)
+	//log.Printf("opened wallet db at %v\n", dbFilename)
 
-	var d Database = &leveldbDatabase{db: ldb}
-	return d
+	d = &leveldbDatabase{db: ldb}
+	return
 }
 
 func (t *leveldbDatabase) Close() {
