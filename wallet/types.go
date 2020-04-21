@@ -26,8 +26,8 @@ type Database interface {
 
 type Output struct {
 	core.Output
-	Index  uint32       `json:"index,omitempty"`
-	Value  uint64       `json:"value,omitempty"`
+	Index  uint32       `json:"index"`
+	Value  uint64       `json:"value"`
 	Status OutputStatus `json:"status,omitempty"`
 	Asset  string       `json:"asset,omitempty"`
 }

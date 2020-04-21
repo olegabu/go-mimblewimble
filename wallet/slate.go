@@ -314,7 +314,7 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 	}
 	defer secp256k1.ContextDestroy(context)
 
-	// get secret keys from sender's slate that has blind and secret secrets
+	// get secret keys from sender's slate that has blind and secret nonces
 	senderBlind := senderSlate.SumSenderBlinds[:]
 	senderNonce := senderSlate.SenderNonce[:]
 	// calculate public keys from secret keys
@@ -501,9 +501,9 @@ func (t *Wallet) blindFromOutput(
 	blind []byte,
 	err error,
 ) {
-	secret, err := t.secretFromHDWallet(context, output.Index)
+	secret, err := t.secret(context, output.Index)
 	if err != nil {
-		err = errors.Wrapf(err, "cannot get secretFromHDWallet for output with key index %d", output.Index)
+		err = errors.Wrapf(err, "cannot get secret for output with key index %d", output.Index)
 		return
 	}
 
@@ -524,9 +524,9 @@ func (t *Wallet) createOutput(
 	blind []byte,
 	err error,
 ) {
-	secret, index, err := t.newSecretFromHDWallet(context)
+	secret, index, err := t.newSecret(context)
 	if err != nil {
-		err = errors.Wrap(err, "cannot get newSecretFromHDWallet")
+		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
 

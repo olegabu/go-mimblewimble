@@ -19,7 +19,8 @@ func TestRound(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w := NewWallet(dir)
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
 	defer w.Close()
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)

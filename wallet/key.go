@@ -66,27 +66,26 @@ func (t *Wallet) createMasterKey() (masterKey *bip32.Key, err error) {
 	return
 }
 
-func (t *Wallet) newSecretFromHDWallet(context *secp256k1.Context) (secret [32]byte, index uint32, err error) {
+func (t *Wallet) createMasterKeyIfDoesntExist() (err error) {
+	masterKey, err := t.getMasterKey()
+	if err != nil {
+		masterKey, err = t.createMasterKey()
+		if err != nil {
+			return
+		}
+	}
+	t.masterKey = masterKey
+
+	return
+}
+
+func (t *Wallet) newSecret(context *secp256k1.Context) (secret [32]byte, index uint32, err error) {
 	index, err = t.db.NextIndex()
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get NextIndex from db")
 	}
 
-	var masterKey *bip32.Key
-
-	if index == 0 {
-		masterKey, err = t.createMasterKey()
-		if err != nil {
-			return [32]byte{}, 0, errors.Wrap(err, "cannot createMasterKey")
-		}
-	} else {
-		masterKey, err = t.getMasterKey()
-		if err != nil {
-			return [32]byte{}, 0, errors.Wrap(err, "cannot getMasterKey")
-		}
-	}
-
-	secret, err = secretFromIndex(context, masterKey, index)
+	secret, err = t.secret(context, index)
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get secretFromIndex")
 	}
@@ -94,22 +93,8 @@ func (t *Wallet) newSecretFromHDWallet(context *secp256k1.Context) (secret [32]b
 	return
 }
 
-func (t *Wallet) secretFromHDWallet(context *secp256k1.Context, index uint32) (secret [32]byte, err error) {
-	masterKey, err := t.getMasterKey()
-	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "cannot getMasterKey")
-	}
-
-	secret, err = secretFromIndex(context, masterKey, index)
-	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "cannot get secretFromIndex")
-	}
-
-	return
-}
-
-func secretFromIndex(context *secp256k1.Context, masterKey *bip32.Key, index uint32) (secret [32]byte, err error) {
-	childKey, err := masterKey.NewChildKey(index)
+func (t *Wallet) secret(context *secp256k1.Context, index uint32) (secret [32]byte, err error) {
+	childKey, err := t.masterKey.NewChildKey(index)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot get NewChildKey")
 	}

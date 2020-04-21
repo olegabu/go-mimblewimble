@@ -24,7 +24,8 @@ func TestWalletRound(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w := NewWallet(dir)
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
 	defer w.Close()
 
 	for _, value := range []int{1} {
@@ -71,8 +72,9 @@ func TestWalletRound(t *testing.T) {
 
 func TestInfo(t *testing.T) {
 	dir := testDbDir()
-	w := NewWallet(dir)
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
 	defer w.Close()
-	err := w.Info()
+	err = w.Info()
 	assert.NoError(t, err)
 }

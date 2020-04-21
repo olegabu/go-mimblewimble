@@ -82,7 +82,10 @@ func main() {
 				asset = args[1]
 			}
 
-			w := wallet.NewWallet(flagPersist)
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
 			defer w.Close()
 
 			txBytes, err := w.Issue(uint64(amount), asset)
@@ -114,7 +117,10 @@ func main() {
 				asset = args[1]
 			}
 
-			w := wallet.NewWallet(flagPersist)
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
 			defer w.Close()
 
 			slateBytes, err := w.Send(uint64(amount), asset)
@@ -147,7 +153,10 @@ func main() {
 				return errors.Wrap(err, "cannot read sender slate file "+slateFileName)
 			}
 
-			w := wallet.NewWallet(flagPersist)
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
 			defer w.Close()
 
 			responseSlateBytes, err := w.Receive(slateBytes)
@@ -180,7 +189,10 @@ func main() {
 				return errors.Wrap(err, "cannot read receiver slate file "+slateFileName)
 			}
 
-			w := wallet.NewWallet(flagPersist)
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
 			defer w.Close()
 
 			txBytes, err := w.Finalize(slateBytes)
@@ -208,10 +220,13 @@ func main() {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			w := wallet.NewWallet(flagPersist)
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
 			defer w.Close()
 
-			err := w.Confirm([]byte(args[0]))
+			err = w.Confirm([]byte(args[0]))
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Confirm")
 			}
@@ -245,10 +260,13 @@ func main() {
 		Long:  `Prints out outputs, slates, transactions stored in the wallet.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			w := wallet.NewWallet(flagPersist)
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
 			defer w.Close()
 
-			err := w.Info()
+			err = w.Info()
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Info")
 			}
@@ -326,10 +344,13 @@ func main() {
 
 			err = client.ListenForSuccessfulTxEvents(func(transactionId []byte) {
 
-				w := wallet.NewWallet(flagPersist)
+				w, err := wallet.NewWallet(flagPersist)
+				if err != nil {
+					fmt.Println(errors.Wrap(err, "cannot create wallet"))
+				}
 				defer w.Close()
 
-				err := w.Confirm(transactionId)
+				err = w.Confirm(transactionId)
 				if err != nil {
 					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", string(transactionId)).Error())
 				} else {

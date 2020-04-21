@@ -14,7 +14,8 @@ func TestCreateAndGetMasterKey(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w := NewWallet(dir)
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
 	defer w.Close()
 
 	masterKey, err := w.createMasterKey()
@@ -36,7 +37,8 @@ func TestSecretFromHDWallet(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w := NewWallet(dir)
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
 	defer w.Close()
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
@@ -45,7 +47,7 @@ func TestSecretFromHDWallet(t *testing.T) {
 	secrets := map[uint32][32]byte{}
 
 	for i := 0; i < 3; i++ {
-		secret, index, err := w.newSecretFromHDWallet(context)
+		secret, index, err := w.newSecret(context)
 		assert.NoError(t, err)
 		fmt.Printf("created i %d index %d secret %v\n", i, index, secret)
 		secrets[index] = secret
@@ -54,7 +56,7 @@ func TestSecretFromHDWallet(t *testing.T) {
 	fmt.Printf("created secrets %v\n", secrets)
 
 	for i := uint32(0); i < 3; i++ {
-		secret, err := w.secretFromHDWallet(context, i)
+		secret, err := w.secret(context, i)
 		assert.NoError(t, err)
 		fmt.Printf("got i %d secret %v\n", i, secret)
 
@@ -68,7 +70,8 @@ func TestNonce(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w := NewWallet(dir)
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
 	defer w.Close()
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)

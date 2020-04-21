@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"encoding/json"
+	"github.com/tyler-smith/go-bip32"
 	"os"
 	"strconv"
 
@@ -16,11 +17,16 @@ import (
 type Wallet struct {
 	persistDir string
 	db         Database
+	masterKey  *bip32.Key
 }
 
-func NewWallet(persistDir string /*db Database*/) *Wallet {
+func NewWallet(persistDir string /*db Database*/) (w *Wallet, err error) {
 	db := NewLeveldbDatabase(persistDir)
-	return &Wallet{persistDir: persistDir, db: db}
+	w = &Wallet{persistDir: persistDir, db: db}
+	if err = w.createMasterKeyIfDoesntExist(); err != nil {
+		return
+	}
+	return
 }
 
 func (t *Wallet) Close() {
@@ -154,10 +160,10 @@ func (t *Wallet) Info() error {
 		return errors.Wrap(err, "cannot ListOutputs")
 	}
 	outputTable := tablewriter.NewWriter(os.Stdout)
-	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit"})
+	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key"})
 	outputTable.SetCaption(true, "Outputs")
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:8], strconv.Itoa(int(output.Index))})
 	}
 	outputTable.Render()
 	print("\n")
@@ -178,7 +184,7 @@ func (t *Wallet) Info() error {
 			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
-	slateTable.SetAutoMergeCells(true)
+	//slateTable.SetAutoMergeCells(true)
 	//slateTable.SetRowLine(true)
 	slateTable.Render()
 	print("\n")
@@ -199,7 +205,7 @@ func (t *Wallet) Info() error {
 			transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
-	transactionTable.SetAutoMergeCells(true)
+	//transactionTable.SetAutoMergeCells(true)
 	//table.SetRowLine(true)
 	transactionTable.Render()
 	print("\n")
