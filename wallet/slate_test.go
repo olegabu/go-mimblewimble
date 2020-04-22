@@ -19,7 +19,7 @@ func TestRound(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWallet(dir)
+	w, err := NewWalletWithoutMasterKeyCheck(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
@@ -37,7 +37,7 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 	_, output2, _, err := w.createOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	inputs := []Output{*output1, *output2}
+	inputs := []*Output{output1, output2}
 
 	slateBytes, _, senderWalletSlate, err := w.CreateSlate(amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
@@ -69,12 +69,12 @@ func TestExcess(t *testing.T) {
 	fee := uint64(slate.Fee)
 	kex, err := ledger.CalculateExcess(context, &slate.Transaction, fee)
 	assert.NoError(t, err)
-	fmt.Printf("ledger.CalculateExcess: %s\n", kex.Hex(context))
+	fmt.Printf("ledger.CalculateExcess: %s\n", kex.String())
 
 	kex0 := slate.Transaction.Body.Kernels[0].Excess
 	fmt.Printf("slate.Transaction.Body.Kernels[0].Excess: %s\n", kex0)
 
-	assert.Equal(t, kex0, kex.Hex(context))
+	assert.Equal(t, kex0, kex.String())
 }
 
 var slateFinal []byte = []byte(`{

@@ -24,7 +24,7 @@ func TestWalletRound(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWallet(dir)
+	w, err := NewWalletWithoutMasterKeyCheck(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 

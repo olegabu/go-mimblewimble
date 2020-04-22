@@ -441,7 +441,7 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 	excessSig := secp256k1.AggsigSignatureSerialize(t.context, &finalSig)
 
 	tx.Body.Kernels[0].Excess = kernelExcess.String()
-  
+
 	tx.Body.Kernels[0].ExcessSig = hex.EncodeToString(excessSig[:])
 
 	ledgerTx := ledger.Transaction{
@@ -465,7 +465,7 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 }
 
 func (t *Wallet) blindFromOutput(
-	output Output,
+	output *Output,
 ) (
 	blind []byte,
 	err error,
@@ -518,8 +518,8 @@ func (t *Wallet) createOutput(
 		nil,
 		nil,
 		value,
-		blind32[:],
-		blind32[:],
+		blind[:],
+		blind[:],
 		nil,
 		nil,
 		nil)
@@ -530,7 +530,7 @@ func (t *Wallet) createOutput(
 
 	output = &core.Output{
 		Features: features,
-		Commit:   commitment.Hex(t.context),
+		Commit:   commitment.String(),
 		Proof:    hex.EncodeToString(proof),
 	}
 
