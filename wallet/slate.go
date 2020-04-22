@@ -18,7 +18,7 @@ func (t *Wallet) CreateSlate(
 	fee uint64,
 	asset string,
 	change uint64,
-	walletInputs []Output,
+	walletInputs []*Output,
 ) (
 	slateBytes []byte,
 	changeOutput *Output,
@@ -440,7 +440,8 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 
 	excessSig := secp256k1.AggsigSignatureSerialize(t.context, &finalSig)
 
-	tx.Body.Kernels[0].Excess = kernelExcess.Hex(t.context)
+	tx.Body.Kernels[0].Excess = kernelExcess.String()
+  
 	tx.Body.Kernels[0].ExcessSig = hex.EncodeToString(excessSig[:])
 
 	ledgerTx := ledger.Transaction{
@@ -517,8 +518,8 @@ func (t *Wallet) createOutput(
 		nil,
 		nil,
 		value,
-		blind,
-		blind,
+		blind32[:],
+		blind32[:],
 		nil,
 		nil,
 		nil)
