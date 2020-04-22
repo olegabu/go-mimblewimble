@@ -42,6 +42,11 @@ Cleanup: delete wallet databases (careful! demo and tests only).
 rm -rf ~/.mw*
 ``` 
 
+Create user's master secret key in the wallet. This will also print out a mnemonic you can use to recover your key.
+```bash
+mw init
+```
+
 Issue coins to yourself in the wallet. Observe new `Coinbase` outputs in your wallet by `mw info` command.
 ```bash
 mw issue 1

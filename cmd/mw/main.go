@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
+	tendermintCmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/cli"
 	"io/ioutil"
@@ -67,6 +67,38 @@ func presetRequiredFlags(cmd *cobra.Command) {
 
 func main() {
 
+	var initCmd = &cobra.Command{
+		Use:     "init [mnemonic]",
+		Short:   "Creates or recovers user's secret key",
+		Long:    `Creates user's master secret key if not found, or re-creates it from a supplied mnemonic'.`,
+		Example: `to create: mw init, to recover: mw init "citizen convince comfort sleep student potato frequent bike catalog dinosaur speed knife"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			w, err := wallet.NewWalletWithoutMasterKeyCheck(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
+
+			var mnemonic string
+			if len(args) > 0 {
+				mnemonic = args[0]
+			}
+
+			fmt.Printf("master secret key is in %v\n", flagPersist)
+
+			createdMnemonic, err := w.InitMasterKey(mnemonic)
+			if err != nil {
+				return errors.Wrap(err, "cannot initialize key")
+			}
+
+			if len(createdMnemonic) > 0 {
+				fmt.Printf("please record all the words of this mnemonic, use it if you ever need to recover your key\n%s\n", createdMnemonic)
+			}
+
+			return nil
+		},
+	}
+
 	var issueCmd = &cobra.Command{
 		Use:   "issue amount [asset]",
 		Short: "Creates outputs in the wallet",
@@ -82,9 +114,11 @@ func main() {
 				asset = args[1]
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
 
 			txBytes, err := w.Issue(uint64(amount), asset)
 			if err != nil {
@@ -115,9 +149,11 @@ func main() {
 				asset = args[1]
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
 
 			slateBytes, err := w.Send(uint64(amount), asset)
 			if err != nil {
@@ -149,9 +185,11 @@ func main() {
 				return errors.Wrap(err, "cannot read sender slate file "+slateFileName)
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
 
 			responseSlateBytes, err := w.Receive(slateBytes)
 			if err != nil {
@@ -183,9 +221,11 @@ func main() {
 				return errors.Wrap(err, "cannot read receiver slate file "+slateFileName)
 			}
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
 
 			txBytes, err := w.Finalize(slateBytes)
 			if err != nil {
@@ -212,11 +252,13 @@ func main() {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
 
-			err := w.Confirm([]byte(args[0]))
+			err = w.Confirm([]byte(args[0]))
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Confirm")
 			}
@@ -250,11 +292,13 @@ func main() {
 		Long:  `Prints out outputs, slates, transactions stored in the wallet.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			db := wallet.NewLeveldbDatabase(flagPersist)
-			w := wallet.NewWallet(db)
-			defer db.Close()
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
 
-			err := w.Info()
+			err = w.Info()
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Info")
 			}
@@ -332,11 +376,13 @@ func main() {
 
 			err = client.ListenForSuccessfulTxEvents(func(transactionId []byte) {
 
-				db := wallet.NewLeveldbDatabase(flagPersist)
-				w := wallet.NewWallet(db)
-				defer db.Close()
+				w, err := wallet.NewWallet(flagPersist)
+				if err != nil {
+					fmt.Println(errors.Wrap(err, "cannot create wallet"))
+				}
+				defer w.Close()
 
-				err := w.Confirm(transactionId)
+				err = w.Confirm(transactionId)
 				if err != nil {
 					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", string(transactionId)).Error())
 				} else {
@@ -379,7 +425,7 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
+	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
 	dir, err := homedir.Dir()
 	if err != nil {
@@ -387,25 +433,25 @@ func main() {
 	}
 	mwroot := filepath.Join(dir, ".mw")
 
-	rootCmd.PersistentFlags().StringVarP(&flagPersist, "persist", "", mwroot, "directory to use for databases")
+	rootCmd.PersistentFlags().StringVarP(&flagPersist, "persist", "", mwroot, "directory to use to store databases and user's master secret key")
 
 	// Tendermint commands
 
-	tendermintRootCmd := cmd.RootCmd
+	tendermintRootCmd := tendermintCmd.RootCmd
 	tendermintRootCmd.AddCommand(
-		cmd.GenValidatorCmd,
-		cmd.InitFilesCmd,
-		cmd.ProbeUpnpCmd,
-		cmd.LiteCmd,
-		cmd.ReplayCmd,
-		cmd.ReplayConsoleCmd,
-		cmd.ResetAllCmd,
-		cmd.ResetPrivValidatorCmd,
-		cmd.ShowValidatorCmd,
-		cmd.TestnetFilesCmd,
-		cmd.ShowNodeIDCmd,
-		cmd.GenNodeKeyCmd,
-		cmd.VersionCmd)
+		tendermintCmd.GenValidatorCmd,
+		tendermintCmd.InitFilesCmd,
+		tendermintCmd.ProbeUpnpCmd,
+		tendermintCmd.LiteCmd,
+		tendermintCmd.ReplayCmd,
+		tendermintCmd.ReplayConsoleCmd,
+		tendermintCmd.ResetAllCmd,
+		tendermintCmd.ResetPrivValidatorCmd,
+		tendermintCmd.ShowValidatorCmd,
+		tendermintCmd.TestnetFilesCmd,
+		tendermintCmd.ShowNodeIDCmd,
+		tendermintCmd.GenNodeKeyCmd,
+		tendermintCmd.VersionCmd)
 
 	tendermintBaseCmd := cli.PrepareBaseCmd(tendermintRootCmd, "TM", os.ExpandEnv(filepath.Join("$HOME", cfg.DefaultTendermintDir)))
 

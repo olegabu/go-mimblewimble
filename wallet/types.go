@@ -20,13 +20,14 @@ type Database interface {
 	ListOutputs() (outputs []Output, err error)
 	GetInputs(amount uint64, asset string) (inputs []*Output, change uint64, err error)
 	Confirm(transactionID []byte) error
+	NextIndex() (uint32, error)
 	Close()
 }
 
 type Output struct {
 	core.Output
-	Blind  [32]byte     `json:"blind,omitempty"`
-	Value  uint64       `json:"value,omitempty"`
+	Index  uint32       `json:"index"`
+	Value  uint64       `json:"value"`
 	Status OutputStatus `json:"status,omitempty"`
 	Asset  string       `json:"asset,omitempty"`
 }

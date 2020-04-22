@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"encoding/json"
+	"github.com/tyler-smith/go-bip32"
 	"os"
 	"strconv"
 
@@ -10,16 +11,58 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/olegabu/go-mimblewimble/ledger"
-	// "github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 
 type Wallet struct {
-	db Database
+	persistDir string
+	db         Database
+	masterKey  *bip32.Key
+	context    *secp256k1.Context
 }
 
-func NewWallet(db Database) *Wallet {
-	return &Wallet{db: db}
+func NewWallet(persistDir string) (w *Wallet, err error) {
+	w, err = NewWalletWithoutMasterKeyCheck(persistDir)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create NewWalletWithoutMasterKeyCheck")
+		return
+	}
+
+	if !w.masterKeyExists() {
+		err = errors.Errorf("cannot find master key in %v, run init first", persistDir)
+		return
+	}
+
+	_, err = w.InitMasterKey("")
+	if err != nil {
+		err = errors.Wrap(err, "cannot InitMasterKey")
+		return
+	}
+
+	return
+}
+
+func NewWalletWithoutMasterKeyCheck(persistDir string) (w *Wallet, err error) {
+	db, err := NewLeveldbDatabase(persistDir)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create NewLeveldbDatabase")
+		return
+	}
+
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+
+	w = &Wallet{persistDir: persistDir, db: db, context: context}
+
+	return
+}
+
+func (t *Wallet) Close() {
+	t.db.Close()
+	secp256k1.ContextDestroy(t.context)
 }
 
 func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error) {
@@ -28,7 +71,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := CreateSlate(nil, amount, 0, asset, change, inputs)
+	slateBytes, changeOutput, senderSlate, err := t.CreateSlate(amount, 0, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateSlate")
 	}
@@ -49,12 +92,12 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 }
 
 func (t *Wallet) Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
-	responseSlateBytes, receiverOutput, receiverSlate, err := CreateResponse(slateBytes)
+	responseSlateBytes, receiverOutput, receiverSlate, err := t.CreateResponse(slateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateResponse")
 	}
 
-	err = t.db.PutOutput(receiverOutput)
+	err = t.db.PutOutput(*receiverOutput)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutOutput")
 	}
@@ -96,7 +139,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	txBytes, tx, err := CreateTransaction(responseSlateBytes, senderSlate)
+	txBytes, tx, err := t.CreateTransaction(responseSlateBytes, senderSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateTransaction")
 	}
@@ -110,21 +153,10 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot ContextCreate")
-	}
-
-	defer secp256k1.ContextDestroy(context)
-
-	blind, _ := secret(context)
-	output, walletOutput, err := createOutput(context, blind[:], value, core.CoinbaseOutput, asset, OutputConfirmed)
+	output, walletOutput, _, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
-
-	// walletOutput.Status = OutputConfirmed
-	// walletOutput.Asset = asset
 
 	err = t.db.PutOutput(*walletOutput)
 	if err != nil {
@@ -150,10 +182,10 @@ func (t *Wallet) Info() error {
 		return errors.Wrap(err, "cannot ListOutputs")
 	}
 	outputTable := tablewriter.NewWriter(os.Stdout)
-	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit"})
+	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key"})
 	outputTable.SetCaption(true, "Outputs")
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:8], strconv.Itoa(int(output.Index))})
 	}
 	outputTable.Render()
 	print("\n")
@@ -174,7 +206,7 @@ func (t *Wallet) Info() error {
 			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
-	slateTable.SetAutoMergeCells(true)
+	//slateTable.SetAutoMergeCells(true)
 	//slateTable.SetRowLine(true)
 	slateTable.Render()
 	print("\n")
@@ -195,7 +227,7 @@ func (t *Wallet) Info() error {
 			transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
 		}
 	}
-	transactionTable.SetAutoMergeCells(true)
+	//transactionTable.SetAutoMergeCells(true)
 	//table.SetRowLine(true)
 	transactionTable.Render()
 	print("\n")
