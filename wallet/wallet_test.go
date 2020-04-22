@@ -28,6 +28,9 @@ func TestWalletRound(t *testing.T) {
 	assert.NoError(t, err)
 	defer w.Close()
 
+	_, err = w.InitMasterKey("")
+	assert.NoError(t, err)
+
 	for _, value := range []int{1} {
 		_, err := w.Issue(uint64(value), "cash")
 		assert.NoError(t, err)

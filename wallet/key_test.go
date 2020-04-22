@@ -7,6 +7,92 @@ import (
 	"testing"
 )
 
+const testMnemonic = "dish salon sea unlock asthma rigid grass gather action dignity quiz vacuum"
+const testMasterKey = "xprv9s21ZrQH143K24mEfYXCoeYDgPT5y18UJvNUc9JZZU37fRsS9znJF78KS2epJAzEbz6aRNH4fb2ptkf1AzDuBxivRx6LH9VQymyVRvw94hv"
+
+func TestInitMasterKeyWhenDoesntExist(t *testing.T) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
+	defer w.Close()
+
+	createdMnemonic, err := w.InitMasterKey("")
+	assert.NoError(t, err)
+	assert.NotNil(t, w.masterKey)
+	assert.NotEmpty(t, createdMnemonic)
+
+	fmt.Printf("createdMnemonic %v\n", createdMnemonic)
+}
+
+func TestInitMasterKeyWhenExists(t *testing.T) {
+	TestInitMasterKeyWhenDoesntExist(t)
+
+	dir := testDbDir()
+
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
+	defer w.Close()
+
+	createdMnemonic, err := w.InitMasterKey("")
+	assert.NoError(t, err)
+	assert.NotNil(t, w.masterKey)
+	assert.Empty(t, createdMnemonic)
+}
+
+func TestInitMasterKeyWithMnemonicWhenExists(t *testing.T) {
+	TestInitMasterKeyWhenDoesntExist(t)
+
+	dir := testDbDir()
+
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
+	defer w.Close()
+
+	_, err = w.InitMasterKey(testMnemonic)
+	assert.Error(t, err)
+
+	fmt.Printf("err %v\n", err)
+}
+
+func TestInitMasterKeyWithMnemonicWhenDoesntExist(t *testing.T) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
+	defer w.Close()
+
+	createdMnemonic, err := w.InitMasterKey(testMnemonic)
+	assert.NoError(t, err)
+	assert.NotNil(t, w.masterKey)
+	assert.Empty(t, createdMnemonic)
+
+	assert.Equal(t, testMasterKey, w.masterKey.String())
+}
+
+func TestMasterKeyFromMnemonic(t *testing.T) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w, err := NewWallet(dir)
+	assert.NoError(t, err)
+	defer w.Close()
+
+	err = w.masterKeyFromMnemonic(testMnemonic)
+	assert.NoError(t, err)
+	assert.NotNil(t, w.masterKey)
+
+	assert.Equal(t, testMasterKey, w.masterKey.String())
+}
+
 func TestCreateAndGetMasterKey(t *testing.T) {
 	dir := testDbDir()
 
@@ -17,13 +103,14 @@ func TestCreateAndGetMasterKey(t *testing.T) {
 	assert.NoError(t, err)
 	defer w.Close()
 
-	masterKey, err := w.createMasterKey()
+	mnemonic, err := w.createMasterKey()
 	assert.NoError(t, err)
-	assert.NotNil(t, masterKey)
+	assert.NotEmpty(t, mnemonic)
+	assert.NotNil(t, w.masterKey)
 
-	fmt.Printf("created masterKey\t%s\n", masterKey.String())
+	fmt.Printf("created masterKey\t%s\n", w.masterKey.String())
 
-	masterKey, err = w.getMasterKey()
+	masterKey, err := w.getMasterKey()
 	assert.NoError(t, err)
 	assert.NotNil(t, masterKey)
 
@@ -39,6 +126,9 @@ func TestSecretFromHDWallet(t *testing.T) {
 	w, err := NewWallet(dir)
 	assert.NoError(t, err)
 	defer w.Close()
+
+	_, err = w.InitMasterKey("")
+	assert.NoError(t, err)
 
 	secrets := map[uint32][32]byte{}
 

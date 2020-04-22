@@ -31,7 +31,8 @@ require (
 	github.com/sykesm/zap-logfmt v0.0.3 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	github.com/tendermint/tendermint v0.32.7
-	github.com/tendermint/tm-db v0.2.0
+	github.com/tendermint/tm-db v0.2.0 // indirect
 	github.com/tyler-smith/go-bip32 v0.0.0-20170922074101-2c9cfd177564
+	github.com/tyler-smith/go-bip39 v1.0.2
 	golang.org/x/crypto v0.0.0-20191122220453-ac88ee75c92c
 )

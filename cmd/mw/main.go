@@ -67,6 +67,38 @@ func presetRequiredFlags(cmd *cobra.Command) {
 
 func main() {
 
+	var initCmd = &cobra.Command{
+		Use:     "init [mnemonic]",
+		Short:   "Creates or recovers user's secret key",
+		Long:    `Creates user's master secret key if not found, or re-creates it from a supplied mnemonic'.`,
+		Example: `to create: mw init, to recover: mw init "citizen convince comfort sleep student potato frequent bike catalog dinosaur speed knife"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
+
+			var mnemonic string
+			if len(args) > 0 {
+				mnemonic = args[0]
+			}
+
+			fmt.Printf("master secret key location is %v\n", flagPersist)
+
+			createdMnemonic, err := w.InitMasterKey(mnemonic)
+			if err != nil {
+				return errors.Wrap(err, "cannot initialize key")
+			}
+
+			if len(createdMnemonic) > 0 {
+				fmt.Printf("please record all the words of this mnemonic, use it if you ever need to recover your key\n%s\n", createdMnemonic)
+			}
+
+			return nil
+		},
+	}
+
 	var issueCmd = &cobra.Command{
 		Use:   "issue amount [asset]",
 		Short: "Creates outputs in the wallet",
@@ -393,7 +425,7 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
+	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
 	dir, err := homedir.Dir()
 	if err != nil {
@@ -401,7 +433,7 @@ func main() {
 	}
 	mwroot := filepath.Join(dir, ".mw")
 
-	rootCmd.PersistentFlags().StringVarP(&flagPersist, "persist", "", mwroot, "directory to use for databases")
+	rootCmd.PersistentFlags().StringVarP(&flagPersist, "persist", "", mwroot, "directory to use to store databases and user's master secret key")
 
 	// Tendermint commands
 

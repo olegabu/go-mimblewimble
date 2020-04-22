@@ -36,11 +36,6 @@ func NewWallet(persistDir string /*db Database*/) (w *Wallet, err error) {
 
 	w = &Wallet{persistDir: persistDir, db: db, context: context}
 
-	if err = w.createMasterKeyIfDoesntExist(); err != nil {
-		err = errors.Wrap(err, "cannot createMasterKeyIfDoesntExist")
-		return
-	}
-
 	return
 }
 

@@ -23,6 +23,9 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 	defer w.Close()
 
+	_, err = w.InitMasterKey("")
+	assert.NoError(t, err)
+
 	inputValue := uint64(300)
 	amount := uint64(200)
 	fee := uint64(0)
@@ -66,10 +69,10 @@ func TestExcess(t *testing.T) {
 	fee := uint64(slate.Fee)
 	kex, err := ledger.CalculateExcess(context, &slate.Transaction, fee)
 	assert.NoError(t, err)
-	fmt.Printf("calculateExcess: %s\n", kex.Hex(context))
+	fmt.Printf("ledger.CalculateExcess: %s\n", kex.Hex(context))
 
 	kex0 := slate.Transaction.Body.Kernels[0].Excess
-	fmt.Printf("calculateExcess: %s\n", kex0)
+	fmt.Printf("slate.Transaction.Body.Kernels[0].Excess: %s\n", kex0)
 
 	assert.Equal(t, kex0, kex.Hex(context))
 }
