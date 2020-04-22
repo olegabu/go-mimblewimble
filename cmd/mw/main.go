@@ -73,7 +73,7 @@ func main() {
 		Long:    `Creates user's master secret key if not found, or re-creates it from a supplied mnemonic'.`,
 		Example: `to create: mw init, to recover: mw init "citizen convince comfort sleep student potato frequent bike catalog dinosaur speed knife"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			w, err := wallet.NewWallet(flagPersist)
+			w, err := wallet.NewWalletWithoutMasterKeyCheck(flagPersist)
 			if err != nil {
 				return errors.Wrap(err, "cannot create wallet")
 			}
@@ -84,7 +84,7 @@ func main() {
 				mnemonic = args[0]
 			}
 
-			fmt.Printf("master secret key location is %v\n", flagPersist)
+			fmt.Printf("master secret key is in %v\n", flagPersist)
 
 			createdMnemonic, err := w.InitMasterKey(mnemonic)
 			if err != nil {

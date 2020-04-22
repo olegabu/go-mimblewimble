@@ -21,7 +21,28 @@ type Wallet struct {
 	context    *secp256k1.Context
 }
 
-func NewWallet(persistDir string /*db Database*/) (w *Wallet, err error) {
+func NewWallet(persistDir string) (w *Wallet, err error) {
+	w, err = NewWalletWithoutMasterKeyCheck(persistDir)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create NewWalletWithoutMasterKeyCheck")
+		return
+	}
+
+	if !w.masterKeyExists() {
+		err = errors.Errorf("cannot find master key in %v, run init first", persistDir)
+		return
+	}
+
+	_, err = w.InitMasterKey("")
+	if err != nil {
+		err = errors.Wrap(err, "cannot InitMasterKey")
+		return
+	}
+
+	return
+}
+
+func NewWalletWithoutMasterKeyCheck(persistDir string) (w *Wallet, err error) {
 	db, err := NewLeveldbDatabase(persistDir)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create NewLeveldbDatabase")
