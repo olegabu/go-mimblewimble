@@ -439,9 +439,6 @@ func CreateTransaction(slateBytes []byte, senderSlate SenderSlate) ([]byte, Tran
 		return nil, Transaction{}, errors.Wrap(err, "excessPublicKey: CommitmentToPublicKey failed")
 	}
 
-	kernelExcess2 := sumPublicBlinds.Bytes(context)
-	kernelExcess2[0] += 6
-
 	// Verify final sig with pk from excess
 
 	err = secp256k1.AggsigVerifySingle(
