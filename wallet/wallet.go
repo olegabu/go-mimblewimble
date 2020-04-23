@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/tyler-smith/go-bip32"
 	"os"
+	"sort"
 	"strconv"
 
 	"github.com/blockcypher/libgrin/core"
@@ -181,11 +182,17 @@ func (t *Wallet) Info() error {
 	if err != nil {
 		return errors.Wrap(err, "cannot ListOutputs")
 	}
+
+	// sort outputs decreasing by child key index
+	sort.Slice(outputs, func(i, j int) bool {
+		return outputs[i].Index > outputs[j].Index
+	})
+
 	outputTable := tablewriter.NewWriter(os.Stdout)
 	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key"})
 	outputTable.SetCaption(true, "Outputs")
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:8], strconv.Itoa(int(output.Index))})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:4], strconv.Itoa(int(output.Index))})
 	}
 	outputTable.Render()
 	print("\n")
@@ -195,16 +202,21 @@ func (t *Wallet) Info() error {
 		return errors.Wrap(err, "cannot ListSlates")
 	}
 	slateTable := tablewriter.NewWriter(os.Stdout)
-	slateTable.SetHeader([]string{"id", "status", "amount", "asset", "in/out", "features", "commit"})
+	slateTable.SetHeader([]string{"id", "status", "amount", "asset", "inputs", "outputs"})
 	slateTable.SetCaption(true, "Slates")
 	for _, slate := range slates {
 		id, _ := slate.ID.MarshalText()
-		for iInput, input := range slate.Transaction.Body.Inputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
+
+		var inputs = ""
+		for _, input := range slate.Transaction.Body.Inputs {
+			inputs += input.Commit[0:4] + " "
 		}
-		for iOutput, output := range slate.Transaction.Body.Outputs {
-			slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
+		var outputs = ""
+		for _, output := range slate.Transaction.Body.Outputs {
+			outputs += output.Commit[0:4] + " "
 		}
+
+		slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, inputs, outputs})
 	}
 	//slateTable.SetAutoMergeCells(true)
 	//slateTable.SetRowLine(true)
@@ -216,16 +228,21 @@ func (t *Wallet) Info() error {
 		return errors.Wrap(err, "cannot ListTransactions")
 	}
 	transactionTable := tablewriter.NewWriter(os.Stdout)
-	transactionTable.SetHeader([]string{"id", "status", "asset", "in/out", "features", "commit"})
+	transactionTable.SetHeader([]string{"id", "status", "asset", "inputs", "outputs"})
 	transactionTable.SetCaption(true, "Transactions")
 	for _, tx := range transactions {
 		id, _ := tx.ID.MarshalText()
-		for iInput, input := range tx.Body.Inputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, "input " + strconv.Itoa(iInput), input.Features.String(), input.Commit[0:8]})
+
+		var inputs = ""
+		for _, input := range tx.Transaction.Body.Inputs {
+			inputs += input.Commit[0:4] + " "
 		}
-		for iOutput, output := range tx.Body.Outputs {
-			transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, "output " + strconv.Itoa(iOutput), output.Features.String(), output.Commit[0:8]})
+		var outputs = ""
+		for _, output := range tx.Transaction.Body.Outputs {
+			outputs += output.Commit[0:4] + " "
 		}
+
+		transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, inputs, outputs})
 	}
 	//transactionTable.SetAutoMergeCells(true)
 	//table.SetRowLine(true)
