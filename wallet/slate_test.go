@@ -19,7 +19,7 @@ func TestRound(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
@@ -33,11 +33,11 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	_, output1, _, err := w.createOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	output1, _, err := w.createOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	_, output2, _, err := w.createOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	output2, _, err := w.createOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	inputs := []*Output{output1, output2}
+	inputs := []Output{*output1, *output2}
 
 	slateBytes, _, senderWalletSlate, err := w.CreateSlate(amount, fee, asset, change, inputs)
 	assert.NoError(t, err)

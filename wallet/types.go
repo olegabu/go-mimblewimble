@@ -18,7 +18,7 @@ type Database interface {
 	ListSlates() (slates []Slate, err error)
 	ListTransactions() (transactions []Transaction, err error)
 	ListOutputs() (outputs []Output, err error)
-	GetInputs(amount uint64, asset string) (inputs []*Output, change uint64, err error)
+	GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error)
 	Confirm(transactionID []byte) error
 	NextIndex() (uint32, error)
 	Close()

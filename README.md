@@ -6,13 +6,12 @@ This is a toy. Do not use for production.
 
 Install Golang ([instructions](https://github.com/golang/go/wiki/Ubuntu)).
 ```bash
-sudo add-apt-repository ppa:longsleep/golang-backports
-sudo apt-get update
-sudo apt-get install golang-go
+sudo add-apt-repository ppa:longsleep/golang-backports && \
+sudo apt-get update && \
+sudo apt-get install golang-go && \
 
-echo "export GOPATH=~/go" >> ~/.bashrc
-echo "export GOBIN=~/go/bin" >> ~/.bashrc
-echo "export PATH=$PATH:$GOBIN" >> ~/.bashrc
+echo "export GOPATH=~/go" >> ~/.bashrc && \
+echo "export PATH=$PATH:~/go/bin" >> ~/.bashrc && \
 . ~/.bashrc
 ```
 
@@ -24,13 +23,9 @@ sudo apt-get install autoconf libtool libgmp3-dev
 ## Build and test
 
 ```bash
-# TODO remove once repo becomes public
-export GOPRIVATE=github.com/olegabu/go-secp256k1-zkp
+go install ./...
 
-# build and install
-make
-
-make test
+go test -v ./wallet ./ledger
 ```
 
 ## Demo offline wallet
@@ -118,30 +113,38 @@ Open sender's wallet in another console.
 
 Issue 1 coin to yourself in the wallet. This will create `issue-1.json` transaction file that needs to be 
  broadcast to the network to get validated and its Coinbase output recorded.
+Observe a new `Coinbase` output in the sender's wallet.
 ```bash
+mw init
 mw issue 1
 mw info
 ```
-Send this new Coinbase output to the consensus node.
+Send this new Coinbase output to the consensus node. 
+Observe both listening wallets receive `issue` event from the blockchain node.
 ```bash
 mw broadcast issue-1.json
 ```
 Now this output can be sent. This will create a `slate-send-<transaction uuid>.json`.
+Observe the Coinbase output turn from `Confirmed` to `Locked` state in the sender's wallet.
 ```bash
 mw send 1
 ```
 
-Open receiver's wallet in another console. 
+Open the receiver's wallet in another console. 
 
-Note that a separate persist directory needs to be set.
-Receiver's wallet is empty.
+Note that a separate persist directory needs to be set for the receiver.
+Observe receiver's wallet is empty.
 ```bash
 export MW_PERSIST=~/.mw_r
+mw init
 mw info
 ```
-Receive the input. This will create a `slate-receive-<transaction uuid>.json`.
+Receive the input from the slate saved by the sender. 
+This will create a `slate-receive-<transaction uuid>.json`.
+Observe a new `Unconfirmed` output in the receiver's wallet.
 ```bash
 mw recieve slate-send-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+mw info
 ```
 
 Return to the sender's wallet console.
@@ -151,12 +154,13 @@ Finalize the transaction. This will create a `tx-<transaction uuid>.json`.
 mw finalize slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
 ```
-Broadcast this transaction to the network.
+Broadcast this transaction to the network to get recorded in the ledger.
 ```bash
 mw broadcast tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 ```
-Observe both sender's and receiver's online wallets receive transfer event and update their databases.
-See original Coinbase output turn to `Spent` in the sender's wallet, and a new `Confirmed` output in the receiver's.
+Observe both the sender's and the receiver's online wallets receive transfer event and update their databases.
+See original Coinbase output turn to `Spent` in the sender's wallet, 
+and the output in the receiver's turn from `Unconfirmed` to `Confirmed`.
 
 ## Issue multiple assets
 

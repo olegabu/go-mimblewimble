@@ -18,32 +18,28 @@ func (t *Wallet) CreateSlate(
 	fee uint64,
 	asset string,
 	change uint64,
-	walletInputs []*Output,
+	walletInputs []Output,
 ) (
-	slateBytes []byte,
+	walletSlateBytes []byte,
 	changeOutput *Output,
 	senderSlate SenderSlate,
 	err error,
 ) {
-	// loop thru wallet inputs to collect slate inputs, sum their values,
+	// loop thru wallet inputs to turn them into slate inputs, sum their values,
 	// collect input blinding factors (negative)
 	var inputsTotal uint64
 	var inputBlinds [][]byte
 	var slateInputs []core.Input
 	for _, input := range walletInputs {
 		inputsTotal += input.Value
-
-		inputBlind, e := t.blindFromOutput(input)
+		// re-create child secret key from its saved index and use it as this input's blind
+		secret, e := t.secret(input.Index)
 		if e != nil {
-			err = errors.Wrap(err, "cannot get blind for input")
+			err = errors.Wrapf(e, "cannot get secret for input with key index %d", input.Index)
 			return
 		}
-
-		inputBlinds = append(inputBlinds, inputBlind)
-		slateInputs = append(slateInputs, core.Input{
-			Features: input.Features,
-			Commit:   input.Commit,
-		})
+		inputBlinds = append(inputBlinds, secret[:])
+		slateInputs = append(slateInputs, core.Input{Features: input.Features, Commit: input.Commit})
 	}
 
 	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
@@ -52,49 +48,58 @@ func (t *Wallet) CreateSlate(
 		return
 	}
 
-	// create and remember blinding factor for change output
+	// create change output and remember its blinding factor
 	var outputBlinds [][]byte
 	var slateOutputs []core.Output
 	if change > 0 {
-		_, changeOutput, changeBlind, err := t.createOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
-		if err != nil {
-			return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create changeOutput")
+		o, b, e := t.createOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
+		if e != nil {
+			err = errors.Wrap(e, "cannot create changeOutput")
+			return
 		}
-		outputBlinds = append(outputBlinds, changeBlind)
-		slateOutputs = append(slateOutputs, changeOutput.Output)
+		outputBlinds = append(outputBlinds, b)
+		slateOutputs = append(slateOutputs, o.Output)
+		changeOutput = o
 	}
+
 	// sum up inputs(-) and outputs(+) blinding factors and calculate their sum's public key
-	blindExcess1, err := secp256k1.BlindSum(t.context, outputBlinds, inputBlinds)
+	blindExcess, err := secp256k1.BlindSum(t.context, outputBlinds, inputBlinds)
 	if err != nil {
-		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create blinding excess sum")
+		err = errors.Wrap(err, "cannot create blinding excess sum")
+		return
 	}
 
 	// generate secret nonce
 	nonce, err := t.nonce()
 	if err != nil {
-		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get nonce")
+		err = errors.Wrap(err, "cannot get nonce")
+		return
 	}
 
 	// generate random kernel offset
 	kernelOffset, err := t.nonce()
 	if err != nil {
-		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get random offset")
+		err = errors.Wrap(err, "cannot get random offset")
+		return
 	}
 
-	// Subtract kernel offset from blinding excess sum
-	blindExcess, err := secp256k1.BlindSum(t.context, [][]byte{blindExcess1[:]}, [][]byte{kernelOffset[:]})
+	// subtract kernel offset from blinding excess
+	sumSenderBlinds, err := secp256k1.BlindSum(t.context, [][]byte{blindExcess[:]}, [][]byte{kernelOffset[:]})
 	if err != nil {
-		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot get offset for blind")
+		err = errors.Wrap(err, "cannot get offset for blind")
+		return
 	}
 
-	publicBlindExcess, err := t.pubKeyFromSecretKey(blindExcess[:])
+	publicBlindExcess, err := t.pubKeyFromSecretKey(sumSenderBlinds[:])
 	if err != nil {
-		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicBlindExcess")
+		err = errors.Wrap(err, "cannot create publicBlindExcess")
+		return
 	}
 
 	publicNonce, err := t.pubKeyFromSecretKey(nonce[:])
 	if err != nil {
-		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot create publicNonce")
+		err = errors.Wrap(err, "cannot create publicNonce")
+		return
 	}
 
 	// put these all into a slate and marshal it to json
@@ -136,27 +141,30 @@ func (t *Wallet) CreateSlate(
 	}
 
 	walletSlate := Slate{
-		Slate: *slate,
-		Asset: asset,
+		Slate:  *slate,
+		Asset:  asset,
+		Status: SlateSent,
 	}
 
-	slateBytes, err = json.Marshal(walletSlate)
+	walletSlateBytes, err = json.Marshal(walletSlate)
 	if err != nil {
-		return nil, nil, SenderSlate{}, errors.Wrap(err, "cannot marshal walletSlate to json")
+		err = errors.Wrap(err, "cannot marshal walletSlate to json")
+		return
 	}
 
-	senderSlate = SenderSlate{Slate: walletSlate}
-	copy(senderSlate.SenderNonce[:], nonce[:])
-	copy(senderSlate.SumSenderBlinds[:], blindExcess[:])
-	senderSlate.Status = SlateSent
+	senderSlate = SenderSlate{
+		Slate:           walletSlate,
+		SenderNonce:     nonce,
+		SumSenderBlinds: sumSenderBlinds,
+	}
 
-	return slateBytes, changeOutput, senderSlate, nil
+	return
 }
 
 func (t *Wallet) CreateResponse(
 	slateBytes []byte,
 ) (
-	responseSlateBytes []byte,
+	walletSlateBytes []byte,
 	walletOutput *Output,
 	receiverSlate ReceiverSlate,
 	err error,
@@ -172,7 +180,7 @@ func (t *Wallet) CreateResponse(
 	// fee := uint64(slate.Fee)
 
 	// create receiver output and remember its blinding factor and calculate its public key
-	output, walletOutput, outputBlind, err := t.createOutput(value, core.PlainOutput, slate.Asset, OutputUnconfirmed)
+	walletOutput, outputBlind, err := t.createOutput(value, core.PlainOutput, slate.Asset, OutputUnconfirmed)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create receiver output")
 		return
@@ -183,7 +191,7 @@ func (t *Wallet) CreateResponse(
 		return
 	}
 
-	// choose receiver secret and calculate its public key
+	// choose receiver nonce and calculate its public key
 	receiverNonce, err := t.nonce()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
@@ -235,7 +243,7 @@ func (t *Wallet) CreateResponse(
 	}
 
 	// Add transaction output
-	slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, *output)
+	slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, walletOutput.Output)
 
 	// Update slate with the receiver's info
 	receiverPartSigBytes := secp256k1.AggsigSignaturePartialSerialize(&receiverPartSig)
@@ -250,11 +258,12 @@ func (t *Wallet) CreateResponse(
 	})
 
 	walletSlate := Slate{
-		Slate: slate.Slate,
-		Asset: slate.Asset,
+		Slate:  slate.Slate,
+		Asset:  slate.Asset,
+		Status: SlateResponded,
 	}
 
-	responseSlateBytes, err = json.Marshal(walletSlate)
+	walletSlateBytes, err = json.Marshal(walletSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal slate to json")
 		return
@@ -264,7 +273,6 @@ func (t *Wallet) CreateResponse(
 		Slate:         walletSlate,
 		ReceiverNonce: receiverNonce,
 	}
-	receiverSlate.Status = SlateResponded
 
 	return
 }
@@ -464,30 +472,12 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 	return
 }
 
-func (t *Wallet) blindFromOutput(
-	output *Output,
-) (
-	blind []byte,
-	err error,
-) {
-	secret, err := t.secret(output.Index)
-	if err != nil {
-		err = errors.Wrapf(err, "cannot get secret for output with key index %d", output.Index)
-		return
-	}
-
-	blind = secret[:]
-
-	return
-}
-
 func (t *Wallet) createOutput(
 	value uint64,
 	features core.OutputFeatures,
 	asset string,
 	status OutputStatus,
 ) (
-	output *core.Output,
 	walletOutput *Output,
 	blind []byte,
 	err error,
@@ -528,14 +518,12 @@ func (t *Wallet) createOutput(
 		return
 	}
 
-	output = &core.Output{
-		Features: features,
-		Commit:   commitment.String(),
-		Proof:    hex.EncodeToString(proof),
-	}
-
 	walletOutput = &Output{
-		Output: *output,
+		Output: core.Output{
+			Features: features,
+			Commit:   commitment.String(),
+			Proof:    hex.EncodeToString(proof),
+		},
 		Value:  value,
 		Asset:  asset,
 		Index:  index,

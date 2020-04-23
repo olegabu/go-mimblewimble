@@ -73,7 +73,7 @@ func main() {
 		Long:    `Creates user's master secret key if not found, or re-creates it from a supplied mnemonic'.`,
 		Example: `to create: mw init, to recover: mw init "citizen convince comfort sleep student potato frequent bike catalog dinosaur speed knife"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			w, err := wallet.NewWalletWithoutMasterKeyCheck(flagPersist)
+			w, err := wallet.NewWalletWithoutMasterKey(flagPersist)
 			if err != nil {
 				return errors.Wrap(err, "cannot create wallet")
 			}
@@ -240,7 +240,7 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
-			fmt.Printf("wrote transaction %v, send it to the network to get validated: broadcast %v\nthen tell wallet the transaction has been confirmed: confirm %v\n", string(id), fileName, string(id))
+			fmt.Printf("wrote transaction %v, send it to the network to get validated: broadcast %v\nthen tell the wallet the transaction has been confirmed: confirm %v\n", string(id), fileName, string(id))
 			return nil
 		},
 	}
@@ -251,7 +251,6 @@ func main() {
 		Long:  `Tells the wallet the transaction has been confirmed by the network so the outputs become valid and inputs spent.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
 				return errors.Wrap(err, "cannot create wallet")
@@ -262,6 +261,7 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Confirm")
 			}
+			fmt.Printf("confirmed transaction: marked inputs as spent and outputs as confirmed")
 			return nil
 		},
 	}
@@ -340,8 +340,8 @@ func main() {
 
 	var eventsCmd = &cobra.Command{
 		Use:   "events",
-		Short: "Listens to and prints tendermint tx events",
-		Long:  `Subscribes to tendermint events and prints out transaction events.`,
+		Short: "Listens to and prints transaction events",
+		Long:  `Subscribes to events from the network and prints out transaction events.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := abci.NewClient(flagAddress)
 			if err != nil {
@@ -365,8 +365,8 @@ func main() {
 
 	var listenCmd = &cobra.Command{
 		Use:   "listen",
-		Short: "Listens to and processes successful tendermint tx events",
-		Long:  `Subscribes to tendermint events and updates wallet with confirmed transactions.`,
+		Short: "Listens to and processes successful transaction events",
+		Long:  `Subscribes to events from the network and updates wallet with confirmed transactions.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := abci.NewClient(flagAddress)
 			if err != nil {

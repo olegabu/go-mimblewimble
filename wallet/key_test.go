@@ -16,7 +16,7 @@ func TestInitMasterKeyWhenDoesntExist(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
@@ -64,7 +64,7 @@ func TestInitMasterKeyWithMnemonicWhenDoesntExist(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
@@ -82,7 +82,7 @@ func TestMasterKeyFromMnemonic(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
@@ -99,7 +99,7 @@ func TestCreateAndGetMasterKey(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
@@ -123,7 +123,7 @@ func TestSecretFromHDWallet(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
@@ -156,7 +156,7 @@ func TestNonce(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 

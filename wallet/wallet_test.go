@@ -1,7 +1,6 @@
 package wallet
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
@@ -24,19 +23,22 @@ func TestWalletRound(t *testing.T) {
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
 
-	w, err := NewWalletWithoutMasterKeyCheck(dir)
+	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
 	_, err = w.InitMasterKey("")
 	assert.NoError(t, err)
 
-	for _, value := range []int{1} {
-		_, err := w.Issue(uint64(value), "cash")
+	for _, value := range []uint64{1, 2, 3} {
+		_, err := w.Issue(value, "cash")
 		assert.NoError(t, err)
 	}
 
-	slateBytes, err := w.Send(1, "cash")
+	err = w.Info()
+	assert.NoError(t, err)
+
+	slateBytes, err := w.Send(4, "cash")
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
 
@@ -57,16 +59,10 @@ func TestWalletRound(t *testing.T) {
 	err = w.Info()
 	assert.NoError(t, err)
 
-	_, err = ledger.ValidateTransactionBytes(txBytes)
+	tx, err := ledger.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
 
-	responseSlate := Slate{}
-	err = json.Unmarshal(responseSlateBytes, &responseSlate)
-	assert.NoError(t, err)
-	txID, err := responseSlate.ID.MarshalText()
-	assert.NoError(t, err)
-
-	err = w.Confirm(txID)
+	err = w.Confirm([]byte(tx.ID.String()))
 	assert.NoError(t, err)
 
 	err = w.Info()

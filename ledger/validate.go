@@ -214,7 +214,7 @@ func CalculateExcess(
 	}
 
 	// subtract the kernel_excess (built from kernel_offset)
-        offsetbytes, _ := hex.DecodeString(tx.Offset)
+	offsetbytes, _ := hex.DecodeString(tx.Offset)
 	kernelOffset, err := secp256k1.Commit(context, offsetbytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return nil, errors.Wrap(err, "error calculating offset commitment")
@@ -412,4 +412,3 @@ func validateBulletproof(
 
 	return nil
 }
-

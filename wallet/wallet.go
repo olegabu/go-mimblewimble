@@ -22,9 +22,9 @@ type Wallet struct {
 }
 
 func NewWallet(persistDir string) (w *Wallet, err error) {
-	w, err = NewWalletWithoutMasterKeyCheck(persistDir)
+	w, err = NewWalletWithoutMasterKey(persistDir)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create NewWalletWithoutMasterKeyCheck")
+		err = errors.Wrap(err, "cannot create NewWalletWithoutMasterKey")
 		return
 	}
 
@@ -42,7 +42,7 @@ func NewWallet(persistDir string) (w *Wallet, err error) {
 	return
 }
 
-func NewWalletWithoutMasterKeyCheck(persistDir string) (w *Wallet, err error) {
+func NewWalletWithoutMasterKey(persistDir string) (w *Wallet, err error) {
 	db, err := NewLeveldbDatabase(persistDir)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create NewLeveldbDatabase")
@@ -88,11 +88,11 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot PutSlate")
 	}
 
-	return slateBytes, nil
+	return
 }
 
-func (t *Wallet) Receive(slateBytes []byte) (responseSlateBytes []byte, err error) {
-	responseSlateBytes, receiverOutput, receiverSlate, err := t.CreateResponse(slateBytes)
+func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err error) {
+	responseSlateBytes, receiverOutput, receiverSlate, err := t.CreateResponse(sendSlateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot CreateResponse")
 	}
@@ -121,7 +121,7 @@ func (t *Wallet) Receive(slateBytes []byte) (responseSlateBytes []byte, err erro
 		return nil, errors.Wrap(err, "cannot PutTransaction")
 	}
 
-	return responseSlateBytes, nil
+	return
 }
 
 func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
@@ -153,7 +153,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	output, walletOutput, _, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
+	walletOutput, _, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
@@ -164,7 +164,7 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 	}
 
 	ledgerIssue := ledger.Issue{
-		Output: *output,
+		Output: walletOutput.Output,
 		Asset:  asset,
 	}
 
