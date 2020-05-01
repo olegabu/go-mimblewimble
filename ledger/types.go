@@ -22,8 +22,9 @@ type Transaction struct {
 }
 
 type Issue struct {
-	Output     core.Output `json:"output"`
-	Asset      string      `json:"asset,omitempty"`
-	AssetSig   []byte      `json:"asset_sig,omitempty"`
-	IssuerCert []byte      `json:"issue_cert,omitempty"`
+	Output     core.Output   `json:"output"`
+	Asset      string        `json:"asset,omitempty"`
+	AssetSig   []byte        `json:"asset_sig,omitempty"`
+	IssuerCert []byte        `json:"issue_cert,omitempty"`
+	Kernel     core.TxKernel `json:"kernel,omitempty"`
 }

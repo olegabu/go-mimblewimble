@@ -154,9 +154,14 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, _, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
+	walletOutput, blind, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
+	}
+
+	excess, err := secp256k1.Commit(t.context, blind, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot create excess")
 	}
 
 	err = t.db.PutOutput(*walletOutput)
@@ -167,6 +172,10 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 	ledgerIssue := ledger.Issue{
 		Output: walletOutput.Output,
 		Asset:  asset,
+		Kernel: core.TxKernel{
+			Features: core.CoinbaseKernel,
+			Excess:   excess.String(),
+		},
 	}
 
 	issueBytes, err = json.Marshal(ledgerIssue)

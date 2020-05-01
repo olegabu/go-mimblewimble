@@ -261,7 +261,7 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Confirm")
 			}
-			fmt.Printf("confirmed transaction: marked inputs as spent and outputs as confirmed")
+			fmt.Println("confirmed transaction: marked inputs as spent and outputs as confirmed")
 			return nil
 		},
 	}

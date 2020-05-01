@@ -54,7 +54,7 @@ func (t *Wallet) CreateSlate(
 	if change > 0 {
 		o, b, e := t.createOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
 		if e != nil {
-			err = errors.Wrap(e, "cannot create changeOutput")
+			err = errors.Wrap(e, "cannot create change output")
 			return
 		}
 		outputBlinds = append(outputBlinds, b)
@@ -277,43 +277,43 @@ func (t *Wallet) CreateResponse(
 	return
 }
 
-func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (ledgerTxBytes []byte, walletTx Transaction, err error) {
-	// get secret keys from sender's slate that has blind and secret nonces
+func (t *Wallet) CreateTransaction(responseSlateBytes []byte, senderSlate SenderSlate) (ledgerTxBytes []byte, walletTx Transaction, err error) {
+	// get secret keys from sender's responseSlate that has blind and secret nonces
 	senderBlind := senderSlate.SumSenderBlinds[:]
 	senderNonce := senderSlate.SenderNonce[:]
 	// calculate public keys from secret keys
 	senderPublicBlind_, _ := t.pubKeyFromSecretKey(senderBlind)
 	senderPublicNonce_, _ := t.pubKeyFromSecretKey(senderNonce)
 
-	// parse slate
+	// parse responseSlate
 
-	var slate = Slate{}
-	err = json.Unmarshal(slateBytes, &slate)
+	var responseSlate = Slate{}
+	err = json.Unmarshal(responseSlateBytes, &responseSlate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to slate")
+		err = errors.Wrap(err, "cannot unmarshal json to responseSlate")
 		return
 	}
 
-	// parse out public blinds and nonces for both sender and receiver from the slate
+	// parse out public blinds and nonces for both sender and receiver from the responseSlate
 
-	if len(slate.ParticipantData) != 2 {
+	if len(responseSlate.ParticipantData) != 2 {
 		err = errors.New("expected 2 entries in ParticipantData")
 		return
 	}
 
-	// Get public keys from slate
-	senderPublicBlind := t.context.PublicKeyFromHex(slate.ParticipantData[0].PublicBlindExcess)
-	senderPublicNonce := t.context.PublicKeyFromHex(slate.ParticipantData[0].PublicNonce)
+	// Get public keys from responseSlate
+	senderPublicBlind := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicBlindExcess)
+	senderPublicNonce := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicNonce)
 
 	// Verify that the response we've got from Receiver has Sender's public key and secret unchanghed
 	if (0 != bytes.Compare(senderPublicBlind.Bytes(t.context), senderPublicBlind_.Bytes(t.context))) ||
 		(0 != bytes.Compare(senderPublicNonce.Bytes(t.context), senderPublicNonce_.Bytes(t.context))) {
-		err = errors.Wrap(err, "public keys mismatch, calculated values are not the same as loaded from slate")
+		err = errors.Wrap(err, "public keys mismatch, calculated values are not the same as loaded from responseSlate")
 		return
 	}
 
-	receiverPublicBlind := t.context.PublicKeyFromHex(slate.ParticipantData[1].PublicBlindExcess)
-	receiverPublicNonce := t.context.PublicKeyFromHex(slate.ParticipantData[1].PublicNonce)
+	receiverPublicBlind := t.context.PublicKeyFromHex(responseSlate.ParticipantData[1].PublicBlindExcess)
+	receiverPublicNonce := t.context.PublicKeyFromHex(responseSlate.ParticipantData[1].PublicNonce)
 
 	var sumPublicBlinds, sumPublicNonces *secp256k1.PublicKey
 	if sumPublicBlinds, err = t.sumPubKeys([]*secp256k1.PublicKey{senderPublicBlind, receiverPublicBlind}); err != nil {
@@ -326,10 +326,10 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 	}
 
 	// calculate message hash
-	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
+	msg := ledger.KernelSignatureMessage(responseSlate.Transaction.Body.Kernels[0])
 
 	// decode receiver's partial signature
-	receiverPartSigBytes, err := hex.DecodeString(*slate.ParticipantData[1].PartSig)
+	receiverPartSigBytes, err := hex.DecodeString(*responseSlate.ParticipantData[1].PartSig)
 	if err != nil {
 		err = errors.Wrap(err, "cannot parse receiverPartialSig from hex")
 		return
@@ -414,11 +414,11 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 		return
 	}
 
-	tx := slate.Transaction
+	tx := responseSlate.Transaction
 
 	// calculate kernel excess as a sum of commitments of inputs, outputs and kernel offset
 	// that would produce a *Commitment type result
-	kernelExcess, err := ledger.CalculateExcess(t.context, &tx, uint64(slate.Fee))
+	kernelExcess, err := ledger.CalculateExcess(t.context, &tx, uint64(responseSlate.Fee))
 	if err != nil {
 		err = errors.Wrap(err, "cannot calculate final kernel excess")
 		return
@@ -449,12 +449,11 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 	excessSig := secp256k1.AggsigSignatureSerialize(t.context, &finalSig)
 
 	tx.Body.Kernels[0].Excess = kernelExcess.String()
-
 	tx.Body.Kernels[0].ExcessSig = hex.EncodeToString(excessSig[:])
 
 	ledgerTx := ledger.Transaction{
 		Transaction: tx,
-		ID:          slate.ID,
+		ID:          responseSlate.ID,
 	}
 
 	ledgerTxBytes, err = json.Marshal(ledgerTx)
@@ -466,7 +465,7 @@ func (t *Wallet) CreateTransaction(slateBytes []byte, senderSlate SenderSlate) (
 	walletTx = Transaction{
 		Transaction: ledgerTx,
 		Status:      TransactionUnconfirmed,
-		Asset:       slate.Asset,
+		Asset:       responseSlate.Asset,
 	}
 
 	return
@@ -536,7 +535,7 @@ func (t *Wallet) createOutput(
 func (t *Wallet) pubKeyFromSecretKey(sk32 []byte) (*secp256k1.PublicKey, error) {
 	res, pk, err := secp256k1.EcPubkeyCreate(t.context, sk32)
 	if res != 1 || pk == nil || err != nil {
-		return nil, errors.Wrap(err, "cannot create Public key from Secret key")
+		return nil, errors.Wrap(err, "cannot create pubKeyFromSecretKey")
 	}
 
 	return pk, nil

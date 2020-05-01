@@ -33,11 +33,11 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	output1, _, err := w.createOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.createOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	output2, _, err := w.createOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.createOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	inputs := []Output{*output1, *output2}
+	inputs := []Output{*input1, *input2}
 
 	slateBytes, _, senderWalletSlate, err := w.CreateSlate(amount, fee, asset, change, inputs)
 	assert.NoError(t, err)

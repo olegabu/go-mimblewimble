@@ -1,7 +1,10 @@
 package wallet
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"github.com/olegabu/go-secp256k1-zkp"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -38,7 +41,91 @@ func TestWalletRound(t *testing.T) {
 	err = w.Info()
 	assert.NoError(t, err)
 
-	slateBytes, err := w.Send(4, "cash")
+	tx := testTransfer(t, w, 4, "cash")
+
+	// take 3 inputs 1+2+3 for 2 outputs: receiver 4 and change 2
+	assert.Equal(t, 3, len(tx.Body.Inputs))
+	assert.Equal(t, 2, len(tx.Body.Outputs))
+
+	tx = testTransfer(t, w, 6, "cash")
+
+	// take 2 inputs 2+4 for 1 output: receiver 6
+	assert.Equal(t, 2, len(tx.Body.Inputs))
+	assert.Equal(t, 1, len(tx.Body.Outputs))
+}
+
+func TestTotalIssues(t *testing.T) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w, err := NewWalletWithoutMasterKey(dir)
+	assert.NoError(t, err)
+	defer w.Close()
+
+	_, err = w.InitMasterKey("")
+	assert.NoError(t, err)
+
+	outputCommitments := make([]*secp256k1.Commitment, 0)
+	excessCommitments := make([]*secp256k1.Commitment, 0)
+
+	var totalIssues uint64
+
+	// issue several tokens of the same asset, sum total number issued,
+	// collect issue kernel excesses into excessCommitments;
+	// issue kernel excess is a public blind, as input value to an issue is zero KEI = RI*G + 0*H
+	for _, value := range []uint64{1, 2, 3} {
+		totalIssues += value
+		issueBytes, err := w.Issue(value, "cash")
+		assert.NoError(t, err)
+		issue := ledger.Issue{}
+		err = json.Unmarshal(issueBytes, &issue)
+		assert.NoError(t, err)
+		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
+		assert.NoError(t, err)
+		excessCommitments = append(excessCommitments, issueExcess)
+	}
+
+	// commitment to total tokens issued is with a zero blind TI = 0*G + totalIssues*H
+	totalIssuesBlind := [32]byte{} // zero
+	totalIssuesCommitment, err := secp256k1.Commit(w.context, totalIssuesBlind[:], totalIssues, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	assert.NoError(t, err)
+
+	// transfer 5 out of total issued 6 to have 2 outputs: receiver 5 and change 1
+	tx := testTransfer(t, w, 5, "cash")
+
+	// collect outputs into outputCommitments
+	for _, output := range tx.Body.Outputs {
+		com, err := secp256k1.CommitmentFromString(output.Commit)
+		assert.NoError(t, err)
+		outputCommitments = append(outputCommitments, com)
+	}
+
+	// add transfer transaction kernel excess to excessCommitments
+	transferExcess, err := secp256k1.CommitmentFromString(tx.Body.Kernels[0].Excess)
+	assert.NoError(t, err)
+	excessCommitments = append(excessCommitments, transferExcess)
+
+	// add kernel offset to excessCommitments
+	offsetBytes, _ := hex.DecodeString(tx.Offset)
+	kernelOffset, err := secp256k1.Commit(w.context, offsetBytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	assert.NoError(t, err)
+	excessCommitments = append(excessCommitments, kernelOffset)
+
+	// subtract all kernel excesses (from issues and transfers) from all remaining outputs
+	// sum(O) - (sum(KE) + sum(offset)*G + sum(KEI))
+	sumCommitment, err := secp256k1.CommitSum(w.context, outputCommitments, excessCommitments)
+	assert.NoError(t, err)
+
+	// difference of remaining outputs and all excesses should equal to the commitment to value of total issued;
+	// ex. for one issue I and one transfer from I to O:
+	// sum(O) - sum(KE) = O - KE - KEI = RO*G + VO*H - (RO*G + VO*H - RI*G - VI*H) - (RI*G + 0*H) = 0*G + VI*H
+	assert.Equal(t, sumCommitment.String(), totalIssuesCommitment.String())
+}
+
+func testTransfer(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
+	slateBytes, err := w.Send(amount, asset)
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
 
@@ -59,7 +146,7 @@ func TestWalletRound(t *testing.T) {
 	err = w.Info()
 	assert.NoError(t, err)
 
-	tx, err := ledger.ValidateTransactionBytes(txBytes)
+	tx, err = ledger.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
 
 	err = w.Confirm([]byte(tx.ID.String()))
@@ -67,6 +154,8 @@ func TestWalletRound(t *testing.T) {
 
 	err = w.Info()
 	assert.NoError(t, err)
+
+	return
 }
 
 func TestInfo(t *testing.T) {

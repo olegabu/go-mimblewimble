@@ -26,6 +26,12 @@ func PersistTransaction(tx *Transaction, db Database) error {
 		}
 	}
 
+	if len(tx.Transaction.Body.Kernels) != 0 {
+		return errors.New("expected one kernel in transaction")
+	}
+
+	//tx.Transaction.Body.Kernels[0].Excess
+
 	return nil
 }
 func PersistIssue(issue *Issue, db Database) error {

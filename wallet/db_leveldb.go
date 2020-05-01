@@ -79,14 +79,9 @@ func (t *leveldbDatabase) PutTransaction(transaction Transaction) error {
 		return errors.Wrap(err, "cannot marshal transaction into json")
 	}
 
-	id, err := transaction.ID.MarshalText()
-	if err != nil {
-		return errors.Wrap(err, "cannot marshal ID into bytes")
-	}
+	key := transactionKey(transaction.ID.String())
 
-	id = append([]byte("transaction"), id...)
-
-	err = t.db.Put(id, transactionBytes, nil)
+	err = t.db.Put(key, transactionBytes, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot Put transaction")
 	}
@@ -100,6 +95,10 @@ func outputKey(output Output) []byte {
 
 func outputRange(asset string) *util.Range {
 	return util.BytesPrefix([]byte("output." + asset))
+}
+
+func transactionKey(id string) []byte {
+	return []byte("transaction." + id)
 }
 
 func (t *leveldbDatabase) PutOutput(output Output) error {
@@ -258,9 +257,7 @@ func (t *leveldbDatabase) ListOutputs() (outputs []Output, err error) {
 }
 
 func (t *leveldbDatabase) GetTransaction(id []byte) (transaction Transaction, err error) {
-	id = append([]byte("transaction"), id...)
-
-	transactionBytes, err := t.db.Get(id, nil)
+	transactionBytes, err := t.db.Get(transactionKey(string(id)), nil)
 	if err != nil {
 		return Transaction{}, errors.Wrap(err, "cannot Get transaction")
 	}
