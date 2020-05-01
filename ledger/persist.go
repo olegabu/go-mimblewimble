@@ -28,7 +28,7 @@ func PersistTransaction(tx *Transaction, db Database) error {
 		}
 	}
 
-	if len(tx.Transaction.Body.Kernels) != 0 {
+	if len(tx.Transaction.Body.Kernels) != 1 {
 		return errors.New("expected one kernel in transaction")
 	}
 
