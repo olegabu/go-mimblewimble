@@ -39,11 +39,20 @@ func (t *shimDatabase) SpendInput(input core.Input) error {
 	return nil
 }
 
-func (t *shimDatabase) PutOutput(output core.Output) error {
-	outputBytes, _ := json.Marshal(output)
-	err := t.stub.PutState(t.outputKey(output.Commit), outputBytes)
+func (t *shimDatabase) PutOutput(o core.Output) error {
+	bytes, _ := json.Marshal(o)
+	err := t.stub.PutState(t.outputKey(o.Commit), bytes)
 	if err != nil {
-		return errors.Wrapf(err, "cannot PutState output %v", output)
+		return errors.Wrapf(err, "cannot PutState o %v", o)
+	}
+	return nil
+}
+
+func (t *shimDatabase) PutKernel(o core.TxKernel) error {
+	bytes, _ := json.Marshal(o)
+	err := t.stub.PutState(t.kernelKey(o), bytes)
+	if err != nil {
+		return errors.Wrapf(err, "cannot PutState o %v", o)
 	}
 	return nil
 }
@@ -64,8 +73,8 @@ func (t *shimDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
 	return
 }
 
-func (t *shimDatabase) ListOutputs() (outputsBytes []byte, err error) {
-	outputs := make([]core.Output, 0)
+func (t *shimDatabase) ListOutputs() (bytes []byte, err error) {
+	list := make([]core.Output, 0)
 
 	iter, err := t.stub.GetStateByPartialCompositeKey("output", nil)
 	if err != nil {
@@ -78,20 +87,60 @@ func (t *shimDatabase) ListOutputs() (outputsBytes []byte, err error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "cannot iter.Next")
 		}
-		output := core.Output{}
-		err = json.Unmarshal(kv.Value, &output)
-		outputs = append(outputs, output)
+		o := core.Output{}
+		err = json.Unmarshal(kv.Value, &o)
+		list = append(list, o)
 	}
 
-	outputsBytes, err = json.Marshal(outputs)
+	bytes, err = json.Marshal(list)
 	if err != nil {
-		return nil, errors.Wrapf(err, "cannot marshal outputs")
+		return nil, errors.Wrapf(err, "cannot marshal list")
 	}
 
 	return
 }
 
+func (t *shimDatabase) ListKernels() (bytes []byte, err error) {
+	list := make([]core.TxKernel, 0)
+
+	iter, err := t.stub.GetStateByPartialCompositeKey("kernel", nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot GetStateByPartialCompositeKey")
+	}
+	defer iter.Close()
+
+	for iter.HasNext() {
+		kv, err := iter.Next()
+		if err != nil {
+			return nil, errors.Wrapf(err, "cannot iter.Next")
+		}
+		o := core.TxKernel{}
+		err = json.Unmarshal(kv.Value, &o)
+		list = append(list, o)
+	}
+
+	bytes, err = json.Marshal(list)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot marshal list")
+	}
+
+	return
+}
+
+func (t *shimDatabase) AddAsset(asset string, value uint64) {
+	panic("implement me")
+}
+
+func (t *shimDatabase) ListAssets() (bytes []byte, err error) {
+	panic("implement me")
+}
+
 func (t *shimDatabase) outputKey(commit string) string {
 	key, _ := t.stub.CreateCompositeKey("output", []string{commit})
+	return key
+}
+
+func (t *shimDatabase) kernelKey(k core.TxKernel) string {
+	key, _ := t.stub.CreateCompositeKey("kernel", []string{k.Excess})
 	return key
 }

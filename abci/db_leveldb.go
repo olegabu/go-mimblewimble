@@ -1,6 +1,7 @@
 package abci
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/ledger"
@@ -54,9 +55,15 @@ func (t *leveldbDatabase) SpendInput(input core.Input) error {
 	return nil
 }
 
-func (t *leveldbDatabase) PutOutput(output core.Output) error {
-	outputBytes, _ := json.Marshal(output)
-	t.currentBatch.Put(outputKey(output.Commit), outputBytes)
+func (t *leveldbDatabase) PutOutput(o core.Output) error {
+	bytes, _ := json.Marshal(o)
+	t.currentBatch.Put(outputKey(o.Commit), bytes)
+	return nil
+}
+
+func (t *leveldbDatabase) PutKernel(o core.TxKernel) error {
+	bytes, _ := json.Marshal(o)
+	t.currentBatch.Put(kernelKey(o.Excess), bytes)
 	return nil
 }
 
@@ -72,39 +79,112 @@ func (t *leveldbDatabase) Commit() (err error) {
 	return
 }
 
-func (t *leveldbDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
-	outputBytes, err = t.db.Get(outputKey(string(id)), nil)
+func (t *leveldbDatabase) GetOutput(id []byte) (bytes []byte, err error) {
+	bytes, err = t.db.Get(outputKey(string(id)), nil)
 	if err != nil {
 		err = errors.Wrapf(err, "cannot db.Get")
 	}
 	return
 }
 
-func (t *leveldbDatabase) ListOutputs() (outputsBytes []byte, err error) {
-	outputs := make([]core.Output, 0)
+func (t *leveldbDatabase) ListOutputs() (bytes []byte, err error) {
+	list := make([]core.Output, 0)
 
 	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
 		//app.logger.Debug("iter", iter.Key(), iter.Value())
-		output := core.Output{}
-		err = json.Unmarshal(iter.Value(), &output)
-		outputs = append(outputs, output)
+		o := core.Output{}
+		err = json.Unmarshal(iter.Value(), &o)
+		list = append(list, o)
 	}
 	iter.Release()
 	err = iter.Error()
 
-	outputsBytes, err = json.Marshal(outputs)
+	bytes, err = json.Marshal(list)
 	if err != nil {
-		err = errors.Wrapf(err, "cannot marshal outputs")
+		err = errors.Wrapf(err, "cannot marshal list")
 	}
 
 	return
 }
 
-func outputKey(commit string) []byte {
-	return []byte("output." + commit)
+func (t *leveldbDatabase) ListKernels() (bytes []byte, err error) {
+	list := make([]core.TxKernel, 0)
+
+	iter := t.db.NewIterator(kernelRange(), nil)
+	for iter.Next() {
+		//app.logger.Debug("iter", iter.Key(), iter.Value())
+		o := core.TxKernel{}
+		err = json.Unmarshal(iter.Value(), &o)
+		list = append(list, o)
+	}
+	iter.Release()
+	err = iter.Error()
+
+	bytes, err = json.Marshal(list)
+	if err != nil {
+		err = errors.Wrapf(err, "cannot marshal list")
+	}
+
+	return
+}
+
+func (t *leveldbDatabase) AddAsset(asset string, value uint64) {
+	var total uint64
+	totalBytes := make([]byte, 8)
+
+	currentTotalBytes, err := t.db.Get(assetKey(asset), nil)
+	if err != nil {
+		total = value
+	} else {
+		currentTotal, _ := binary.Uvarint(currentTotalBytes)
+		total = currentTotal + value
+	}
+
+	binary.PutUvarint(totalBytes, total)
+	t.currentBatch.Put(assetKey(asset), totalBytes)
+}
+
+func (t *leveldbDatabase) ListAssets() (bytes []byte, err error) {
+	list := make(map[string]uint64)
+
+	iter := t.db.NewIterator(assetRange(), nil)
+	for iter.Next() {
+		//app.logger.Debug("iter", iter.Key(), iter.Value())
+		currentTotal, _ := binary.Uvarint(iter.Value())
+		list[string(iter.Key())] = currentTotal
+	}
+	iter.Release()
+	err = iter.Error()
+
+	bytes, err = json.Marshal(list)
+	if err != nil {
+		err = errors.Wrapf(err, "cannot marshal list")
+	}
+
+	return
+}
+
+func outputKey(o string) []byte {
+	return []byte("output." + o)
 }
 
 func outputRange() *util.Range {
 	return util.BytesPrefix([]byte("output."))
+}
+
+func kernelKey(o string) []byte {
+	return []byte("kernel." + o)
+}
+
+func kernelRange() *util.Range {
+	return util.BytesPrefix([]byte("kernel."))
+}
+
+func assetKey(o string) []byte {
+	return []byte("asset." + o)
+}
+
+func assetRange() *util.Range {
+	return util.BytesPrefix([]byte("asset."))
 }

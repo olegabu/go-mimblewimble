@@ -12,8 +12,12 @@ type Database interface {
 	PutOutput(output core.Output) error
 	Commit() error
 	Close()
-	GetOutput(id []byte) (outputBytes []byte, err error)
-	ListOutputs() (outputsBytes []byte, err error)
+	GetOutput(id []byte) (bytes []byte, err error)
+	ListOutputs() (bytes []byte, err error)
+	PutKernel(kernel core.TxKernel) error
+	ListKernels() (bytes []byte, err error)
+	AddAsset(asset string, value uint64)
+	ListAssets() (bytes []byte, err error)
 }
 
 type Transaction struct {
@@ -23,6 +27,7 @@ type Transaction struct {
 
 type Issue struct {
 	Output     core.Output   `json:"output"`
+	Value      uint64        `json:"value"`
 	Asset      string        `json:"asset,omitempty"`
 	AssetSig   []byte        `json:"asset_sig,omitempty"`
 	IssuerCert []byte        `json:"issue_cert,omitempty"`

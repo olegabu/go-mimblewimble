@@ -172,6 +172,7 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 	ledgerIssue := ledger.Issue{
 		Output: walletOutput.Output,
 		Asset:  asset,
+		Value:  value,
 		Kernel: core.TxKernel{
 			Features: core.CoinbaseKernel,
 			Excess:   excess.String(),

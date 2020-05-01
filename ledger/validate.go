@@ -73,6 +73,30 @@ func ValidateIssue(issue *Issue) error {
 		return errors.Wrap(err, "cannot validateBulletproofs")
 	}
 
+	// commit to issue value with zero blind 0*G + V*H
+	valueBlind := [32]byte{} // zero
+	valueCommit, err := secp256k1.Commit(context, valueBlind[:], issue.Value, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	if err != nil {
+		return errors.Wrap(err, "cannot Commit")
+	}
+
+	// issue kernel excess should be a commit to issue blind with zero value R*G + 0*H
+	excess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
+	if err != nil {
+		return errors.Wrap(err, "cannot CommitmentFromString")
+	}
+
+	// sum of commitment to value should be the issue output commit: I = (0*G + V*H) + (R*G + 0*H) = R*G + V*H
+	sum, err := secp256k1.CommitSum(context, []*secp256k1.Commitment{excess, valueCommit}, []*secp256k1.Commitment{})
+	if err != nil {
+		return errors.Wrap(err, "cannot CommitSum")
+	}
+
+	// verify that equality
+	if sum.String() != issue.Output.Commit {
+		return errors.Wrap(err, "kernel excess verification failed")
+	}
+
 	return nil
 }
 
@@ -100,6 +124,98 @@ func ValidateIssueBytes(issueBytes []byte) (ledgerIssue *Issue, err error) {
 	err = ValidateIssue(ledgerIssue)
 
 	return
+}
+
+func ValidateStateBytes(outputBytes []byte, kernelBytes []byte, assetBytes []byte) error {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		return errors.Wrap(err, "cannot ContextCreate")
+	}
+	defer secp256k1.ContextDestroy(context)
+
+	var outputs []core.Output
+
+	err = json.Unmarshal(outputBytes, &outputs)
+	if err != nil {
+		return errors.Wrap(err, "cannot unmarshal json to outputs")
+	}
+
+	var kernels []core.TxKernel
+
+	err = json.Unmarshal(kernelBytes, &kernels)
+	if err != nil {
+		return errors.Wrap(err, "cannot unmarshal json to kernels")
+	}
+
+	var assets map[string]uint64
+
+	err = json.Unmarshal(assetBytes, &assets)
+	if err != nil {
+		return errors.Wrap(err, "cannot unmarshal json to assets")
+	}
+
+	outputCommitments := make([]*secp256k1.Commitment, 0)
+	excessCommitments := make([]*secp256k1.Commitment, 0)
+
+	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*4096)
+	if err != nil {
+		return errors.Wrap(err, "cannot ScratchSpaceCreate")
+	}
+
+	bulletproofGenerators, err := secp256k1.BulletproofGeneratorsCreate(context, &secp256k1.GeneratorG, 256)
+	if bulletproofGenerators == nil {
+		return errors.Wrap(err, "cannot BulletproofGeneratorsCreate")
+	}
+
+	for i, output := range outputs {
+		err := validateBulletproof(context, output, scratch, bulletproofGenerators)
+		if err != nil {
+			return errors.Wrapf(err, "cannot validateBulletproof output #%d: %v", i, output)
+		}
+
+		com, err := secp256k1.CommitmentFromString(output.Commit)
+		if err != nil {
+			return errors.Wrapf(err, "cannot CommitmentFromString output #%d: %v", i, output)
+		}
+		outputCommitments = append(outputCommitments, com)
+	}
+
+	for i, kernel := range kernels {
+		com, err := secp256k1.CommitmentFromString(kernel.Excess)
+		if err != nil {
+			return errors.Wrapf(err, "cannot CommitmentFromString kernel #%d: %v", i, kernel)
+		}
+		excessCommitments = append(excessCommitments, com)
+	}
+
+	// subtract all kernel excesses (from issues and transfers) from all remaining outputs
+	// sum(O) - (sum(KE) + sum(offset)*G + sum(KEI))
+	sumCommitment, err := secp256k1.CommitSum(context, outputCommitments, excessCommitments)
+	if err != nil {
+		return errors.Wrap(err, "cannot CommitSum outputCommitments, excessCommitments")
+	}
+
+	var totalIssues uint64
+	for _, total := range assets {
+		totalIssues += total
+	}
+
+	// commitment to total tokens issued is with a zero blind TI = 0*G + totalIssues*H
+	//totalIssues := uint64(2)
+	totalIssuesBlind := [32]byte{} // zero
+	totalIssuesCommitment, err := secp256k1.Commit(context, totalIssuesBlind[:], totalIssues, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	if err != nil {
+		return errors.Wrap(err, "cannot Commit totalIssues")
+	}
+
+	// difference of remaining outputs and all excesses should equal to the commitment to value of total issued;
+	// ex. for one issue I and one transfer from I to O:
+	// sum(O) - sum(KE) = O - KE - KEI = RO*G + VO*H - (RO*G + VO*H - RI*G - VI*H) - (RI*G + 0*H) = 0*G + VI*H
+	if sumCommitment.String() != totalIssuesCommitment.String() {
+		return errors.Errorf("difference of outputs and kernel excesses does not equal to the total of issued assets=%d", totalIssues)
+	}
+
+	return nil
 }
 
 func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {

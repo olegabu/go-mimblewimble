@@ -125,22 +125,38 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 	if paths[0] == "output" {
 		if len(paths) == 1 {
 			// return all outputs
-			outputsBytes, err := app.db.ListOutputs()
+			bytes, err := app.db.ListOutputs()
 			if err != nil {
 				resQuery.Log = errors.Wrap(err, "cannot list outputs").Error()
 			} else {
-				resQuery.Value = outputsBytes
+				resQuery.Value = bytes
 			}
 		} else if len(paths) > 1 {
 			// return one output
-			outputBytes, err := app.db.GetOutput([]byte(paths[1]))
+			bytes, err := app.db.GetOutput([]byte(paths[1]))
 			if err != nil {
 				resQuery.Log = errors.Wrap(err, "does not exist").Error()
 			} else {
 				resQuery.Log = "exists"
-				resQuery.Value = outputBytes
+				resQuery.Value = bytes
 			}
-			resQuery.Value = outputBytes
+			resQuery.Value = bytes
+		}
+	} else if paths[0] == "kernel" {
+		// return all kernels
+		bytes, err := app.db.ListKernels()
+		if err != nil {
+			resQuery.Log = errors.Wrap(err, "cannot list kernels").Error()
+		} else {
+			resQuery.Value = bytes
+		}
+	} else if paths[0] == "asset" {
+		// return all assets
+		bytes, err := app.db.ListAssets()
+		if err != nil {
+			resQuery.Log = errors.Wrap(err, "cannot list assets").Error()
+		} else {
+			resQuery.Value = bytes
 		}
 	}
 

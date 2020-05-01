@@ -11,90 +11,170 @@ import (
 )
 
 func TestValidateData(t *testing.T) {
-    for _, data := range testData {
-        bytes := []byte(data)
-        testValidateData(t, bytes)
-    }
+	for _, data := range testData {
+		bytes := []byte(data)
+		testValidateData(t, bytes)
+	}
 }
 
 func testValidateData(t *testing.T, bytes []byte) {
-    var tx *Transaction
-    err := json.Unmarshal(bytes, &tx)
-    assert.NoError(t, err)
+	var tx *Transaction
+	err := json.Unmarshal(bytes, &tx)
+	assert.NoError(t, err)
 
-    err = ValidateTransaction(tx)
-    assert.NoError(t, err)
+	err = ValidateTransaction(tx)
+	assert.NoError(t, err)
 }
 
 func readFile(filename string) []byte {
-    bytes, err := ioutil.ReadFile(filename)
-    if err != nil {
-        log.Panicf("cannot open json file with test transaction %s", filename)
-    }
-    return bytes
+	bytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Panicf("cannot open json file with test transaction %s", filename)
+	}
+	return bytes
 }
 
 func getTx(slateBytes []byte) (tx *Transaction, err error) {
-    var slate libwallet.Slate
+	var slate libwallet.Slate
 
-    err = json.Unmarshal(slateBytes, &slate)
-    if err != nil {
-        return
-    }
+	err = json.Unmarshal(slateBytes, &slate)
+	if err != nil {
+		return
+	}
 
-    ltx := Transaction{slate.Transaction, slate.ID}
+	ltx := Transaction{slate.Transaction, slate.ID}
 
-    return &ltx, nil
+	return &ltx, nil
 }
 
 func TestIssue(t *testing.T) {
-    bytes := []byte(`{
-	  "output": {
-		"features": "Coinbase",
-		"commit": "092e6fdf366508bcbab6a336639f8046fe8b26ea58858035ab1110199d355e85ab",
-		"proof": "6de4e50fcfdaa8013313145413df2b72ba9067dd77148533f52d3bbcffd7b64d5107eb494281b86fa568c92e91a9c9b787d5ff58603ac47af84b3ef8b56c8d54063f16aa44eef14dd3225e90dfffdab80f9a669c28b97c060a545a140900ea801a18746ea5c20756129b6437719d409a24a0f2d3a7a027b231567bcb914fbee06e9ed85477b1fe6a2febec76e86b5b4873f2f8e782538f4be61e6f1683571c41176d5e63a287a14bd05ccaae727d32130d7cda80b191d86f1d173979efd67c0357dbe81dfe9595eee143d1ef82519c47ca2883fe02132ea149e402d17d070e72badf2bea4f79acda686db213911f2fba835d7ff8d3a60cd459c8c74e87a23a83f9e78b28da57553a22aa4bbe822689d8dbd10b2369c833d75cbdd1dec359e60fffbab5610019649a4f107b26fb6139be230663c87aa3fb092c86bcd832cf8131b25285f453a9f285baefd078795203667d32caf27af0922dde775e6e60f404041d49032f989cc62f5b78257b641ccdb796077c43e29761b79e60a626bbaf0ba14a8b2451a9a9dfa92494cf810e9047e0852bd911a5cb42a9a0513db69308ad58c323b6c1d33b79e0f8a1cb6a574cd58c9d0691c8825b46592fc418c2ffc5f7380f5d3a5f8698d1b5073a8d2a0b75e10e9860977b841d8877f254a9561a70b4230388bc54a648398e52a6e7b5efd5a334c0c18f71d762bf833fb6237cf2cc588ac09075e772e6c803096bfb121abc116dc48231decc07bf0599732fed20033182c78b691dd8c96f5ea2dfae225ccc916f4792a6de96f364ce42eac13fb5e9a083b38194a9aa84a16f2d2445546c7779a412d4553d8f69411f6e30a8232d2b8bc3bf1aa63e2fd1bc28b3ad2c9e8710e1fc884edd42a3b0673392c0cd6801869ccb54dd1a6cb2d0d61bfaa96876ee71f5c735879f9b0122e10f1a260f8bb0c892b129a2d5"
-	  },
-	  "asset": "¤"
-	}`)
+	bytes := []byte(`{
+  "output": {
+    "features": "Coinbase",
+    "commit": "0980596ec61a13a445d49ab6b9a14bbe29d88827a723aeeac12d1ee0b3ed4a1882",
+    "proof": "086b8dcf66ddfbcaa93513e795c1e2882a75d614d78312252a5cbd83fb436e563b35cc2615c7905857b58e604529f3f76b4dc1e56b2658fa82d79e6f4a961e26038a6987f949d7982e732ec4f53762a6c83dc1feb3b41839386d30d6776907938af7dbf52c0f0f54979f877735eff39a07e3463e201be8c8cf35849ad744e1d2bb7417ca9e5836e3bf36d94258ba03bd7a478fd18fa6ee7820f11e5c43c23b2d18d217307b09a05441a6daa75aaf185781f73532b73afe7a332d14938d84021ef5a6aedec66042ea5ee8350164877a50c93307c9d9b1aae7975cffd65d79d48ae4bd9a1105dfe9b19b3754dbfc63a8081dc22d78b5b9153f041001c83b95a65d141205b045e44b9308e2120ebbf9a11b29c335c57046c514c969fd13dab9a791d9e6292ae1c3f4c52afc5a3f5c7b2d077479047a52631388f34bc6bac65f2bfa95a7823e5e53fc4f514eaeb1020d15619267ec05349fa7c03706fc26604b913c6efe02725a98a32f477213b8855693552b313305e5cce1aad3ec2e63d594320597666eae21d51649b97e501a3062c8fd152e087fc2d59a2a583b7d9c6e7ed7ef4eab5e08e7b956c41653471ae5f2baf19c1f0107312e0e7d4c4a5e7e48ab293f2f860a484c913414f4ffe4d06626a515b2460a17cb3c19c6bd6d81b8d31664fccc342649399001387f3997ef8614eee5e7f45ee159e8eafe5256f132d94adca2ee99b46afc950792687b8812b2628d37679dc09782962694ec91d692b8414493c8f432983d7070baaa48d937a96ef750d8ba0654be7bb5e46c1bd0e2c622ec97f8cefe382acdd920af52f9ce53f375b5c4a0334cdfbfb948610fa1c435b3abccfb23f614db476723a6e78512c1ea459bb82869d92d4407f8f8561675fb1af571286f849b524d9874dfb366154d164f7089c33cd7c253fc8dd43ae68f407cb0730cac6a"
+  },
+  "value": 1,
+  "asset": "¤",
+  "kernel": {
+    "features": "Coinbase",
+    "fee": "0",
+    "lock_height": "0",
+    "excess": "08764a0c0d67bc674b958d756642aa5ba2b2371d4eae6bea22debe9a2ea62844e6",
+    "excess_sig": ""
+  }
+}`)
 
-    ledgerIssue, err := ValidateIssueBytes(bytes)
-    assert.NoError(t, err)
-    assert.NotNil(t, ledgerIssue)
+	ledgerIssue, err := ValidateIssueBytes(bytes)
+	assert.NoError(t, err)
+	assert.NotNil(t, ledgerIssue)
 }
 
 func TestIssueInvalidBulletProof(t *testing.T) {
-    bytes := []byte(`{
-	  "output": {
-		"features": "Coinbase",
-		"commit": "092e6fdf366508bcbab6a336639f8046fe8b26ea58858035ab1110199d355e85ab",
-		"proof": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeaddeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde"
-	  },
-	  "asset": "¤"
-	}`)
+	bytes := []byte(`{
+  "output": {
+    "features": "Coinbase",
+    "commit": "0980596ec61a13a445d49ab6b9a14bbe29d88827a723aeeac12d1ee0b3ed4a1882",
+    "proof": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeaddeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde"
+  },
+  "value": 1,
+  "asset": "¤",
+  "kernel": {
+    "features": "Coinbase",
+    "fee": "0",
+    "lock_height": "0",
+    "excess": "08764a0c0d67bc674b958d756642aa5ba2b2371d4eae6bea22debe9a2ea62844e6",
+    "excess_sig": ""
+  }
+}`)
 
-    ledgerIssue, err := ValidateIssueBytes(bytes)
-    assert.Error(t, err)
-    assert.NotNil(t, ledgerIssue)
+	ledgerIssue, err := ValidateIssueBytes(bytes)
+	assert.Error(t, err)
+	assert.NotNil(t, ledgerIssue)
 }
 
 func TestIssueInvalidCommit(t *testing.T) {
-    bytes := []byte(`{
-	  "output": {
-		"features": "Coinbase",
-		"commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde",
-		"proof": "6de4e50fcfdaa8013313145413df2b72ba9067dd77148533f52d3bbcffd7b64d5107eb494281b86fa568c92e91a9c9b787d5ff58603ac47af84b3ef8b56c8d54063f16aa44eef14dd3225e90dfffdab80f9a669c28b97c060a545a140900ea801a18746ea5c20756129b6437719d409a24a0f2d3a7a027b231567bcb914fbee06e9ed85477b1fe6a2febec76e86b5b4873f2f8e782538f4be61e6f1683571c41176d5e63a287a14bd05ccaae727d32130d7cda80b191d86f1d173979efd67c0357dbe81dfe9595eee143d1ef82519c47ca2883fe02132ea149e402d17d070e72badf2bea4f79acda686db213911f2fba835d7ff8d3a60cd459c8c74e87a23a83f9e78b28da57553a22aa4bbe822689d8dbd10b2369c833d75cbdd1dec359e60fffbab5610019649a4f107b26fb6139be230663c87aa3fb092c86bcd832cf8131b25285f453a9f285baefd078795203667d32caf27af0922dde775e6e60f404041d49032f989cc62f5b78257b641ccdb796077c43e29761b79e60a626bbaf0ba14a8b2451a9a9dfa92494cf810e9047e0852bd911a5cb42a9a0513db69308ad58c323b6c1d33b79e0f8a1cb6a574cd58c9d0691c8825b46592fc418c2ffc5f7380f5d3a5f8698d1b5073a8d2a0b75e10e9860977b841d8877f254a9561a70b4230388bc54a648398e52a6e7b5efd5a334c0c18f71d762bf833fb6237cf2cc588ac09075e772e6c803096bfb121abc116dc48231decc07bf0599732fed20033182c78b691dd8c96f5ea2dfae225ccc916f4792a6de96f364ce42eac13fb5e9a083b38194a9aa84a16f2d2445546c7779a412d4553d8f69411f6e30a8232d2b8bc3bf1aa63e2fd1bc28b3ad2c9e8710e1fc884edd42a3b0673392c0cd6801869ccb54dd1a6cb2d0d61bfaa96876ee71f5c735879f9b0122e10f1a260f8bb0c892b129a2d5"
-	  },
-	  "asset": "¤"
-	}`)
+	bytes := []byte(`{
+  "output": {
+    "features": "Coinbase",
+    "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde",
+    "proof": "086b8dcf66ddfbcaa93513e795c1e2882a75d614d78312252a5cbd83fb436e563b35cc2615c7905857b58e604529f3f76b4dc1e56b2658fa82d79e6f4a961e26038a6987f949d7982e732ec4f53762a6c83dc1feb3b41839386d30d6776907938af7dbf52c0f0f54979f877735eff39a07e3463e201be8c8cf35849ad744e1d2bb7417ca9e5836e3bf36d94258ba03bd7a478fd18fa6ee7820f11e5c43c23b2d18d217307b09a05441a6daa75aaf185781f73532b73afe7a332d14938d84021ef5a6aedec66042ea5ee8350164877a50c93307c9d9b1aae7975cffd65d79d48ae4bd9a1105dfe9b19b3754dbfc63a8081dc22d78b5b9153f041001c83b95a65d141205b045e44b9308e2120ebbf9a11b29c335c57046c514c969fd13dab9a791d9e6292ae1c3f4c52afc5a3f5c7b2d077479047a52631388f34bc6bac65f2bfa95a7823e5e53fc4f514eaeb1020d15619267ec05349fa7c03706fc26604b913c6efe02725a98a32f477213b8855693552b313305e5cce1aad3ec2e63d594320597666eae21d51649b97e501a3062c8fd152e087fc2d59a2a583b7d9c6e7ed7ef4eab5e08e7b956c41653471ae5f2baf19c1f0107312e0e7d4c4a5e7e48ab293f2f860a484c913414f4ffe4d06626a515b2460a17cb3c19c6bd6d81b8d31664fccc342649399001387f3997ef8614eee5e7f45ee159e8eafe5256f132d94adca2ee99b46afc950792687b8812b2628d37679dc09782962694ec91d692b8414493c8f432983d7070baaa48d937a96ef750d8ba0654be7bb5e46c1bd0e2c622ec97f8cefe382acdd920af52f9ce53f375b5c4a0334cdfbfb948610fa1c435b3abccfb23f614db476723a6e78512c1ea459bb82869d92d4407f8f8561675fb1af571286f849b524d9874dfb366154d164f7089c33cd7c253fc8dd43ae68f407cb0730cac6a"
+  },
+  "value": 1,
+  "asset": "¤",
+  "kernel": {
+    "features": "Coinbase",
+    "fee": "0",
+    "lock_height": "0",
+    "excess": "08764a0c0d67bc674b958d756642aa5ba2b2371d4eae6bea22debe9a2ea62844e6",
+    "excess_sig": ""
+  }
+}`)
 
-    ledgerIssue, err := ValidateIssueBytes(bytes)
-    assert.Error(t, err)
-    assert.NotNil(t, ledgerIssue)
+	ledgerIssue, err := ValidateIssueBytes(bytes)
+	assert.Error(t, err)
+	assert.NotNil(t, ledgerIssue)
+}
+
+func TestValidateState(t *testing.T) {
+	outputBytes := []byte(`
+[
+  {
+    "features": "Coinbase",
+    "commit": "08fc4753db7646c7656e005238b3a127be5fe931418654685519d7362b4305477c",
+    "proof": "9b03addf6aa3c3db1a1ed305fbbad340e6a2ce3a8936845db73e991d25f2a59d4e81af6368fa9c7530ad141ea77aa2e4ef62a87b159ed5db48a693e378badad40e586a6ddebeab39bebbc1679af9137629799e47ad0f954d8fa6cfa47279e59cdf989c6004b8f93118c9a728e5d1e24ea470d692945444d9df38ffaebfc1deccde958c68d5e904cdbb129dcc47156fe2f9ab7f60e810dfb27b397dab6a3d638a1e43bb53d81c25bbf8f5bfb1f63cfee9f8c14eb8b5c9a94681fd28e75f20ccb8c3f49c5dbbe46ddf6f74f753ea6ccd9f2f5845cb46c3a8c8ef2783f7117c15203ee2ab3ef7f640fa2f9f883a687451b455013b9419dc138984fecbbbe659d2e39ec8b21ca04290b5f145ba387f004114e7a4adc3d27b4b22072b3877bb179f9f2087468f07df1994d761d0fe09b77b1c3152ffa8e76a6c4caf0022108756c484f163a6683d42b1968cb6017b54cc13aea615bb4f42494fab250fb231c13356dba411005fdbaa9deaf4486ca8151d2660ed63daaeaca3fe8cbe164ce306939a3af28f29c1e4796ec800fe168312239425303a373d659a16063d3269b92276c6a7686e0f0bde2d605a09672c6a2184e4c439cb10c680b604d94901626ec8121d01312cdf9f7688a8c83e41b0c3d914d65b693f90900ef41e511bc95296245553ea5231ccf14d80148b05d25dbd827fab5e760124a3b567031a79e154f3a7c1d29bfdb814d663f2655270f8cb272d6c4a1cc130fab609edbc5b50d5dae0bc0966425a1819b369fdf334b47165624faf55ff8e9389732367d9452db1e41152318fd19ffca97d9ab462a241373143ca617a5138e563a0207bccf66f1586282f4e0ceb1cbcf544759c60769f1e8d53698d175f11b222cdc9a3cedbebe87f7bd87b6ec1d50ccc01b5da941628d70c7240bb3a8b99f09b3d683cffa84dde129390418788ee34c7"
+  },
+  {
+    "features": "Coinbase",
+    "commit": "09892a538bea559d46709fde751bcc86e848a811ea5b4db6cce2ae93b24000a065",
+    "proof": "0a26c080ec7f582bdd7c33e8cea5e03b5900cefd392a2a403b8d0161203e34dd314dd095e2dad5cb375c078cb55e67b2bd492e3841d472699666aaa58ff4b1a805ac4090acad3c4b1ee40b5f8877a8e54b19a8ae780564d585b1221f02f6c52b7e2454bef674b53a1c9a6f2a09458b474c7065cecdd9754777dddd7fadd639db4963513a9324af2c563fddae8a309001d0bbb4ff5d44f4acc884fff516693dac09832ff2ebc4fd2a8d2db61d224592ac8a10b55a408584c789d2b98db216273ca9bc81504220c8b58b935f18281669a864ab88df2f6c1cfbe8eadedb3240bf29908a2803ad3bbef5654c9526b9bd08dc022b8bbb397defb014b4f9699175e85bfed727dfd50c8cd6877c89dfb8a505de432141a1b87cbef85e8937843364be003a97623cbfaaaec80bf3f11a8a8224ae170b496c54f63a918c43a7745a663d2ff0b53f865eef3c85d0de4d9f0ebef6e1e78c116caf3a92e3c3784f8a63cc4cd733aa0296fd8fdb858ffc2ac77decc27dd45b12d03ce32efdffe4068fc8341b8340482ed437ece645b0e7041117b5ba2fab0a9d2f1a27a20f62186deac0fedd8c16d33f3b25143f1d533d17f0aa12cdb2e86e5fd3baa94031d2ebca8e0a61c0fdcf556431b991bba4dbb777a293423b06b9b6e456872c72110479b115682bd86363cada16931ad25d5330f079e1f1800acb2579bf90212ad096016e774216af3c92b8e9a9cb771948bf07accb89d07cdab15afe8f7a259dfe2bf9c2e94588813e0aec3eeedb4021ed43375ce80ba9c21175982d89d3cb3e1bd799c7ea6cbde46eb66daba925da62b858c9cc6970258392d5ba328d681c662359ce26c2a396745bfd4d6691d7626f8cc1912e5f350681ae4301cb1917e9751551ba42bedd80bf6c3572d0f2ab96904d353b106ae24f1e12cb08ff51cc9a506a28021a4615be9055acef8e"
+  },
+  {
+    "features": "Coinbase",
+    "commit": "09ca8a0809b0d778f906e53f584119ca4804ad39fdd7a43388b198ed39d84aeb3a",
+    "proof": "a89c201e9319da3ed23b651ce3f6dfafe88796244a4c96fb0b2482e9872b2dcc352ee8dc9c81bbbc79f8ca30b9e38ac19a2c428f664922b80f576459ec0aa04d0e99790d15f85cdd7d6cdfd36a3a4e7ca8709e9cbbdb1b30a56aef9692d4b734caaaf05c912c8557f3408656b56642ef751ff0eb08a3ab20cc5b98553d931db092a1efa62645e91411d6d43a25eac16bae16e3249f63fb282059d90ec84a90776ad63149e19101be8cb2c9a2a00410806e105e9a8ccb0e8656c3ec4b070559995420710846a6095736f54ab6b144c364a55b668b55f53bc779055bdc3cb6f985d4ae81fe52fe355ee862c79539acdc709c75ee151096f62187c616fd8fef042fa9f84795ac926a0bf6737e3e62e5325e50f2df37b22f26e5ec39996c3174bf05ab41baa6dd2ac131111dd6f99a1f1b39be712dcd55f9a550e558039ec13b093ccafb7750ded2bdfbefea82ec9299d8bf98b9cccb6c62f44366e55ecb637d5fda218e01c76599cf82f9c99e0f30560f7002a235bbd46fb4796af811dd3e00a5f02457dbbcc7abaae85f9022351fe0d81fdc368eccdcde81a517a33544af6c63f83dc7f5885650e7e947c2fbaf55097c77a982586c4ff2aebff70f6fd453c2ae1f6b8970278b214db0bc08576059bb614801d1ec5eca8defe9eff7f41b96c32b19d3415a91baf7d62162bb9b449210349d2531085f3ccc2aa06b4cd0764b4e3a7f37003a723582585f5c5b4bbd6e1e2d8b321736d77b6e9699b9aae44528a4f3250c4184be3acc238b0df03e0f69191141ebf3d2caf410439d55443c8f27c745e09366768dc8049586745e023c917ece8751cb7ece51dbbb28a61b157334879fbba80364fc663684ee70f5d5d6e209d1617db40970bfac23f4c2dd8d5573f537de8da8448444017b0e8f6c83292f2d668909fda9bae5937a702f770ba6da9ad5ad1ba17e"
+  }
+]
+`)
+	kernelBytes := []byte(`
+[
+  {
+    "features": "Coinbase",
+    "fee": "0",
+    "lock_height": "0",
+    "excess": "08944c89325011b409339c8f597bde3dc63b1ecba9e8c33770d93583f80e711852",
+    "excess_sig": ""
+  },
+  {
+    "features": "Coinbase",
+    "fee": "0",
+    "lock_height": "0",
+    "excess": "08dd489b3f717621a56f4e9c1c134581051f9962e7c31ca7b4b2ec6c288184024a",
+    "excess_sig": ""
+  },
+  {
+    "features": "Coinbase",
+    "fee": "0",
+    "lock_height": "0",
+    "excess": "08eaf90498c7ef773bef0b80fccba19de84a5d6c250a69191d19bccddfd0e6062d",
+    "excess_sig": ""
+  }
+]
+`)
+	assetBytes := []byte(`
+{
+  "asset.$": 2,
+  "asset.¤": 3
+}
+`)
+
+	err := ValidateStateBytes(outputBytes, kernelBytes, assetBytes)
+	assert.NoError(t, err)
 }
 
 var testData []string = []string{
-    /* 1g_rep.json */
-    `{
+	/* 1g_rep.json */
+	`{
 		"offset": "fb6cfc60871c81e72e820c6900e6b7e16e4895f20fd527d5d4f327ffa2978776",
 		"body": {
 			"inputs": [{
@@ -121,8 +201,8 @@ var testData []string = []string{
 			}]
 		}
 	}`,
-    /* 10_grin_repost.json */
-    `{
+	/* 10_grin_repost.json */
+	`{
 	  "offset": "2f9ff6c511e4f0b5674a4080f1ed3e841d7df15e2ead671988a53c123540ec64",
 	  "body": {
 		"inputs": [
@@ -198,8 +278,8 @@ var testData []string = []string{
 		]
 	  }
 	}`,
-    /* 200_repost.json */
-    `{
+	/* 200_repost.json */
+	`{
 	  "offset": "10d01d4b60a57c63fb838545a541018b8c40b9e6387f9e735116a03600a0dd6c",
 	  "body": {
 		"inputs": [
