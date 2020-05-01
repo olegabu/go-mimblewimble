@@ -201,7 +201,7 @@ func CalculateExcess(
 	//TODO explore logic of negative fee
 	if fee != 0 {
 		//TODO validator needs to save his fee output
-		feeBlind := secp256k1.Random256()
+		feeBlind := [32]byte{} // zero
 		feeCommitment, err := secp256k1.Commit(context, feeBlind[:], fee, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 		if err != nil {
 			return nil, errors.Wrap(err, "error calculating fee commitment")
