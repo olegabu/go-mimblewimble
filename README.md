@@ -185,9 +185,6 @@ Ask the node to validate integrity of the world state:
 sum all unspent outputs and kernel excesses known to the network, and validate no coins have been minted out of air.
 ```bash
 curl '0.0.0.0:26657/abci_query?path="validate"'
-
-# view summary
-curl '0.0.0.0:26657/abci_query?path="validate"' | jq -r .result.response.value | base64 -d | jq
 ```
 
 ## Issue multiple assets

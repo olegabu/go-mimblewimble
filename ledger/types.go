@@ -18,6 +18,7 @@ type Database interface {
 	ListKernels() (list []core.TxKernel, err error)
 	AddAsset(asset string, value uint64)
 	ListAssets() (list map[string]uint64, err error)
+	ResetAssets() error
 }
 
 type Transaction struct {

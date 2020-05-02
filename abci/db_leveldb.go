@@ -153,6 +153,23 @@ func (t *leveldbDatabase) ListAssets() (list map[string]uint64, err error) {
 	return
 }
 
+func (t *leveldbDatabase) ResetAssets() error {
+	iter := t.db.NewIterator(assetRange(), nil)
+	for iter.Next() {
+		err := t.db.Delete(iter.Key(), nil)
+		if err != nil {
+			return errors.Wrap(err, "cannot delete asset")
+		}
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		return errors.Wrap(err, "cannot iterate over assets")
+	}
+
+	return nil
+}
+
 func outputKey(o string) []byte {
 	return []byte("output." + o)
 }

@@ -36,7 +36,11 @@ func (MWApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.Respons
 	return abcitypes.ResponseSetOption{}
 }
 
-func (MWApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+func (app *MWApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+	err := app.db.ResetAssets()
+	if err != nil {
+		app.logger.Error(fmt.Sprintf("cannot ResetAssets while in InitChain %v", err))
+	}
 	return abcitypes.ResponseInitChain{}
 }
 
@@ -127,18 +131,18 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 		if len(paths) == 1 {
 			// return all outputs
 			list, err := app.db.ListOutputs()
-			okResponse(&resQuery, list, err)
+			valueResponse(&resQuery, list, err)
 		} else if len(paths) > 1 {
 			// return one output
 			bytes, err := app.db.GetOutput([]byte(paths[1]))
-			okResponse(&resQuery, bytes, err)
+			valueResponse(&resQuery, bytes, err)
 		}
 	} else if paths[0] == "kernel" {
 		list, err := app.db.ListKernels()
-		okResponse(&resQuery, list, err)
+		valueResponse(&resQuery, list, err)
 	} else if paths[0] == "asset" {
 		list, err := app.db.ListAssets()
-		okResponse(&resQuery, list, err)
+		valueResponse(&resQuery, list, err)
 	} else if paths[0] == "validate" {
 		outputs, err := app.db.ListOutputs()
 		errorResponse(&resQuery, err, "cannot list outputs")
@@ -148,7 +152,7 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 		errorResponse(&resQuery, err, "cannot list assets")
 
 		msg, err := ledger.ValidateState(outputs, kernels, assets)
-		okResponse(&resQuery, msg, err)
+		logResponse(&resQuery, msg, err)
 	}
 
 	return
@@ -164,7 +168,7 @@ func errorResponse(resQuery *abcitypes.ResponseQuery, err error, msg string) {
 	}
 }
 
-func okResponse(resQuery *abcitypes.ResponseQuery, list interface{}, err error) {
+func valueResponse(resQuery *abcitypes.ResponseQuery, list interface{}, err error) {
 	if resQuery == nil {
 		return
 	}
@@ -174,6 +178,18 @@ func okResponse(resQuery *abcitypes.ResponseQuery, list interface{}, err error) 
 		bytes, err := json.Marshal(list)
 		errorResponse(resQuery, err, "cannot marshal")
 		resQuery.Value = bytes
+		resQuery.Code = http.StatusOK
+	}
+}
+
+func logResponse(resQuery *abcitypes.ResponseQuery, msg string, err error) {
+	if resQuery == nil {
+		return
+	}
+	if err != nil {
+		errorResponse(resQuery, err, "error")
+	} else {
+		resQuery.Log = msg
 		resQuery.Code = http.StatusOK
 	}
 }

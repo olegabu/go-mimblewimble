@@ -130,6 +130,10 @@ func (t *shimDatabase) ListAssets() (list map[string]uint64, err error) {
 	panic("implement me")
 }
 
+func (t *shimDatabase) ResetAssets() error {
+	panic("implement me")
+}
+
 func (t *shimDatabase) outputKey(commit string) string {
 	key, _ := t.stub.CreateCompositeKey("output", []string{commit})
 	return key
