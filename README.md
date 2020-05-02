@@ -158,9 +158,34 @@ Broadcast this transaction to the network to get recorded in the ledger.
 ```bash
 mw broadcast tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 ```
-Observe both the sender's and the receiver's online wallets receive transfer event and update their databases.
+Observe both the sender's, and the receiver's online wallets receive transfer event and update their databases.
 See original Coinbase output turn to `Spent` in the sender's wallet, 
 and the output in the receiver's turn from `Unconfirmed` to `Confirmed`.
+
+Query consensus node for the unspent outputs. 
+As the results in jsonRPC are base64 encoded, pipe them thru a json parser and base64 decoder. 
+```bash
+# all unspent outputs in the network's ledger 
+curl '0.0.0.0:26657/abci_query?path="output"'
+
+# view query results decoded
+curl '0.0.0.0:26657/abci_query?path="output"' | jq -r .result.response.value | base64 -d | jq
+
+# query for a specific output
+curl '0.0.0.0:26657/abci_query?path="output/09543892a4fd6a712850716ba31dc63f242978a606aaf7d995e8d5e7d0f021762f"' | jq -r .result.response.value | base64 -d | jq
+```
+
+Similarly, query for kernel excesses of all transactions recorded and numbers of total coins issued per asset.
+```bash
+curl '0.0.0.0:26657/abci_query?path="kernel"' | jq -r .result.response.value | base64 -d | jq
+curl '0.0.0.0:26657/abci_query?path="asset"' | jq -r .result.response.value | base64 -d | jq
+```   
+
+Ask the node to validate integrity of the world state: 
+sum all unspent outputs and kernel excesses known to the network, and validate no coins have been minted out of air.
+```bash
+curl '0.0.0.0:26657/abci_query?path="validate"'
+```
 
 ## Issue multiple assets
 

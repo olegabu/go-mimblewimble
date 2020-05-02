@@ -80,7 +80,7 @@ func (t *Client) PrintTxEvent(evt types.TMEventData) {
 }
 
 func (t *Client) ListenForTxEvents(onEvent func(evt types.TMEventData)) error {
-	const timeoutSeconds = 60
+	const timeoutSeconds = 600
 
 	for {
 		evt, err := client.WaitForOneEvent(t.httpClient, types.EventTx, timeoutSeconds*time.Second)
