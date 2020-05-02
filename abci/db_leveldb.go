@@ -79,20 +79,25 @@ func (t *leveldbDatabase) Commit() (err error) {
 	return
 }
 
-func (t *leveldbDatabase) GetOutput(id []byte) (bytes []byte, err error) {
-	bytes, err = t.db.Get(outputKey(string(id)), nil)
+func (t *leveldbDatabase) GetOutput(id []byte) (output core.Output, err error) {
+	output = core.Output{}
+
+	outputBytes, err := t.db.Get(outputKey(string(id)), nil)
 	if err != nil {
 		err = errors.Wrapf(err, "cannot db.Get")
+		return
 	}
+
+	err = json.Unmarshal(outputBytes, &output)
+
 	return
 }
 
-func (t *leveldbDatabase) ListOutputs() (bytes []byte, err error) {
-	list := make([]core.Output, 0)
+func (t *leveldbDatabase) ListOutputs() (list []core.Output, err error) {
+	list = make([]core.Output, 0)
 
 	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
-		//app.logger.Debug("iter", iter.Key(), iter.Value())
 		o := core.Output{}
 		err = json.Unmarshal(iter.Value(), &o)
 		list = append(list, o)
@@ -100,31 +105,20 @@ func (t *leveldbDatabase) ListOutputs() (bytes []byte, err error) {
 	iter.Release()
 	err = iter.Error()
 
-	bytes, err = json.Marshal(list)
-	if err != nil {
-		err = errors.Wrapf(err, "cannot marshal list")
-	}
-
 	return
 }
 
-func (t *leveldbDatabase) ListKernels() (bytes []byte, err error) {
-	list := make([]core.TxKernel, 0)
+func (t *leveldbDatabase) ListKernels() (list []core.TxKernel, err error) {
+	list = make([]core.TxKernel, 0)
 
 	iter := t.db.NewIterator(kernelRange(), nil)
 	for iter.Next() {
-		//app.logger.Debug("iter", iter.Key(), iter.Value())
 		o := core.TxKernel{}
 		err = json.Unmarshal(iter.Value(), &o)
 		list = append(list, o)
 	}
 	iter.Release()
 	err = iter.Error()
-
-	bytes, err = json.Marshal(list)
-	if err != nil {
-		err = errors.Wrapf(err, "cannot marshal list")
-	}
 
 	return
 }
@@ -145,22 +139,16 @@ func (t *leveldbDatabase) AddAsset(asset string, value uint64) {
 	t.currentBatch.Put(assetKey(asset), totalBytes)
 }
 
-func (t *leveldbDatabase) ListAssets() (bytes []byte, err error) {
-	list := make(map[string]uint64)
+func (t *leveldbDatabase) ListAssets() (list map[string]uint64, err error) {
+	list = make(map[string]uint64)
 
 	iter := t.db.NewIterator(assetRange(), nil)
 	for iter.Next() {
-		//app.logger.Debug("iter", iter.Key(), iter.Value())
 		currentTotal, _ := binary.Uvarint(iter.Value())
 		list[string(iter.Key())] = currentTotal
 	}
 	iter.Release()
 	err = iter.Error()
-
-	bytes, err = json.Marshal(list)
-	if err != nil {
-		err = errors.Wrapf(err, "cannot marshal list")
-	}
 
 	return
 }

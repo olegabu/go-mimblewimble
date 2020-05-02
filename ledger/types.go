@@ -12,12 +12,12 @@ type Database interface {
 	PutOutput(output core.Output) error
 	Commit() error
 	Close()
-	GetOutput(id []byte) (bytes []byte, err error)
-	ListOutputs() (bytes []byte, err error)
+	GetOutput(id []byte) (output core.Output, err error)
+	ListOutputs() (list []core.Output, err error)
 	PutKernel(kernel core.TxKernel) error
-	ListKernels() (bytes []byte, err error)
+	ListKernels() (list []core.TxKernel, err error)
 	AddAsset(asset string, value uint64)
-	ListAssets() (bytes []byte, err error)
+	ListAssets() (list map[string]uint64, err error)
 }
 
 type Transaction struct {

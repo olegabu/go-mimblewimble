@@ -2,6 +2,8 @@ package ledger
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/blockcypher/libgrin/core"
 	"io/ioutil"
 	"log"
 	"testing"
@@ -175,8 +177,24 @@ func TestValidateState(t *testing.T) {
 }
 `)
 
-	err := ValidateStateBytes(outputBytes, kernelBytes, assetBytes)
+	var outputs []core.Output
+
+	err := json.Unmarshal(outputBytes, &outputs)
 	assert.NoError(t, err)
+
+	var kernels []core.TxKernel
+
+	err = json.Unmarshal(kernelBytes, &kernels)
+	assert.NoError(t, err)
+
+	var assets map[string]uint64
+
+	err = json.Unmarshal(assetBytes, &assets)
+	assert.NoError(t, err)
+
+	msg, err := ValidateState(outputs, kernels, assets)
+	assert.NoError(t, err)
+	fmt.Println(msg)
 }
 
 var testData []string = []string{

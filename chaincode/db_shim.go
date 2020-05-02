@@ -65,16 +65,21 @@ func (t *shimDatabase) Commit() (err error) {
 	return
 }
 
-func (t *shimDatabase) GetOutput(id []byte) (outputBytes []byte, err error) {
-	outputBytes, err = t.stub.GetState(t.outputKey(string(id)))
+func (t *shimDatabase) GetOutput(id []byte) (output core.Output, err error) {
+	output = core.Output{}
+
+	outputBytes, err := t.stub.GetState(t.outputKey(string(id)))
 	if err != nil {
-		return nil, errors.Wrapf(err, "cannot GetState output")
+		err = errors.Wrapf(err, "cannot GetState output")
+		return
 	}
+	err = json.Unmarshal(outputBytes, &output)
+
 	return
 }
 
-func (t *shimDatabase) ListOutputs() (bytes []byte, err error) {
-	list := make([]core.Output, 0)
+func (t *shimDatabase) ListOutputs() (list []core.Output, err error) {
+	list = make([]core.Output, 0)
 
 	iter, err := t.stub.GetStateByPartialCompositeKey("output", nil)
 	if err != nil {
@@ -92,16 +97,11 @@ func (t *shimDatabase) ListOutputs() (bytes []byte, err error) {
 		list = append(list, o)
 	}
 
-	bytes, err = json.Marshal(list)
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot marshal list")
-	}
-
 	return
 }
 
-func (t *shimDatabase) ListKernels() (bytes []byte, err error) {
-	list := make([]core.TxKernel, 0)
+func (t *shimDatabase) ListKernels() (list []core.TxKernel, err error) {
+	list = make([]core.TxKernel, 0)
 
 	iter, err := t.stub.GetStateByPartialCompositeKey("kernel", nil)
 	if err != nil {
@@ -119,11 +119,6 @@ func (t *shimDatabase) ListKernels() (bytes []byte, err error) {
 		list = append(list, o)
 	}
 
-	bytes, err = json.Marshal(list)
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot marshal list")
-	}
-
 	return
 }
 
@@ -131,7 +126,7 @@ func (t *shimDatabase) AddAsset(asset string, value uint64) {
 	panic("implement me")
 }
 
-func (t *shimDatabase) ListAssets() (bytes []byte, err error) {
+func (t *shimDatabase) ListAssets() (list map[string]uint64, err error) {
 	panic("implement me")
 }
 

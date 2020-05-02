@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	pb "github.com/hyperledger/fabric/protos/peer"
 	"github.com/olegabu/go-mimblewimble/ledger"
@@ -86,24 +87,35 @@ func (t *MWChaincode) issue(stub shim.ChaincodeStubInterface, args []string) pb.
 
 // return all or one output
 func (t *MWChaincode) query(stub shim.ChaincodeStubInterface, args []string) pb.Response {
-	var valBytes []byte
-	var err error
+	var bytes []byte
 
 	if len(args) < 1 {
-		valBytes, err = t.db.ListOutputs()
+		list, err := t.db.ListOutputs()
+		if err != nil {
+			return pb.Response{Status: http.StatusInternalServerError, Message: "cannot list outputs: " + err.Error()}
+		}
+
+		bytes, err = json.Marshal(list)
+		if err != nil {
+			return pb.Response{Status: http.StatusInternalServerError, Message: "cannot marshal list: " + err.Error()}
+		}
+
 	} else {
-		valBytes, err = t.db.GetOutput([]byte(args[0]))
+		o, err := t.db.GetOutput([]byte(args[0]))
+		if err != nil {
+			return pb.Response{Status: http.StatusNotFound, Message: "cannot get output: " + err.Error()}
+		}
+		bytes, err = json.Marshal(o)
+		if err != nil {
+			return pb.Response{Status: http.StatusNotFound, Message: "cannot marshal output: " + err.Error()}
+		}
 	}
 
-	if err != nil {
-		return shim.Error(err.Error())
-	}
-
-	if valBytes == nil {
+	if bytes == nil {
 		return pb.Response{Status: http.StatusNotFound, Message: "output not found"}
 	}
 
-	return shim.Success(valBytes)
+	return shim.Success(bytes)
 }
 
 // validates transaction but does not persist it

@@ -126,64 +126,56 @@ func ValidateIssueBytes(issueBytes []byte) (ledgerIssue *Issue, err error) {
 	return
 }
 
-func ValidateStateBytes(outputBytes []byte, kernelBytes []byte, assetBytes []byte) error {
+func ValidateState(outputs []core.Output, kernels []core.TxKernel, assets map[string]uint64) (msg string, err error) {
+	var totalIssues uint64
+	for _, t := range assets {
+		totalIssues += t
+	}
+
+	msg = fmt.Sprintf("%d outputs %d kernels %d types of assets %d total assets issued", len(outputs), len(kernels), len(assets), totalIssues)
+
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		return errors.Wrap(err, "cannot ContextCreate")
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
 	}
 	defer secp256k1.ContextDestroy(context)
-
-	var outputs []core.Output
-
-	err = json.Unmarshal(outputBytes, &outputs)
-	if err != nil {
-		return errors.Wrap(err, "cannot unmarshal json to outputs")
-	}
-
-	var kernels []core.TxKernel
-
-	err = json.Unmarshal(kernelBytes, &kernels)
-	if err != nil {
-		return errors.Wrap(err, "cannot unmarshal json to kernels")
-	}
-
-	var assets map[string]uint64
-
-	err = json.Unmarshal(assetBytes, &assets)
-	if err != nil {
-		return errors.Wrap(err, "cannot unmarshal json to assets")
-	}
 
 	outputCommitments := make([]*secp256k1.Commitment, 0)
 	excessCommitments := make([]*secp256k1.Commitment, 0)
 
 	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*4096)
 	if err != nil {
-		return errors.Wrap(err, "cannot ScratchSpaceCreate")
+		err = errors.Wrap(err, "cannot ScratchSpaceCreate")
+		return
 	}
 
-	bulletproofGenerators, err := secp256k1.BulletproofGeneratorsCreate(context, &secp256k1.GeneratorG, 256)
-	if bulletproofGenerators == nil {
-		return errors.Wrap(err, "cannot BulletproofGeneratorsCreate")
+	bulletproofGenerators, e := secp256k1.BulletproofGeneratorsCreate(context, &secp256k1.GeneratorG, 256)
+	if bulletproofGenerators == nil || e != nil {
+		err = errors.Wrap(err, "cannot BulletproofGeneratorsCreate")
+		return
 	}
 
 	for i, output := range outputs {
-		err := validateBulletproof(context, output, scratch, bulletproofGenerators)
-		if err != nil {
-			return errors.Wrapf(err, "cannot validateBulletproof output #%d: %v", i, output)
+		e := validateBulletproof(context, output, scratch, bulletproofGenerators)
+		if e != nil {
+			err = errors.Wrapf(e, "cannot validateBulletproof output #%d: %v", i, output)
+			return
 		}
 
-		com, err := secp256k1.CommitmentFromString(output.Commit)
-		if err != nil {
-			return errors.Wrapf(err, "cannot CommitmentFromString output #%d: %v", i, output)
+		com, e := secp256k1.CommitmentFromString(output.Commit)
+		if e != nil {
+			err = errors.Wrapf(e, "cannot CommitmentFromString output #%d: %v", i, output)
+			return
 		}
 		outputCommitments = append(outputCommitments, com)
 	}
 
 	for i, kernel := range kernels {
-		com, err := secp256k1.CommitmentFromString(kernel.Excess)
-		if err != nil {
-			return errors.Wrapf(err, "cannot CommitmentFromString kernel #%d: %v", i, kernel)
+		com, e := secp256k1.CommitmentFromString(kernel.Excess)
+		if e != nil {
+			err = errors.Wrapf(e, "cannot CommitmentFromString kernel #%d: %v", i, kernel)
+			return
 		}
 		excessCommitments = append(excessCommitments, com)
 	}
@@ -192,38 +184,37 @@ func ValidateStateBytes(outputBytes []byte, kernelBytes []byte, assetBytes []byt
 	// sum(O) - (sum(KE) + sum(offset)*G + sum(KEI))
 	sumCommitment, err := secp256k1.CommitSum(context, outputCommitments, excessCommitments)
 	if err != nil {
-		return errors.Wrap(err, "cannot CommitSum outputCommitments, excessCommitments")
-	}
-
-	var totalIssues uint64
-	for _, total := range assets {
-		totalIssues += total
+		err = errors.Wrap(err, "cannot CommitSum outputCommitments, excessCommitments")
+		return
 	}
 
 	// commitment to total tokens issued is with a zero blind TI = 0*G + totalIssues*H
-	//totalIssues := uint64(2)
 	totalIssuesBlind := [32]byte{} // zero
 	totalIssuesCommitment, err := secp256k1.Commit(context, totalIssuesBlind[:], totalIssues, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
-		return errors.Wrap(err, "cannot Commit totalIssues")
+		err = errors.Wrap(err, "cannot Commit totalIssues")
+		return
 	}
 
 	// difference of remaining outputs and all excesses should equal to the commitment to value of total issued;
 	// ex. for one issue I and one transfer from I to O:
 	// sum(O) - sum(KE) = O - KE - KEI = RO*G + VO*H - (RO*G + VO*H - RI*G - VI*H) - (RI*G + 0*H) = 0*G + VI*H
 	if sumCommitment.String() != totalIssuesCommitment.String() {
-		return errors.Errorf("difference of outputs and kernel excesses does not equal to the total of issued assets=%d", totalIssues)
+		err = errors.Errorf("difference of outputs and kernel excesses does not equal to the total of issued assets=%d", totalIssues)
+		return
 	}
 
-	return nil
+	return
 }
 
 func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
-	if len(tx.Body.Kernels) < 1 {
-		return errors.New("no entries in Kernels")
+	if len(tx.Body.Kernels) != 1 {
+		return errors.New("expected one kernel in transaction")
 	}
 
-	excessSigBytes, err := hex.DecodeString(tx.Body.Kernels[0].ExcessSig)
+	kernel := tx.Body.Kernels[0]
+
+	excessSigBytes, err := hex.DecodeString(kernel.ExcessSig)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode hex ExcessSig")
 	}
@@ -232,7 +223,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 		return errors.Wrap(err, "cannot parse compact ExcessSig")
 	}
 
-	excessBytes, err := hex.DecodeString(tx.Body.Kernels[0].Excess)
+	excessBytes, err := hex.DecodeString(kernel.Excess)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode hex Excess")
 	}
@@ -245,7 +236,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 		return errors.Wrap(err, "CommitmentToPublicKey failed")
 	}
 
-	msg := KernelSignatureMessage(tx.Body.Kernels[0])
+	msg := KernelSignatureMessage(kernel)
 
 	err = secp256k1.AggsigVerifySingle(
 		context,

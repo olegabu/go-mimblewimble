@@ -1,6 +1,7 @@
 package abci
 
 import (
+	"encoding/json"
 	"fmt"
 	_ "github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/ledger"
@@ -125,42 +126,56 @@ func (app *MWApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 	if paths[0] == "output" {
 		if len(paths) == 1 {
 			// return all outputs
-			bytes, err := app.db.ListOutputs()
-			if err != nil {
-				resQuery.Log = errors.Wrap(err, "cannot list outputs").Error()
-			} else {
-				resQuery.Value = bytes
-			}
+			list, err := app.db.ListOutputs()
+			okResponse(&resQuery, list, err)
 		} else if len(paths) > 1 {
 			// return one output
 			bytes, err := app.db.GetOutput([]byte(paths[1]))
-			if err != nil {
-				resQuery.Log = errors.Wrap(err, "does not exist").Error()
-			} else {
-				resQuery.Log = "exists"
-				resQuery.Value = bytes
-			}
-			resQuery.Value = bytes
+			okResponse(&resQuery, bytes, err)
 		}
 	} else if paths[0] == "kernel" {
-		// return all kernels
-		bytes, err := app.db.ListKernels()
-		if err != nil {
-			resQuery.Log = errors.Wrap(err, "cannot list kernels").Error()
-		} else {
-			resQuery.Value = bytes
-		}
+		list, err := app.db.ListKernels()
+		okResponse(&resQuery, list, err)
 	} else if paths[0] == "asset" {
-		// return all assets
-		bytes, err := app.db.ListAssets()
-		if err != nil {
-			resQuery.Log = errors.Wrap(err, "cannot list assets").Error()
-		} else {
-			resQuery.Value = bytes
-		}
+		list, err := app.db.ListAssets()
+		okResponse(&resQuery, list, err)
+	} else if paths[0] == "validate" {
+		outputs, err := app.db.ListOutputs()
+		errorResponse(&resQuery, err, "cannot list outputs")
+		kernels, err := app.db.ListKernels()
+		errorResponse(&resQuery, err, "cannot list kernels")
+		assets, err := app.db.ListAssets()
+		errorResponse(&resQuery, err, "cannot list assets")
+
+		msg, err := ledger.ValidateState(outputs, kernels, assets)
+		okResponse(&resQuery, msg, err)
 	}
 
 	return
+}
+
+func errorResponse(resQuery *abcitypes.ResponseQuery, err error, msg string) {
+	if resQuery == nil {
+		return
+	}
+	if err != nil {
+		resQuery.Log = errors.Wrap(err, msg).Error()
+		resQuery.Code = http.StatusInternalServerError
+	}
+}
+
+func okResponse(resQuery *abcitypes.ResponseQuery, list interface{}, err error) {
+	if resQuery == nil {
+		return
+	}
+	if err != nil {
+		errorResponse(resQuery, err, "error")
+	} else {
+		bytes, err := json.Marshal(list)
+		errorResponse(resQuery, err, "cannot marshal")
+		resQuery.Value = bytes
+		resQuery.Code = http.StatusOK
+	}
 }
 
 // see https://github.com/tendermint/tendermint/blob/60827f75623b92eff132dc0eff5b49d2025c591e/docs/spec/abci/abci.md#events
