@@ -25,11 +25,47 @@ func (t *Wallet) NewSend(
 	savedSlate *SavedSlate,
 	err error,
 ) {
+	slateInputs, changeOutput, blindExcess, err := t.slateInputsAndChange(
+		amount,
+		fee,
+		asset,
+		change,
+		walletInputs)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create slate inputs and outputs")
+		return
+	}
+
+	var slateOutputs []core.Output
+	if changeOutput != nil {
+		slateOutputs = append(slateOutputs, changeOutput.Output)
+	}
+
+	slateBytes, savedSlate, err = t.newSlate(slateInputs, slateOutputs, amount, fee, asset, blindExcess[:])
+	if err != nil {
+		err = errors.Wrap(err, "cannot create newSlate")
+		return
+	}
+
+	return
+}
+
+func (t *Wallet) slateInputsAndChange(
+	amount uint64,
+	fee uint64,
+	asset string,
+	change uint64,
+	walletInputs []Output,
+) (
+	slateInputs []core.Input,
+	changeOutput *Output,
+	blindExcess [32]byte,
+	err error,
+) {
 	// loop thru wallet inputs to turn them into slate inputs, sum their values,
 	// collect input blinding factors (negative)
 	var inputsTotal uint64
 	var inputBlinds [][]byte
-	var slateInputs []core.Input
 	for _, input := range walletInputs {
 		inputsTotal += input.Value
 		// re-create child secret key from its saved index and use it as this input's blind
@@ -50,7 +86,6 @@ func (t *Wallet) NewSend(
 
 	// create change output and remember its blinding factor
 	var outputBlinds [][]byte
-	var slateOutputs []core.Output
 	if change > 0 {
 		o, b, e := t.newOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
 		if e != nil {
@@ -58,58 +93,31 @@ func (t *Wallet) NewSend(
 			return
 		}
 		outputBlinds = append(outputBlinds, b)
-		slateOutputs = append(slateOutputs, o.Output)
 		changeOutput = o
 	}
 
 	// sum up inputs(-) and outputs(+) blinding factors
-	blindExcess, err := secp256k1.BlindSum(t.context, outputBlinds, inputBlinds)
+	blindExcess, err = secp256k1.BlindSum(t.context, outputBlinds, inputBlinds)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create blinding excess sum")
-		return
-	}
-
-	slateBytes, savedSlate, err = t.newSlate(slateInputs, slateOutputs, amount, fee, asset, blindExcess)
-	if err != nil {
-		err = errors.Wrap(err, "cannot create newSlate")
 		return
 	}
 
 	return
 }
 
-func (t *Wallet) NewReceive(
-	senderSlateBytes []byte,
-) (
-	receiverSlateBytes []byte,
-	walletOutput *Output,
-	savedSlate *SavedSlate,
-	err error,
-) {
-	var slate = Slate{}
-	err = json.Unmarshal(senderSlateBytes, &slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to slate")
-		return
-	}
+func (t *Wallet) respond(slate *Slate, output core.Output, outputBlind []byte) (receiverNonce [32]byte, err error) {
+	// add responder output (receiver's in Send, payer's change in Invoice)
+	slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, output)
 
-	value := uint64(slate.Amount)
-	// fee := uint64(slate.Fee)
-
-	// create receiver output and remember its blinding factor and calculate its public key
-	walletOutput, outputBlind, err := t.newOutput(value, core.PlainOutput, slate.Asset, OutputUnconfirmed)
-	if err != nil {
-		err = errors.Wrap(err, "cannot create receiver output")
-		return
-	}
 	receiverPublicBlind, err := t.pubKeyFromSecretKey(outputBlind)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create publicBlindExcess")
+		err = errors.Wrap(err, "cannot create publicBlind")
 		return
 	}
 
 	// choose receiver nonce and calculate its public key
-	receiverNonce, err := t.nonce()
+	receiverNonce, err = t.nonce()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
 		return
@@ -120,7 +128,7 @@ func (t *Wallet) NewReceive(
 		return
 	}
 
-	// parse out sender public blind and public secret
+	// parse out sender public blind and public nonce
 	senderPublicBlind := t.context.PublicKeyFromHex(slate.ParticipantData[0].PublicBlindExcess)
 	if senderPublicBlind == nil {
 		err = errors.Wrap(err, "cannot get senderPublicBlindExcess")
@@ -159,9 +167,6 @@ func (t *Wallet) NewReceive(
 		return
 	}
 
-	// Add transaction output
-	slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, walletOutput.Output)
-
 	// Update slate with the receiver's info
 	receiverPartSigBytes := secp256k1.AggsigSignaturePartialSerialize(&receiverPartSig)
 	receiverPartSigString := hex.EncodeToString(receiverPartSigBytes[:])
@@ -174,7 +179,67 @@ func (t *Wallet) NewReceive(
 		MessageSig:        nil,
 	})
 
-	receiverSlate := slate
+	return
+}
+
+func (t *Wallet) NewInvoice(
+	amount uint64,
+	fee uint64,
+	asset string,
+) (
+	slateBytes []byte,
+	walletOutput *Output,
+	savedSlate *SavedSlate,
+	err error,
+) {
+	// create receiver output and remember its blinding factor and calculate its public key
+	walletOutput, outputBlind, err := t.newOutput(amount, core.PlainOutput, asset, OutputUnconfirmed)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create receiver output")
+		return
+	}
+
+	slateBytes, savedSlate, err = t.newSlate(nil, []core.Output{walletOutput.Output}, amount, fee, asset, outputBlind[:])
+	if err != nil {
+		err = errors.Wrap(err, "cannot create newSlate")
+		return
+	}
+
+	return
+}
+
+func (t *Wallet) NewReceive(
+	senderSlateBytes []byte,
+) (
+	receiverSlateBytes []byte,
+	walletOutput *Output,
+	savedSlate *SavedSlate,
+	err error,
+) {
+	var slate = &Slate{}
+	err = json.Unmarshal(senderSlateBytes, slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal json to slate")
+		return
+	}
+
+	value := uint64(slate.Amount)
+	// fee := uint64(slate.Fee)
+
+	// create receiver output and remember its blinding factor
+	walletOutput, outputBlind, err := t.newOutput(value, core.PlainOutput, slate.Asset, OutputUnconfirmed)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create receiver output")
+		return
+	}
+
+	receiverNonce, err := t.respond(slate, walletOutput.Output, outputBlind)
+	if err != nil {
+		err = errors.Wrap(err, "cannot respond to slate")
+		return
+	}
+
+	receiverSlate := *slate
 	receiverSlate.Status = SlateReceived
 
 	receiverSlateBytes, err = json.Marshal(receiverSlate)
@@ -186,6 +251,62 @@ func (t *Wallet) NewReceive(
 	savedSlate = &SavedSlate{
 		Slate: receiverSlate,
 		Nonce: receiverNonce,
+	}
+
+	return
+}
+
+func (t *Wallet) NewPay(
+	amount uint64,
+	fee uint64,
+	asset string,
+	change uint64,
+	walletInputs []Output,
+	invoiceSlateBytes []byte,
+) (
+	slateBytes []byte,
+	changeOutput *Output,
+	savedSlate *SavedSlate,
+	err error,
+) {
+	slateInputs, changeOutput, blindExcess, err := t.slateInputsAndChange(
+		amount,
+		fee,
+		asset,
+		change,
+		walletInputs)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create slate inputs and outputs")
+		return
+	}
+
+	var slate = &Slate{}
+	err = json.Unmarshal(invoiceSlateBytes, slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal json to slate")
+		return
+	}
+
+	slate.Transaction.Body.Inputs = slateInputs
+
+	payerNonce, err := t.respond(slate, changeOutput.Output, blindExcess[:])
+	if err != nil {
+		err = errors.Wrap(err, "cannot respond to slate")
+		return
+	}
+
+	payerSlate := slate
+	payerSlate.Status = SlatePaid
+
+	slateBytes, err = json.Marshal(payerSlate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
+	}
+
+	savedSlate = &SavedSlate{
+		Slate: *payerSlate,
+		Nonce: payerNonce,
 	}
 
 	return
@@ -443,7 +564,7 @@ func (t *Wallet) newOutput(
 }
 
 func (t *Wallet) newSlate(slateInputs []core.Input, slateOutputs []core.Output,
-	amount uint64, fee uint64, asset string, blind [32]byte) (slateBytes []byte, savedSlate *SavedSlate, err error) {
+	amount uint64, fee uint64, asset string, blind []byte) (slateBytes []byte, savedSlate *SavedSlate, err error) {
 
 	// generate secret nonce
 	nonce, err := t.nonce()

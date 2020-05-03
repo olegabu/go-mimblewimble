@@ -13,18 +13,9 @@ import (
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 
-func TestRound(t *testing.T) {
-	dir := testDbDir()
-
-	err := os.RemoveAll(dir)
-	assert.NoError(t, err)
-
-	w, err := NewWalletWithoutMasterKey(dir)
-	assert.NoError(t, err)
+func TestSlateSendReceive(t *testing.T) {
+	w := newTestWallet(t)
 	defer w.Close()
-
-	_, err = w.InitMasterKey("")
-	assert.NoError(t, err)
 
 	inputValue := uint64(300)
 	amount := uint64(200)
@@ -41,13 +32,88 @@ func TestRound(t *testing.T) {
 
 	senderSlateBytes, _, senderSavedSlate, err := w.NewSend(amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
+	assert.NotNil(t, senderSlateBytes)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
 	responseSlateBytes, _, _, err := w.NewReceive(senderSlateBytes)
 	assert.NoError(t, err)
+	assert.NotNil(t, responseSlateBytes)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
 	txBytes, tx, err := w.NewTransaction(responseSlateBytes, senderSavedSlate)
+	assert.NotNil(t, txBytes)
+	assert.NotNil(t, tx)
+	assert.NoError(t, err)
+	fmt.Printf("tran %s\n", string(txBytes))
+
+	tr, err := ledger.ValidateTransactionBytes(txBytes)
+	assert.NoError(t, err)
+	assert.NotNil(t, tr)
+}
+
+func newTestWallet(t *testing.T) (w *Wallet) {
+	dir := testDbDir()
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w, err = NewWalletWithoutMasterKey(dir)
+	assert.NoError(t, err)
+
+	_, err = w.InitMasterKey("")
+	assert.NoError(t, err)
+
+	return
+}
+
+func TestNewInvoice(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	amount := uint64(200)
+	fee := uint64(0)
+	asset := "cash"
+
+	slateBytes, walletOutput, savedSlate, err := w.NewInvoice(amount, fee, asset)
+	assert.NoError(t, err)
+	assert.NotNil(t, slateBytes)
+	assert.NotNil(t, walletOutput)
+	assert.NotNil(t, savedSlate)
+	fmt.Printf("invoice %s\n", string(slateBytes))
+}
+
+func TestSlateInvoicePay(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	inputValue := uint64(300)
+	amount := uint64(200)
+	fee := uint64(0)
+	asset := "cash"
+
+	invoiceSlateBytes, walletOutput, invoiceSavedSlate, err := w.NewInvoice(amount, fee, asset)
+	assert.NoError(t, err)
+	assert.NotNil(t, invoiceSlateBytes)
+	assert.NotNil(t, walletOutput)
+	assert.NotNil(t, invoiceSavedSlate)
+	fmt.Printf("invoice %s\n", string(invoiceSlateBytes))
+
+	change := inputValue - amount - fee
+
+	input1, _, err := w.newOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	assert.NoError(t, err)
+	input2, _, err := w.newOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	assert.NoError(t, err)
+	inputs := []Output{*input1, *input2}
+
+	paySlateBytes, changeOutput, paySavedSlate, err := w.NewPay(amount, fee, asset, change, inputs, invoiceSlateBytes)
+	assert.NoError(t, err)
+	assert.NotNil(t, paySlateBytes)
+	assert.NotNil(t, changeOutput)
+	assert.NotNil(t, paySavedSlate)
+	fmt.Printf("pay %s\n", string(paySlateBytes))
+
+	txBytes, tx, err := w.NewTransaction(paySlateBytes, invoiceSavedSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)
