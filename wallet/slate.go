@@ -106,9 +106,11 @@ func (t *Wallet) slateInputsAndChange(
 	return
 }
 
-func (t *Wallet) respond(slate *Slate, output core.Output, outputBlind []byte) (receiverNonce [32]byte, err error) {
+func (t *Wallet) respond(slate *Slate, output *core.Output, outputBlind []byte) (receiverNonce [32]byte, err error) {
 	// add responder output (receiver's in Send, payer's change in Invoice)
-	slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, output)
+	if output != nil {
+		slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, *output)
+	}
 
 	receiverPublicBlind, err := t.pubKeyFromSecretKey(outputBlind)
 	if err != nil {
@@ -233,7 +235,7 @@ func (t *Wallet) NewReceive(
 		return
 	}
 
-	receiverNonce, err := t.respond(slate, walletOutput.Output, outputBlind)
+	receiverNonce, err := t.respond(slate, &walletOutput.Output, outputBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot respond to slate")
 		return
@@ -289,7 +291,14 @@ func (t *Wallet) NewPay(
 
 	slate.Transaction.Body.Inputs = slateInputs
 
-	payerNonce, err := t.respond(slate, changeOutput.Output, blindExcess[:])
+	var output *core.Output
+	if changeOutput != nil {
+		output = &changeOutput.Output
+	} else {
+		output = nil
+	}
+
+	payerNonce, err := t.respond(slate, output, blindExcess[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot respond to slate")
 		return

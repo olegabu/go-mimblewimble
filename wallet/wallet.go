@@ -92,6 +92,25 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 	return
 }
 
+func (t *Wallet) Invoice(amount uint64, asset string) (slateBytes []byte, err error) {
+	slateBytes, walletOutput, savedSlate, err := t.NewInvoice(amount, 0, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewInvoice")
+	}
+
+	err = t.db.PutOutput(*walletOutput)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutOutput")
+	}
+
+	err = t.db.PutSenderSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	return
+}
+
 func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err error) {
 	responseSlateBytes, receiverOutput, receiverSlate, err := t.NewReceive(sendSlateBytes)
 	if err != nil {
@@ -115,6 +134,57 @@ func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err 
 		},
 		Status: TransactionUnconfirmed,
 		Asset:  receiverSlate.Asset,
+	}
+
+	err = t.db.PutTransaction(tx)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutTransaction")
+	}
+
+	return
+}
+
+func (t *Wallet) Pay(invoiceSlateBytes []byte) (paySlateBytes []byte, err error) {
+	var slate = &Slate{}
+	err = json.Unmarshal(invoiceSlateBytes, slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal json to slate")
+		return
+	}
+
+	amount := uint64(slate.Amount)
+	fee := uint64(slate.Fee)
+	asset := slate.Asset
+
+	inputs, change, err := t.db.GetInputs(amount, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	paySlateBytes, changeOutput, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, invoiceSlateBytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewReceive")
+	}
+
+	if changeOutput != nil {
+		err = t.db.PutOutput(*changeOutput)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
+	}
+
+	err = t.db.PutReceiverSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
+	}
+
+	tx := Transaction{
+		Transaction: ledger.Transaction{
+			Transaction: savedSlate.Transaction,
+			ID:          savedSlate.ID,
+		},
+		Status: TransactionUnconfirmed,
+		Asset:  asset,
 	}
 
 	err = t.db.PutTransaction(tx)
