@@ -61,7 +61,7 @@ mw receive slate-send-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
 ```
 Finalize the transaction. This will create a `tx-<transaction uuid>.json` file that needs to be broadcast 
-to the network to be validated. 
+to the network to get validated. 
 In this offline scenario we'll skip this part and tell the wallet the transaction has been confirmed. 
 ```bash
 mw finalize slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
@@ -74,6 +74,23 @@ in your wallet.
 mw confirm 8668319f-d8ae-4dda-be5b-e3fd1648565e
 mw info
 ```
+
+You can request a payment by creating an invoice and passing it to the payer.
+```bash
+mw invoice 1
+```
+The payer can accept the invoice and pay it.
+```bash
+mw pay slate-invoice-4ef548ba-31bd-4d03-8954-9884cc907d15.json
+```
+Upon receipt of the pay slate from the payer the payee will finalize the exchange to create a transaction, 
+just like in the send-receive scenario with the difference that now it is the payee
+that finalizes, not the payer.
+```bash
+mw finalize slate-pay-4ef548ba-31bd-4d03-8954-9884cc907d15.json
+mw confirm 4ef548ba-31bd-4d03-8954-9884cc907d15
+```
+
 You can validate any transaction serialized in [Grin](https://github.com/mimblewimble/grin) format.
 ```bash
 mw validate tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
