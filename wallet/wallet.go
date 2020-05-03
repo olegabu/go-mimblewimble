@@ -72,7 +72,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := t.NewSend(amount, 0, asset, change, inputs)
+	slateBytes, changeOutput, savedSlate, err := t.NewSend(amount, 0, asset, change, inputs)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewSend")
 	}
@@ -84,7 +84,7 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		}
 	}
 
-	err = t.db.PutSenderSlate(senderSlate)
+	err = t.db.PutSenderSlate(savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
 	}
@@ -154,7 +154,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, blind, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
+	walletOutput, blind, err := t.newOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}

@@ -33,21 +33,21 @@ func TestRound(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.createOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	input2, _, err := w.createOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.newOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*input1, *input2}
 
-	slateBytes, _, senderWalletSlate, err := w.NewSend(amount, fee, asset, change, inputs)
+	senderSlateBytes, _, senderSavedSlate, err := w.NewSend(amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
-	fmt.Printf("send %s\n", string(slateBytes))
+	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, _, err := w.NewReceive(slateBytes)
+	responseSlateBytes, _, _, err := w.NewReceive(senderSlateBytes)
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, tx, err := w.NewTransaction(responseSlateBytes, senderWalletSlate)
+	txBytes, tx, err := w.NewTransaction(responseSlateBytes, senderSavedSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)

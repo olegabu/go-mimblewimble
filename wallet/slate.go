@@ -20,9 +20,9 @@ func (t *Wallet) NewSend(
 	change uint64,
 	walletInputs []Output,
 ) (
-	walletSlateBytes []byte,
+	slateBytes []byte,
 	changeOutput *Output,
-	senderSlate SenderSlate,
+	savedSlate *SavedSlate,
 	err error,
 ) {
 	// loop thru wallet inputs to turn them into slate inputs, sum their values,
@@ -52,7 +52,7 @@ func (t *Wallet) NewSend(
 	var outputBlinds [][]byte
 	var slateOutputs []core.Output
 	if change > 0 {
-		o, b, e := t.createOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
+		o, b, e := t.newOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
 		if e != nil {
 			err = errors.Wrap(e, "cannot create change output")
 			return
@@ -62,115 +62,32 @@ func (t *Wallet) NewSend(
 		changeOutput = o
 	}
 
-	// sum up inputs(-) and outputs(+) blinding factors and calculate their sum's public key
+	// sum up inputs(-) and outputs(+) blinding factors
 	blindExcess, err := secp256k1.BlindSum(t.context, outputBlinds, inputBlinds)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create blinding excess sum")
 		return
 	}
 
-	// generate secret nonce
-	nonce, err := t.nonce()
+	slateBytes, savedSlate, err = t.newSlate(slateInputs, slateOutputs, amount, fee, asset, blindExcess)
 	if err != nil {
-		err = errors.Wrap(err, "cannot get nonce")
+		err = errors.Wrap(err, "cannot create newSlate")
 		return
-	}
-
-	// generate random kernel offset
-	kernelOffset, err := t.nonce()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get random offset")
-		return
-	}
-
-	// subtract kernel offset from blinding excess
-	sumSenderBlinds, err := secp256k1.BlindSum(t.context, [][]byte{blindExcess[:]}, [][]byte{kernelOffset[:]})
-	if err != nil {
-		err = errors.Wrap(err, "cannot get offset for blind")
-		return
-	}
-
-	publicBlindExcess, err := t.pubKeyFromSecretKey(sumSenderBlinds[:])
-	if err != nil {
-		err = errors.Wrap(err, "cannot create publicBlindExcess")
-		return
-	}
-
-	publicNonce, err := t.pubKeyFromSecretKey(nonce[:])
-	if err != nil {
-		err = errors.Wrap(err, "cannot create publicNonce")
-		return
-	}
-
-	// put these all into a slate and marshal it to json
-
-	slate := &libwallet.Slate{
-		VersionInfo: libwallet.VersionCompatInfo{
-			Version:            3,
-			OrigVersion:        3,
-			BlockHeaderVersion: 2,
-		},
-		NumParticipants: 2,
-		ID:              uuid.New(),
-		Transaction: core.Transaction{
-			Offset: hex.EncodeToString(kernelOffset[:]),
-			Body: core.TransactionBody{
-				Inputs:  slateInputs,
-				Outputs: slateOutputs,
-				Kernels: []core.TxKernel{{
-					Features:   core.PlainKernel,
-					Fee:        core.Uint64(fee),
-					LockHeight: 0,
-					Excess:     "000000000000000000000000000000000000000000000000000000000000000000",
-					ExcessSig:  "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-				}},
-			},
-		},
-		Amount:     core.Uint64(amount),
-		Fee:        core.Uint64(fee),
-		Height:     0,
-		LockHeight: 0,
-		ParticipantData: []libwallet.ParticipantData{{
-			ID:                0,
-			PublicBlindExcess: publicBlindExcess.Hex(t.context),
-			PublicNonce:       publicNonce.Hex(t.context),
-			PartSig:           nil,
-			Message:           nil,
-			MessageSig:        nil,
-		}},
-	}
-
-	walletSlate := Slate{
-		Slate:  *slate,
-		Asset:  asset,
-		Status: SlateSent,
-	}
-
-	walletSlateBytes, err = json.Marshal(walletSlate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot marshal walletSlate to json")
-		return
-	}
-
-	senderSlate = SenderSlate{
-		Slate:           walletSlate,
-		SenderNonce:     nonce,
-		SumSenderBlinds: sumSenderBlinds,
 	}
 
 	return
 }
 
 func (t *Wallet) NewReceive(
-	slateBytes []byte,
+	senderSlateBytes []byte,
 ) (
-	walletSlateBytes []byte,
+	receiverSlateBytes []byte,
 	walletOutput *Output,
-	receiverSlate ReceiverSlate,
+	savedSlate *SavedSlate,
 	err error,
 ) {
 	var slate = Slate{}
-	err = json.Unmarshal(slateBytes, &slate)
+	err = json.Unmarshal(senderSlateBytes, &slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot unmarshal json to slate")
 		return
@@ -180,7 +97,7 @@ func (t *Wallet) NewReceive(
 	// fee := uint64(slate.Fee)
 
 	// create receiver output and remember its blinding factor and calculate its public key
-	walletOutput, outputBlind, err := t.createOutput(value, core.PlainOutput, slate.Asset, OutputUnconfirmed)
+	walletOutput, outputBlind, err := t.newOutput(value, core.PlainOutput, slate.Asset, OutputUnconfirmed)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create receiver output")
 		return
@@ -215,7 +132,7 @@ func (t *Wallet) NewReceive(
 		return
 	}
 
-	// Combine public blinds and nonces
+	// Combine sender and receiver public blinds and nonces
 	sumPublicBlinds, err := t.sumPubKeys([]*secp256k1.PublicKey{senderPublicBlind, receiverPublicBlind})
 	if err != nil {
 		err = errors.Wrap(err, "cannot get sumPublicBlindsBytes")
@@ -257,36 +174,32 @@ func (t *Wallet) NewReceive(
 		MessageSig:        nil,
 	})
 
-	walletSlate := Slate{
-		Slate:  slate.Slate,
-		Asset:  slate.Asset,
-		Status: SlateResponded,
-	}
+	receiverSlate := slate
+	receiverSlate.Status = SlateReceived
 
-	walletSlateBytes, err = json.Marshal(walletSlate)
+	receiverSlateBytes, err = json.Marshal(receiverSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal slate to json")
 		return
 	}
 
-	receiverSlate = ReceiverSlate{
-		Slate:         walletSlate,
-		ReceiverNonce: receiverNonce,
+	savedSlate = &SavedSlate{
+		Slate: receiverSlate,
+		Nonce: receiverNonce,
 	}
 
 	return
 }
 
-func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSlate) (ledgerTxBytes []byte, walletTx Transaction, err error) {
+func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate *SavedSlate) (ledgerTxBytes []byte, walletTx Transaction, err error) {
 	// get secret keys from sender's responseSlate that has blind and secret nonces
-	senderBlind := senderSlate.SumSenderBlinds[:]
-	senderNonce := senderSlate.SenderNonce[:]
+	senderBlind := senderSlate.Blind[:]
+	senderNonce := senderSlate.Nonce[:]
 	// calculate public keys from secret keys
-	senderPublicBlind_, _ := t.pubKeyFromSecretKey(senderBlind)
-	senderPublicNonce_, _ := t.pubKeyFromSecretKey(senderNonce)
+	senderPublicBlind, _ := t.pubKeyFromSecretKey(senderBlind)
+	senderPublicNonce, _ := t.pubKeyFromSecretKey(senderNonce)
 
 	// parse responseSlate
-
 	var responseSlate = Slate{}
 	err = json.Unmarshal(responseSlateBytes, &responseSlate)
 	if err != nil {
@@ -295,19 +208,18 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 	}
 
 	// parse out public blinds and nonces for both sender and receiver from the responseSlate
-
 	if len(responseSlate.ParticipantData) != 2 {
 		err = errors.New("expected 2 entries in ParticipantData")
 		return
 	}
 
-	// Get public keys from responseSlate
-	senderPublicBlind := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicBlindExcess)
-	senderPublicNonce := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicNonce)
+	// get public keys from responseSlate
+	senderPublicBlindFromReceiverSlate := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicBlindExcess)
+	senderPublicNonceFromReceiverSlate := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicNonce)
 
-	// Verify that the response we've got from Receiver has Sender's public key and secret unchanghed
-	if (0 != bytes.Compare(senderPublicBlind.Bytes(t.context), senderPublicBlind_.Bytes(t.context))) ||
-		(0 != bytes.Compare(senderPublicNonce.Bytes(t.context), senderPublicNonce_.Bytes(t.context))) {
+	// verify that the response we've got from Receiver has Sender's public key and secret unchanged
+	if (0 != bytes.Compare(senderPublicBlind.Bytes(t.context), senderPublicBlindFromReceiverSlate.Bytes(t.context))) ||
+		(0 != bytes.Compare(senderPublicNonce.Bytes(t.context), senderPublicNonceFromReceiverSlate.Bytes(t.context))) {
 		err = errors.Wrap(err, "public keys mismatch, calculated values are not the same as loaded from responseSlate")
 		return
 	}
@@ -315,13 +227,15 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 	receiverPublicBlind := t.context.PublicKeyFromHex(responseSlate.ParticipantData[1].PublicBlindExcess)
 	receiverPublicNonce := t.context.PublicKeyFromHex(responseSlate.ParticipantData[1].PublicNonce)
 
-	var sumPublicBlinds, sumPublicNonces *secp256k1.PublicKey
-	if sumPublicBlinds, err = t.sumPubKeys([]*secp256k1.PublicKey{senderPublicBlind, receiverPublicBlind}); err != nil {
-		err = errors.Wrap(err, "cannot get sumPublicBlindsBytes")
+	// combine sender and receiver public blinds and nonces
+	sumPublicBlinds, err := t.sumPubKeys([]*secp256k1.PublicKey{senderPublicBlind, receiverPublicBlind})
+	if err != nil {
+		err = errors.Wrap(err, "cannot get sumPublicBlinds")
 		return
 	}
-	if sumPublicNonces, err = t.sumPubKeys([]*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce}); err != nil {
-		err = errors.Wrap(err, "cannot get sumPublicNoncesBytes")
+	sumPublicNonces, err := t.sumPubKeys([]*secp256k1.PublicKey{senderPublicNonce, receiverPublicNonce})
+	if err != nil {
+		err = errors.Wrap(err, "cannot get sumPublicNonces")
 		return
 	}
 
@@ -331,31 +245,30 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 	// decode receiver's partial signature
 	receiverPartSigBytes, err := hex.DecodeString(*responseSlate.ParticipantData[1].PartSig)
 	if err != nil {
-		err = errors.Wrap(err, "cannot parse receiverPartialSig from hex")
+		err = errors.Wrap(err, "cannot decode receiverPartSigBytes from hex")
 		return
 	}
 	receiverPartSig, err := secp256k1.AggsigSignaturePartialParse(receiverPartSigBytes)
 	if err != nil {
-		err = errors.Wrap(err, "cannot parse receiverPartialSig from hex")
+		err = errors.Wrap(err, "cannot parse receiverPartialSig from bytes")
 		return
 	}
 
-	// Verify receiver's partial signature
-
-	if nil != secp256k1.AggsigVerifyPartial(
+	// verify receiver's partial signature
+	err = secp256k1.AggsigVerifyPartial(
 		t.context,
 		&receiverPartSig,
 		sumPublicNonces,
 		receiverPublicBlind,
 		sumPublicBlinds,
 		msg,
-	) {
+	)
+	if err != nil {
 		err = errors.Wrap(err, "cannot verify receiver partial signature")
 		return
 	}
 
-	// Calculate sender's partial signature
-
+	// calculate sender's partial signature
 	senderPartSig, err := secp256k1.AggsigSignPartial(
 		t.context,
 		senderBlind,
@@ -370,21 +283,20 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 	}
 
 	// verify sender's partial signature
-
-	if nil != secp256k1.AggsigVerifyPartial(
+	err = secp256k1.AggsigVerifyPartial(
 		t.context,
 		&senderPartSig,
 		sumPublicNonces,
 		senderPublicBlind,
 		sumPublicBlinds,
 		msg,
-	) {
+	)
+	if err != nil {
 		err = errors.Wrap(err, "cannot verify sender partial signature")
 		return
 	}
 
-	// Finalize the transaction
-
+	// add sender and receiver partial signatures
 	finalSig, err := secp256k1.AggsigAddSignaturesSingle(
 		t.context,
 		[]*secp256k1.AggsigSignaturePartial{
@@ -393,12 +305,11 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 		},
 		sumPublicNonces)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create excess signature")
+		err = errors.Wrap(err, "cannot add sender and receiver partial signatures")
 		return
 	}
 
-	// Verify final sig
-
+	// verify final signature
 	err = secp256k1.AggsigVerifySingle(
 		t.context,
 		&finalSig,
@@ -416,7 +327,7 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 
 	tx := responseSlate.Transaction
 
-	// calculate kernel excess as a sum of commitments of inputs, outputs and kernel offset
+	// calculate kernel excess as a sum of commitments of inputs, outputs and kernel offset,
 	// that would produce a *Commitment type result
 	kernelExcess, err := ledger.CalculateExcess(t.context, &tx, uint64(responseSlate.Fee))
 	if err != nil {
@@ -430,8 +341,7 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 		return
 	}
 
-	// Verify final sig with pk from excess
-
+	// verify final sig with pk from excess
 	err = secp256k1.AggsigVerifySingle(
 		t.context,
 		&finalSig,
@@ -471,7 +381,7 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSla
 	return
 }
 
-func (t *Wallet) createOutput(
+func (t *Wallet) newOutput(
 	value uint64,
 	features core.OutputFeatures,
 	asset string,
@@ -527,6 +437,99 @@ func (t *Wallet) createOutput(
 		Asset:  asset,
 		Index:  index,
 		Status: status,
+	}
+
+	return
+}
+
+func (t *Wallet) newSlate(slateInputs []core.Input, slateOutputs []core.Output,
+	amount uint64, fee uint64, asset string, blind [32]byte) (slateBytes []byte, savedSlate *SavedSlate, err error) {
+
+	// generate secret nonce
+	nonce, err := t.nonce()
+	if err != nil {
+		err = errors.Wrap(err, "cannot get nonce")
+		return
+	}
+
+	// generate random kernel offset
+	kernelOffset, err := t.nonce()
+	if err != nil {
+		err = errors.Wrap(err, "cannot get nonce for kernelOffset")
+		return
+	}
+
+	// subtract kernel offset from blinding excess
+	sumBlinds, err := secp256k1.BlindSum(t.context, [][]byte{blind[:]}, [][]byte{kernelOffset[:]})
+	if err != nil {
+		err = errors.Wrap(err, "cannot BlindSum")
+		return
+	}
+
+	publicBlindExcess, err := t.pubKeyFromSecretKey(sumBlinds[:])
+	if err != nil {
+		err = errors.Wrap(err, "cannot create publicBlindExcess")
+		return
+	}
+
+	publicNonce, err := t.pubKeyFromSecretKey(nonce[:])
+	if err != nil {
+		err = errors.Wrap(err, "cannot create publicNonce")
+		return
+	}
+
+	coreSlate := &libwallet.Slate{
+		VersionInfo: libwallet.VersionCompatInfo{
+			Version:            3,
+			OrigVersion:        3,
+			BlockHeaderVersion: 2,
+		},
+		NumParticipants: 2,
+		ID:              uuid.New(),
+		Transaction: core.Transaction{
+			Offset: hex.EncodeToString(kernelOffset[:]),
+			Body: core.TransactionBody{
+				Inputs:  slateInputs,
+				Outputs: slateOutputs,
+				Kernels: []core.TxKernel{{
+					Features:   core.PlainKernel,
+					Fee:        core.Uint64(fee),
+					LockHeight: 0,
+					Excess:     "000000000000000000000000000000000000000000000000000000000000000000",
+					ExcessSig:  "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				}},
+			},
+		},
+		Amount:     core.Uint64(amount),
+		Fee:        core.Uint64(fee),
+		Height:     0,
+		LockHeight: 0,
+		ParticipantData: []libwallet.ParticipantData{{
+			ID:                0,
+			PublicBlindExcess: publicBlindExcess.Hex(t.context),
+			PublicNonce:       publicNonce.Hex(t.context),
+			PartSig:           nil,
+			Message:           nil,
+			MessageSig:        nil,
+		}},
+	}
+
+	slate := &Slate{
+		Slate:  *coreSlate,
+		Asset:  asset,
+		Status: SlateSent,
+	}
+
+	savedSlate = &SavedSlate{
+		Slate: *slate,
+		Nonce: nonce,
+		Blind: sumBlinds,
+	}
+
+	slateBytes, err = json.Marshal(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
 	}
 
 	return

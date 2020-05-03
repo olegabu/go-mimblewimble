@@ -103,14 +103,14 @@ func TestCreateAndGetMasterKey(t *testing.T) {
 	assert.NoError(t, err)
 	defer w.Close()
 
-	mnemonic, err := w.createMasterKey()
+	mnemonic, err := w.newMasterKey()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, mnemonic)
 	assert.NotNil(t, w.masterKey)
 
 	fmt.Printf("created masterKey\t%s\n", w.masterKey.String())
 
-	masterKey, err := w.getMasterKey()
+	masterKey, err := w.masterKeyFromFile()
 	assert.NoError(t, err)
 	assert.NotNil(t, masterKey)
 
