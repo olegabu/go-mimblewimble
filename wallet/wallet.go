@@ -72,9 +72,9 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, senderSlate, err := t.CreateSlate(amount, 0, asset, change, inputs)
+	slateBytes, changeOutput, savedSlate, err := t.NewSend(amount, 0, asset, change, inputs)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot CreateSlate")
+		return nil, errors.Wrap(err, "cannot NewSend")
 	}
 
 	if changeOutput != nil {
@@ -84,7 +84,26 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 		}
 	}
 
-	err = t.db.PutSenderSlate(senderSlate)
+	err = t.db.PutSenderSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	return
+}
+
+func (t *Wallet) Invoice(amount uint64, asset string) (slateBytes []byte, err error) {
+	slateBytes, walletOutput, savedSlate, err := t.NewInvoice(amount, 0, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewInvoice")
+	}
+
+	err = t.db.PutOutput(*walletOutput)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutOutput")
+	}
+
+	err = t.db.PutSenderSlate(savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot PutSlate")
 	}
@@ -93,9 +112,9 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 }
 
 func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err error) {
-	responseSlateBytes, receiverOutput, receiverSlate, err := t.CreateResponse(sendSlateBytes)
+	responseSlateBytes, receiverOutput, receiverSlate, err := t.NewReceive(sendSlateBytes)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot CreateResponse")
+		return nil, errors.Wrap(err, "cannot NewReceive")
 	}
 
 	err = t.db.PutOutput(*receiverOutput)
@@ -125,6 +144,57 @@ func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err 
 	return
 }
 
+func (t *Wallet) Pay(invoiceSlateBytes []byte) (paySlateBytes []byte, err error) {
+	var slate = &Slate{}
+	err = json.Unmarshal(invoiceSlateBytes, slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal json to slate")
+		return
+	}
+
+	amount := uint64(slate.Amount)
+	fee := uint64(slate.Fee)
+	asset := slate.Asset
+
+	inputs, change, err := t.db.GetInputs(amount, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	paySlateBytes, changeOutput, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, invoiceSlateBytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewReceive")
+	}
+
+	if changeOutput != nil {
+		err = t.db.PutOutput(*changeOutput)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
+	}
+
+	err = t.db.PutReceiverSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
+	}
+
+	tx := Transaction{
+		Transaction: ledger.Transaction{
+			Transaction: savedSlate.Transaction,
+			ID:          savedSlate.ID,
+		},
+		Status: TransactionUnconfirmed,
+		Asset:  asset,
+	}
+
+	err = t.db.PutTransaction(tx)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutTransaction")
+	}
+
+	return
+}
+
 func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
 	responseSlate := Slate{}
 
@@ -140,9 +210,9 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	txBytes, tx, err := t.CreateTransaction(responseSlateBytes, senderSlate)
+	txBytes, tx, err := t.NewTransaction(responseSlateBytes, senderSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot CreateTransaction")
+		return nil, errors.Wrap(err, "cannot NewTransaction")
 	}
 
 	err = t.db.PutTransaction(tx)
@@ -154,7 +224,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, blind, err := t.createOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
+	walletOutput, blind, err := t.newOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}

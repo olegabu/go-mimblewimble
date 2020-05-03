@@ -39,7 +39,7 @@ func (t *Wallet) putMasterKey(masterKey *bip32.Key) error {
 	return nil
 }
 
-func (t *Wallet) getMasterKey() (masterKey *bip32.Key, err error) {
+func (t *Wallet) masterKeyFromFile() (masterKey *bip32.Key, err error) {
 	masterKeyBytes, err := ioutil.ReadFile(t.masterKeyPath())
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot ReadFile with masterKey")
@@ -53,7 +53,7 @@ func (t *Wallet) getMasterKey() (masterKey *bip32.Key, err error) {
 	return
 }
 
-func (t *Wallet) createMasterKey() (mnemonic string, err error) {
+func (t *Wallet) newMasterKey() (mnemonic string, err error) {
 	//seed, err := bip32.NewSeed()
 	//if err != nil {
 	//	return nil, errors.Wrap(err, "cannot get NewSeed from bip32")
@@ -101,7 +101,7 @@ func (t *Wallet) masterKeyFromMnemonic(mnemonic string) (err error) {
 }
 
 func (t *Wallet) masterKeyExists() (ret bool) {
-	_, err := t.getMasterKey()
+	_, err := t.masterKeyFromFile()
 	if err != nil {
 		return false
 	}
@@ -109,9 +109,9 @@ func (t *Wallet) masterKeyExists() (ret bool) {
 }
 
 func (t *Wallet) readMasterKey() (err error) {
-	masterKey, err := t.getMasterKey()
+	masterKey, err := t.masterKeyFromFile()
 	if err != nil {
-		return errors.Wrap(err, "cannot getMasterKey")
+		return errors.Wrap(err, "cannot masterKeyFromFile")
 	}
 
 	t.masterKey = masterKey
@@ -119,11 +119,11 @@ func (t *Wallet) readMasterKey() (err error) {
 	return
 }
 
-func (t *Wallet) createMasterKeyIfDoesntExist() (err error) {
+func (t *Wallet) newMasterKeyIfDoesntExist() (err error) {
 	if !t.masterKeyExists() {
-		mnemonic, err := t.createMasterKey()
+		mnemonic, err := t.newMasterKey()
 		if err != nil {
-			return errors.Wrap(err, "cannot createMasterKey")
+			return errors.Wrap(err, "cannot newMasterKey")
 		}
 		fmt.Println("created new master secret key with mnemonic: ", mnemonic)
 	} else {
@@ -150,7 +150,7 @@ func (t *Wallet) InitMasterKey(mnemonic string) (createdMnemonic string, err err
 		}
 	} else {
 		if len(mnemonic) == 0 {
-			createdMnemonic, err = t.createMasterKey()
+			createdMnemonic, err = t.newMasterKey()
 			if err != nil {
 				err = errors.Wrap(err, "cannot create master key")
 				return

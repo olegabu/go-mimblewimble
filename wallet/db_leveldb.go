@@ -41,7 +41,7 @@ func senderSlateKey(id string) []byte {
 	return []byte("slate." + id + ".s")
 }
 
-func (t *leveldbDatabase) PutSenderSlate(slate SenderSlate) error {
+func (t *leveldbDatabase) PutSenderSlate(slate *SavedSlate) error {
 	slateBytes, err := json.Marshal(slate)
 	if err != nil {
 		return errors.Wrap(err, "cannot marshal SenderSlate into json")
@@ -59,7 +59,7 @@ func receiverSlateKey(id string) []byte {
 	return []byte("slate." + id + ".r")
 }
 
-func (t *leveldbDatabase) PutReceiverSlate(slate ReceiverSlate) error {
+func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
 	slateBytes, err := json.Marshal(slate)
 	if err != nil {
 		return errors.Wrap(err, "cannot marshal ReceiverSlate into json")
@@ -115,17 +115,19 @@ func (t *leveldbDatabase) PutOutput(output Output) error {
 	return nil
 }
 
-func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate SenderSlate, err error) {
+func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate *SavedSlate, err error) {
 	slateBytes, err := t.db.Get(senderSlateKey(string(id)), nil)
 	if err != nil {
-		return SenderSlate{}, errors.Wrap(err, "cannot Get slate")
+		err = errors.Wrap(err, "cannot Get slate")
+		return
 	}
 
-	slate = SenderSlate{}
+	slate = &SavedSlate{}
 
-	err = json.Unmarshal(slateBytes, &slate)
+	err = json.Unmarshal(slateBytes, slate)
 	if err != nil {
-		return SenderSlate{}, errors.Wrap(err, "cannot unmarshal slateBytes")
+		err = errors.Wrap(err, "cannot unmarshal slateBytes")
+		return
 	}
 
 	return slate, nil
@@ -190,12 +192,12 @@ func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Outpu
 	return inputs, change, nil
 }
 
-func (t *leveldbDatabase) ListSlates() (slates []Slate, err error) {
-	slates = make([]Slate, 0)
+func (t *leveldbDatabase) ListSlates() (slates []SavedSlate, err error) {
+	slates = make([]SavedSlate, 0)
 
 	iter := t.db.NewIterator(util.BytesPrefix([]byte("slate")), nil)
 	for iter.Next() {
-		slate := Slate{}
+		slate := SavedSlate{}
 		err = json.Unmarshal(iter.Value(), &slate)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot unmarshal slate in iterator")

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/olegabu/go-secp256k1-zkp"
-	"os"
 	"os/user"
 	"path/filepath"
 	"testing"
@@ -20,52 +19,77 @@ func testDbDir() string {
 	return filepath.Join(usr.HomeDir, ".mw_test")
 }
 
-func TestWalletRound(t *testing.T) {
-	dir := testDbDir()
-
-	err := os.RemoveAll(dir)
-	assert.NoError(t, err)
-
-	w, err := NewWalletWithoutMasterKey(dir)
-	assert.NoError(t, err)
+func TestWalletSendReceive(t *testing.T) {
+	w := newTestWallet(t)
 	defer w.Close()
-
-	_, err = w.InitMasterKey("")
-	assert.NoError(t, err)
 
 	for _, value := range []uint64{1, 2, 3} {
 		_, err := w.Issue(value, "cash")
 		assert.NoError(t, err)
 	}
 
-	err = w.Info()
+	err := w.Info()
 	assert.NoError(t, err)
 
-	tx := testTransfer(t, w, 4, "cash")
+	tx := testSendReceive(t, w, 4, "cash")
 
 	// take 3 inputs 1+2+3 for 2 outputs: receiver 4 and change 2
 	assert.Equal(t, 3, len(tx.Body.Inputs))
 	assert.Equal(t, 2, len(tx.Body.Outputs))
 
-	tx = testTransfer(t, w, 6, "cash")
+	tx = testSendReceive(t, w, 6, "cash")
 
 	// take 2 inputs 2+4 for 1 output: receiver 6
 	assert.Equal(t, 2, len(tx.Body.Inputs))
 	assert.Equal(t, 1, len(tx.Body.Outputs))
 }
 
-func TestTotalIssues(t *testing.T) {
-	dir := testDbDir()
-
-	err := os.RemoveAll(dir)
-	assert.NoError(t, err)
-
-	w, err := NewWalletWithoutMasterKey(dir)
-	assert.NoError(t, err)
+func TestWalletInvoicePay(t *testing.T) {
+	w := newTestWallet(t)
 	defer w.Close()
 
-	_, err = w.InitMasterKey("")
+	for _, value := range []uint64{1, 2, 3} {
+		_, err := w.Issue(value, "cash")
+		assert.NoError(t, err)
+	}
+
+	err := w.Info()
 	assert.NoError(t, err)
+
+	tx := testInvoicePay(t, w, 4, "cash")
+
+	// take 3 inputs 1+2+3 for 2 outputs: receiver 4 and change 2
+	assert.Equal(t, 3, len(tx.Body.Inputs))
+	assert.Equal(t, 2, len(tx.Body.Outputs))
+
+	tx = testInvoicePay(t, w, 6, "cash")
+
+	// take 2 inputs 2+4 for 1 output: receiver 6
+	assert.Equal(t, 2, len(tx.Body.Inputs))
+	assert.Equal(t, 1, len(tx.Body.Outputs))
+}
+
+func TestWalletInvoicePaySingle(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	for _, value := range []uint64{1, 2} {
+		_, err := w.Issue(value, "cash")
+		assert.NoError(t, err)
+	}
+
+	err := w.Info()
+	assert.NoError(t, err)
+
+	tx := testInvoicePay(t, w, 1, "cash")
+
+	assert.Equal(t, 1, len(tx.Body.Inputs))
+	assert.Equal(t, 1, len(tx.Body.Outputs))
+}
+
+func TestTotalIssues(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
 
 	outputCommitments := make([]*secp256k1.Commitment, 0)
 	excessCommitments := make([]*secp256k1.Commitment, 0)
@@ -93,7 +117,7 @@ func TestTotalIssues(t *testing.T) {
 	assert.NoError(t, err)
 
 	// transfer 5 out of total issued 6 to have 2 outputs: receiver 5 and change 1
-	tx := testTransfer(t, w, 5, "cash")
+	tx := testSendReceive(t, w, 5, "cash")
 
 	// collect outputs into outputCommitments
 	for _, output := range tx.Body.Outputs {
@@ -124,7 +148,7 @@ func TestTotalIssues(t *testing.T) {
 	assert.Equal(t, sumCommitment.String(), totalIssuesCommitment.String())
 }
 
-func testTransfer(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
+func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
 	slateBytes, err := w.Send(amount, asset)
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
@@ -135,6 +159,40 @@ func testTransfer(t *testing.T, w *Wallet, amount uint64, asset string) (tx *led
 	responseSlateBytes, err := w.Receive(slateBytes)
 	assert.NoError(t, err)
 	fmt.Println("resp " + string(responseSlateBytes))
+
+	err = w.Info()
+	assert.NoError(t, err)
+
+	txBytes, err := w.Finalize(responseSlateBytes)
+	assert.NoError(t, err)
+	fmt.Println("tx   " + string(txBytes))
+
+	err = w.Info()
+	assert.NoError(t, err)
+
+	tx, err = ledger.ValidateTransactionBytes(txBytes)
+	assert.NoError(t, err)
+
+	err = w.Confirm([]byte(tx.ID.String()))
+	assert.NoError(t, err)
+
+	err = w.Info()
+	assert.NoError(t, err)
+
+	return
+}
+
+func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
+	slateBytes, err := w.Invoice(amount, asset)
+	assert.NoError(t, err)
+	fmt.Println("invoice " + string(slateBytes))
+
+	err = w.Info()
+	assert.NoError(t, err)
+
+	responseSlateBytes, err := w.Pay(slateBytes)
+	assert.NoError(t, err)
+	fmt.Println("pay " + string(responseSlateBytes))
 
 	err = w.Info()
 	assert.NoError(t, err)

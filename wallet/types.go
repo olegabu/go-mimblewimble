@@ -8,14 +8,14 @@ import (
 )
 
 type Database interface {
-	PutSenderSlate(slate SenderSlate) error
-	PutReceiverSlate(slate ReceiverSlate) error
+	PutSenderSlate(slate *SavedSlate) error
+	PutReceiverSlate(slate *SavedSlate) error
 	PutTransaction(tx Transaction) error
 	PutOutput(output Output) error
-	GetSenderSlate(id []byte) (slate SenderSlate, err error)
+	GetSenderSlate(id []byte) (slate *SavedSlate, err error)
 	GetTransaction(id []byte) (transaction Transaction, err error)
 	GetOutput(commit string, asset string) (output Output, err error)
-	ListSlates() (slates []Slate, err error)
+	ListSlates() (slates []SavedSlate, err error)
 	ListTransactions() (transactions []Transaction, err error)
 	ListOutputs() (outputs []Output, err error)
 	GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error)
@@ -62,15 +62,10 @@ type Slate struct {
 	Status SlateStatus `json:"status,omitempty"`
 }
 
-type SenderSlate struct {
+type SavedSlate struct {
 	Slate
-	SumSenderBlinds [32]byte `json:"sumSenderBlinds,omitempty"`
-	SenderNonce     [32]byte `json:"senderNonce,omitempty"`
-}
-
-type ReceiverSlate struct {
-	Slate
-	ReceiverNonce [32]byte `json:"receiverNonce,omitempty"`
+	Blind [32]byte `json:"blind,omitempty"`
+	Nonce [32]byte `json:"nonce,omitempty"`
 }
 
 type SlateStatus int
@@ -78,7 +73,6 @@ type SlateStatus int
 const (
 	SlateSent = iota
 	SlateResponded
-	SlateFinalized
 )
 
 func (t SlateStatus) String() string {
@@ -87,8 +81,6 @@ func (t SlateStatus) String() string {
 		return "Sent"
 	case SlateResponded:
 		return "Responded"
-	case SlateFinalized:
-		return "Finalized"
 	default:
 		return fmt.Sprintf("%d", int(t))
 	}

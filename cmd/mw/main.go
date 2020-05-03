@@ -136,8 +136,8 @@ func main() {
 
 	var sendCmd = &cobra.Command{
 		Use:   "send amount [asset]",
-		Short: "Initiates a send transaction",
-		Long:  `Creates a json file with a slate to pass to the receiver.`,
+		Short: "Initiates a send-receive transaction",
+		Long:  `Payer creates a json file with a send slate to pass to the payee.`,
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
@@ -173,10 +173,49 @@ func main() {
 		},
 	}
 
+	var invoiceCmd = &cobra.Command{
+		Use:   "invoice amount [asset]",
+		Short: "Initiates an invoice-pay transaction",
+		Long:  `Payee creates a json file with an invoice slate to pass to the payer.`,
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			amount, err := strconv.Atoi(args[0])
+			if err != nil {
+				return errors.Wrap(err, "cannot parse amount")
+			}
+			asset := defaultAsset
+			if len(args) > 1 {
+				asset = args[1]
+			}
+
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
+
+			slateBytes, err := w.Invoice(uint64(amount), asset)
+			if err != nil {
+				return errors.Wrap(err, "cannot wallet.Send")
+			}
+			id, err := wallet.ParseIDFromSlate(slateBytes)
+			if err != nil {
+				return errors.Wrap(err, "cannot parse id from slate")
+			}
+			fileName := "slate-invoice-" + string(id) + ".json"
+			err = ioutil.WriteFile(fileName, slateBytes, 0644)
+			if err != nil {
+				return errors.Wrap(err, "cannot write file "+fileName)
+			}
+			fmt.Printf("wrote slate, pass it to the payer to fill in and respond: pay %v \n", fileName)
+			return nil
+		},
+	}
+
 	var receiveCmd = &cobra.Command{
 		Use:   "receive slate_send_file",
 		Short: "Receives transfer by creating a response slate",
-		Long:  `Creates a json file with a response slate with own output and partial signature from sender's slate file.`,
+		Long:  `Creates json file with a response receive slate with own output and partial signature.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slateFileName := args[0]
@@ -205,6 +244,42 @@ func main() {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
 			fmt.Printf("wrote slate, pass it back to the sender: finalize %v\n", fileName)
+			return nil
+		},
+	}
+
+	var payCmd = &cobra.Command{
+		Use:   "pay slate_invoice_file",
+		Short: "Pays by responding with a pay slate to an invoice",
+		Long:  `Creates json file with a response pay slate with inputs, change output and partial signature.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slateFileName := args[0]
+			slateBytes, err := ioutil.ReadFile(slateFileName)
+			if err != nil {
+				return errors.Wrap(err, "cannot read sender slate file "+slateFileName)
+			}
+
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
+
+			responseSlateBytes, err := w.Pay(slateBytes)
+			if err != nil {
+				return errors.Wrap(err, "cannot wallet.Receive")
+			}
+			id, err := wallet.ParseIDFromSlate(responseSlateBytes)
+			if err != nil {
+				return errors.Wrap(err, "cannot parse id from slate")
+			}
+			fileName := "slate-pay-" + string(id) + ".json"
+			err = ioutil.WriteFile(fileName, responseSlateBytes, 0644)
+			if err != nil {
+				return errors.Wrap(err, "cannot write file "+fileName)
+			}
+			fmt.Printf("wrote slate, pass it back to the payee: finalize %v\n", fileName)
 			return nil
 		},
 	}
@@ -425,7 +500,8 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
+	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, payCmd,
+		finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
 	dir, err := homedir.Dir()
 	if err != nil {
