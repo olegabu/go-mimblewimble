@@ -69,6 +69,24 @@ func TestWalletInvoicePay(t *testing.T) {
 	assert.Equal(t, 1, len(tx.Body.Outputs))
 }
 
+func TestWalletInvoicePaySingle(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	for _, value := range []uint64{1, 2} {
+		_, err := w.Issue(value, "cash")
+		assert.NoError(t, err)
+	}
+
+	err := w.Info()
+	assert.NoError(t, err)
+
+	tx := testInvoicePay(t, w, 1, "cash")
+
+	assert.Equal(t, 1, len(tx.Body.Inputs))
+	assert.Equal(t, 1, len(tx.Body.Outputs))
+}
+
 func TestTotalIssues(t *testing.T) {
 	w := newTestWallet(t)
 	defer w.Close()

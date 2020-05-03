@@ -242,7 +242,7 @@ func (t *Wallet) NewReceive(
 	}
 
 	receiverSlate := *slate
-	receiverSlate.Status = SlateReceived
+	receiverSlate.Status = SlateResponded
 
 	receiverSlateBytes, err = json.Marshal(receiverSlate)
 	if err != nil {
@@ -305,7 +305,7 @@ func (t *Wallet) NewPay(
 	}
 
 	payerSlate := slate
-	payerSlate.Status = SlatePaid
+	payerSlate.Status = SlateResponded
 
 	slateBytes, err = json.Marshal(payerSlate)
 	if err != nil {

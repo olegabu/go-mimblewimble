@@ -72,24 +72,15 @@ type SlateStatus int
 
 const (
 	SlateSent = iota
-	SlateReceived
-	SlateFinalized
-	SlateInvoiced
-	SlatePaid
+	SlateResponded
 )
 
 func (t SlateStatus) String() string {
 	switch t {
 	case SlateSent:
 		return "Sent"
-	case SlateReceived:
-		return "Received"
-	case SlateInvoiced:
-		return "Invoiced"
-	case SlatePaid:
-		return "Paid"
-	case SlateFinalized:
-		return "Finalized"
+	case SlateResponded:
+		return "Responded"
 	default:
 		return fmt.Sprintf("%d", int(t))
 	}
