@@ -39,15 +39,15 @@ func TestRound(t *testing.T) {
 	assert.NoError(t, err)
 	inputs := []Output{*input1, *input2}
 
-	slateBytes, _, senderWalletSlate, err := w.CreateSlate(amount, fee, asset, change, inputs)
+	slateBytes, _, senderWalletSlate, err := w.NewSend(amount, fee, asset, change, inputs)
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(slateBytes))
 
-	responseSlateBytes, _, _, err := w.CreateResponse(slateBytes)
+	responseSlateBytes, _, _, err := w.NewReceive(slateBytes)
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, tx, err := w.CreateTransaction(responseSlateBytes, senderWalletSlate)
+	txBytes, tx, err := w.NewTransaction(responseSlateBytes, senderWalletSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)

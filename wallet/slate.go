@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) CreateSlate(
+func (t *Wallet) NewSend(
 	amount uint64,
 	fee uint64,
 	asset string,
@@ -161,7 +161,7 @@ func (t *Wallet) CreateSlate(
 	return
 }
 
-func (t *Wallet) CreateResponse(
+func (t *Wallet) NewReceive(
 	slateBytes []byte,
 ) (
 	walletSlateBytes []byte,
@@ -277,7 +277,7 @@ func (t *Wallet) CreateResponse(
 	return
 }
 
-func (t *Wallet) CreateTransaction(responseSlateBytes []byte, senderSlate SenderSlate) (ledgerTxBytes []byte, walletTx Transaction, err error) {
+func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate SenderSlate) (ledgerTxBytes []byte, walletTx Transaction, err error) {
 	// get secret keys from sender's responseSlate that has blind and secret nonces
 	senderBlind := senderSlate.SumSenderBlinds[:]
 	senderNonce := senderSlate.SenderNonce[:]
