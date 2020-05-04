@@ -19,29 +19,35 @@ func (t *Wallet) NewSend(
 	asset string,
 	change uint64,
 	walletInputs []Output,
+	receiveAmount uint64,
+	receiveAsset string,
 ) (
 	slateBytes []byte,
-	changeOutput *Output,
+	outputs []Output,
 	savedSlate *SavedSlate,
 	err error,
 ) {
-	slateInputs, changeOutput, blindExcess, err := t.slateInputsAndChange(
+	inputs, outputs, blindExcess, err := t.inputsAndOutputs(
 		amount,
 		fee,
 		asset,
 		change,
-		walletInputs)
+		walletInputs,
+		receiveAmount,
+		receiveAsset)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create slate inputs and outputs")
 		return
 	}
 
-	var slateOutputs []core.Output
-	if changeOutput != nil {
-		slateOutputs = append(slateOutputs, changeOutput.Output)
-	}
-
-	slateBytes, savedSlate, err = t.newSlate(slateInputs, slateOutputs, amount, fee, asset, blindExcess[:])
+	slateBytes, savedSlate, err = t.newSlate(inputs,
+		outputs,
+		amount,
+		fee,
+		asset,
+		blindExcess[:],
+		receiveAmount,
+		receiveAsset)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create newSlate")
 		return
@@ -50,15 +56,17 @@ func (t *Wallet) NewSend(
 	return
 }
 
-func (t *Wallet) slateInputsAndChange(
+func (t *Wallet) inputsAndOutputs(
 	amount uint64,
 	fee uint64,
 	asset string,
 	change uint64,
 	walletInputs []Output,
+	receiveAmount uint64,
+	receiveAsset string,
 ) (
-	slateInputs []core.Input,
-	changeOutput *Output,
+	inputs []core.Input,
+	outputs []Output,
 	blindExcess [32]byte,
 	err error,
 ) {
@@ -75,7 +83,7 @@ func (t *Wallet) slateInputsAndChange(
 			return
 		}
 		inputBlinds = append(inputBlinds, secret[:])
-		slateInputs = append(slateInputs, core.Input{Features: input.Features, Commit: input.Commit})
+		inputs = append(inputs, core.Input{Features: input.Features, Commit: input.Commit})
 	}
 
 	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
@@ -84,16 +92,27 @@ func (t *Wallet) slateInputsAndChange(
 		return
 	}
 
-	// create change output and remember its blinding factor
 	var outputBlinds [][]byte
+
+	// create change output and remember its blinding factor
 	if change > 0 {
-		o, b, e := t.newOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
+		changeOutput, changeBlind, e := t.newOutput(change, core.PlainOutput, asset, OutputUnconfirmed)
 		if e != nil {
 			err = errors.Wrap(e, "cannot create change output")
 			return
 		}
-		outputBlinds = append(outputBlinds, b)
-		changeOutput = o
+		outputBlinds = append(outputBlinds, changeBlind)
+		outputs = append(outputs, *changeOutput)
+	}
+
+	if receiveAmount > 0 {
+		receiveOutput, receiveBlind, e := t.newOutput(receiveAmount, core.PlainOutput, receiveAsset, OutputUnconfirmed)
+		if e != nil {
+			err = errors.Wrap(e, "cannot get newOutput for exchange")
+			return
+		}
+		outputBlinds = append(outputBlinds, receiveBlind)
+		outputs = append(outputs, *receiveOutput)
 	}
 
 	// sum up inputs(-) and outputs(+) blinding factors
@@ -106,10 +125,10 @@ func (t *Wallet) slateInputsAndChange(
 	return
 }
 
-func (t *Wallet) respond(slate *Slate, output *core.Output, outputBlind []byte) (receiverNonce [32]byte, err error) {
+func (t *Wallet) respond(slate *Slate, outputs []Output, outputBlind []byte) (receiverNonce [32]byte, err error) {
 	// add responder output (receiver's in Send, payer's change in Invoice)
-	if output != nil {
-		slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, *output)
+	for _, o := range outputs {
+		slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, o.Output)
 	}
 
 	receiverPublicBlind, err := t.pubKeyFromSecretKey(outputBlind)
@@ -201,7 +220,9 @@ func (t *Wallet) NewInvoice(
 		return
 	}
 
-	slateBytes, savedSlate, err = t.newSlate(nil, []core.Output{walletOutput.Output}, amount, fee, asset, outputBlind[:])
+	outputs := []Output{*walletOutput}
+
+	slateBytes, savedSlate, err = t.newSlate(nil, outputs, 0, fee, "", outputBlind[:], amount, asset)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create newSlate")
 		return
@@ -235,7 +256,9 @@ func (t *Wallet) NewReceive(
 		return
 	}
 
-	receiverNonce, err := t.respond(slate, &walletOutput.Output, outputBlind)
+	outputs := []Output{*walletOutput}
+
+	receiverNonce, err := t.respond(slate, outputs, outputBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot respond to slate")
 		return
@@ -266,16 +289,18 @@ func (t *Wallet) NewPay(
 	invoiceSlateBytes []byte,
 ) (
 	slateBytes []byte,
-	changeOutput *Output,
+	outputs []Output,
 	savedSlate *SavedSlate,
 	err error,
 ) {
-	slateInputs, changeOutput, blindExcess, err := t.slateInputsAndChange(
+	inputs, outputs, blindExcess, err := t.inputsAndOutputs(
 		amount,
 		fee,
 		asset,
 		change,
-		walletInputs)
+		walletInputs,
+		0,
+		"")
 	if err != nil {
 		err = errors.Wrap(err, "cannot create slate inputs and outputs")
 		return
@@ -288,16 +313,9 @@ func (t *Wallet) NewPay(
 		return
 	}
 
-	slate.Transaction.Body.Inputs = slateInputs
+	slate.Transaction.Body.Inputs = inputs
 
-	var output *core.Output
-	if changeOutput != nil {
-		output = &changeOutput.Output
-	} else {
-		output = nil
-	}
-
-	payerNonce, err := t.respond(slate, output, blindExcess[:])
+	payerNonce, err := t.respond(slate, outputs, blindExcess[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot respond to slate")
 		return
@@ -503,7 +521,6 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate *SavedSla
 	walletTx = Transaction{
 		Transaction: ledgerTx,
 		Status:      TransactionUnconfirmed,
-		Asset:       responseSlate.Asset,
 	}
 
 	return
@@ -570,8 +587,20 @@ func (t *Wallet) newOutput(
 	return
 }
 
-func (t *Wallet) newSlate(slateInputs []core.Input, slateOutputs []core.Output,
-	amount uint64, fee uint64, asset string, blind []byte) (slateBytes []byte, savedSlate *SavedSlate, err error) {
+func (t *Wallet) newSlate(
+	inputs []core.Input,
+	outputs []Output,
+	amount uint64,
+	fee uint64,
+	asset string,
+	blind []byte,
+	receiveAmount uint64,
+	receiveAsset string,
+) (
+	slateBytes []byte,
+	savedSlate *SavedSlate,
+	err error,
+) {
 
 	// generate secret nonce
 	nonce, err := t.nonce()
@@ -606,6 +635,11 @@ func (t *Wallet) newSlate(slateInputs []core.Input, slateOutputs []core.Output,
 		return
 	}
 
+	var coreOutputs []core.Output
+	for _, o := range outputs {
+		coreOutputs = append(coreOutputs, o.Output)
+	}
+
 	coreSlate := &libwallet.Slate{
 		VersionInfo: libwallet.VersionCompatInfo{
 			Version:            3,
@@ -617,8 +651,8 @@ func (t *Wallet) newSlate(slateInputs []core.Input, slateOutputs []core.Output,
 		Transaction: core.Transaction{
 			Offset: hex.EncodeToString(kernelOffset[:]),
 			Body: core.TransactionBody{
-				Inputs:  slateInputs,
-				Outputs: slateOutputs,
+				Inputs:  inputs,
+				Outputs: coreOutputs,
 				Kernels: []core.TxKernel{{
 					Features:   core.PlainKernel,
 					Fee:        core.Uint64(fee),
@@ -643,8 +677,10 @@ func (t *Wallet) newSlate(slateInputs []core.Input, slateOutputs []core.Output,
 	}
 
 	slate := &Slate{
-		Slate: *coreSlate,
-		Asset: asset,
+		Slate:         *coreSlate,
+		Asset:         asset,
+		ReceiveAmount: core.Uint64(receiveAmount),
+		ReceiveAsset:  receiveAsset,
 	}
 
 	savedSlate = &SavedSlate{
