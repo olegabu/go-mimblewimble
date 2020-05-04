@@ -28,7 +28,7 @@ func TestWalletSendReceive(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	err := w.Info()
+	err := w.Print()
 	assert.NoError(t, err)
 
 	tx := testSendReceive(t, w, 4, "cash")
@@ -53,7 +53,7 @@ func TestWalletInvoicePay(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	err := w.Info()
+	err := w.Print()
 	assert.NoError(t, err)
 
 	tx := testInvoicePay(t, w, 4, "cash")
@@ -78,7 +78,7 @@ func TestWalletInvoicePaySingle(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	err := w.Info()
+	err := w.Print()
 	assert.NoError(t, err)
 
 	tx := testInvoicePay(t, w, 1, "cash")
@@ -153,21 +153,21 @@ func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	responseSlateBytes, err := w.Receive(slateBytes)
 	assert.NoError(t, err)
 	fmt.Println("resp " + string(responseSlateBytes))
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	txBytes, err := w.Finalize(responseSlateBytes)
 	assert.NoError(t, err)
 	fmt.Println("tx   " + string(txBytes))
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	tx, err = ledger.ValidateTransactionBytes(txBytes)
@@ -176,7 +176,7 @@ func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *
 	err = w.Confirm([]byte(tx.ID.String()))
 	assert.NoError(t, err)
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	return
@@ -187,21 +187,21 @@ func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *l
 	assert.NoError(t, err)
 	fmt.Println("invoice " + string(slateBytes))
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	responseSlateBytes, err := w.Pay(slateBytes)
 	assert.NoError(t, err)
 	fmt.Println("pay " + string(responseSlateBytes))
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	txBytes, err := w.Finalize(responseSlateBytes)
 	assert.NoError(t, err)
 	fmt.Println("tx   " + string(txBytes))
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	tx, err = ledger.ValidateTransactionBytes(txBytes)
@@ -210,7 +210,7 @@ func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *l
 	err = w.Confirm([]byte(tx.ID.String()))
 	assert.NoError(t, err)
 
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 
 	return
@@ -221,6 +221,6 @@ func TestInfo(t *testing.T) {
 	w, err := NewWallet(dir)
 	assert.NoError(t, err)
 	defer w.Close()
-	err = w.Info()
+	err = w.Print()
 	assert.NoError(t, err)
 }

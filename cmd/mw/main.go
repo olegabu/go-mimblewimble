@@ -373,9 +373,9 @@ func main() {
 			}
 			defer w.Close()
 
-			err = w.Info()
+			err = w.Print()
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Info")
+				return errors.Wrap(err, "cannot wallet.Print")
 			}
 			return nil
 		},
@@ -461,9 +461,9 @@ func main() {
 				if err != nil {
 					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", string(transactionId)).Error())
 				} else {
-					err = w.Info()
+					err = w.Print()
 					if err != nil {
-						fmt.Println(errors.Wrap(err, "cannot wallet.Info").Error())
+						fmt.Println(errors.Wrap(err, "cannot wallet.Print").Error())
 					}
 				}
 			})

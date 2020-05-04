@@ -58,32 +58,13 @@ func (t OutputStatus) String() string {
 
 type Slate struct {
 	libwallet.Slate
-	Asset  string      `json:"asset,omitempty"`
-	Status SlateStatus `json:"status,omitempty"`
+	Asset string `json:"asset,omitempty"`
 }
 
 type SavedSlate struct {
 	Slate
 	Blind [32]byte `json:"blind,omitempty"`
 	Nonce [32]byte `json:"nonce,omitempty"`
-}
-
-type SlateStatus int
-
-const (
-	SlateSent = iota
-	SlateResponded
-)
-
-func (t SlateStatus) String() string {
-	switch t {
-	case SlateSent:
-		return "Sent"
-	case SlateResponded:
-		return "Responded"
-	default:
-		return fmt.Sprintf("%d", int(t))
-	}
 }
 
 type Transaction struct {

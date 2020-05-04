@@ -3,9 +3,9 @@ package wallet
 import (
 	"encoding/json"
 	"github.com/tyler-smith/go-bip32"
-	"os"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olekukonko/tablewriter"
@@ -257,10 +257,12 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 	return
 }
 
-func (t *Wallet) Info() error {
+func (t *Wallet) Info() (string, error) {
+	tableString := &strings.Builder{}
+
 	outputs, err := t.db.ListOutputs()
 	if err != nil {
-		return errors.Wrap(err, "cannot ListOutputs")
+		return tableString.String(), errors.Wrap(err, "cannot ListOutputs")
 	}
 
 	// sort outputs decreasing by child key index
@@ -268,22 +270,24 @@ func (t *Wallet) Info() error {
 		return outputs[i].Index > outputs[j].Index
 	})
 
-	outputTable := tablewriter.NewWriter(os.Stdout)
+	outputTable := tablewriter.NewWriter(tableString)
 	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key"})
 	outputTable.SetCaption(true, "Outputs")
+	outputTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, output := range outputs {
 		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:4], strconv.Itoa(int(output.Index))})
 	}
 	outputTable.Render()
-	print("\n")
+	tableString.WriteByte('\n')
 
 	slates, err := t.db.ListSlates()
 	if err != nil {
-		return errors.Wrap(err, "cannot ListSlates")
+		return tableString.String(), errors.Wrap(err, "cannot ListSlates")
 	}
-	slateTable := tablewriter.NewWriter(os.Stdout)
-	slateTable.SetHeader([]string{"id", "status", "amount", "asset", "inputs", "outputs"})
+	slateTable := tablewriter.NewWriter(tableString)
+	slateTable.SetHeader([]string{"id", "amount", "asset", "inputs", "outputs"})
 	slateTable.SetCaption(true, "Slates")
+	slateTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, slate := range slates {
 		id, _ := slate.ID.MarshalText()
 
@@ -296,20 +300,19 @@ func (t *Wallet) Info() error {
 			outputs += output.Commit[0:4] + " "
 		}
 
-		slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, inputs, outputs})
+		slateTable.Append([]string{string(id), strconv.Itoa(int(slate.Amount)), slate.Asset, inputs, outputs})
 	}
-	//slateTable.SetAutoMergeCells(true)
-	//slateTable.SetRowLine(true)
 	slateTable.Render()
-	print("\n")
+	tableString.WriteByte('\n')
 
 	transactions, err := t.db.ListTransactions()
 	if err != nil {
-		return errors.Wrap(err, "cannot ListTransactions")
+		return tableString.String(), errors.Wrap(err, "cannot ListTransactions")
 	}
-	transactionTable := tablewriter.NewWriter(os.Stdout)
+	transactionTable := tablewriter.NewWriter(tableString)
 	transactionTable.SetHeader([]string{"id", "status", "asset", "inputs", "outputs"})
 	transactionTable.SetCaption(true, "Transactions")
+	transactionTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, tx := range transactions {
 		id, _ := tx.ID.MarshalText()
 
@@ -324,11 +327,18 @@ func (t *Wallet) Info() error {
 
 		transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, inputs, outputs})
 	}
-	//transactionTable.SetAutoMergeCells(true)
-	//table.SetRowLine(true)
 	transactionTable.Render()
-	print("\n")
+	tableString.WriteByte('\n')
 
+	return tableString.String(), nil
+}
+
+func (t *Wallet) Print() error {
+	s, err := t.Info()
+	if err != nil {
+		return err
+	}
+	print(s)
 	return nil
 }
 
