@@ -160,7 +160,7 @@ func (t *Wallet) Pay(inSlateBytes []byte) (outSlateBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	outSlateBytes, outputs, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, inSlateBytes)
+	outSlateBytes, outputs, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, 0, "", inSlateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewReceive")
 	}

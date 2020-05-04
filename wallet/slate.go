@@ -286,6 +286,8 @@ func (t *Wallet) NewPay(
 	asset string,
 	change uint64,
 	walletInputs []Output,
+	receiveAmount uint64,
+	receiveAsset string,
 	invoiceSlateBytes []byte,
 ) (
 	slateBytes []byte,
@@ -299,8 +301,8 @@ func (t *Wallet) NewPay(
 		asset,
 		change,
 		walletInputs,
-		0,
-		"")
+		receiveAmount,
+		receiveAsset)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create slate inputs and outputs")
 		return
@@ -313,7 +315,7 @@ func (t *Wallet) NewPay(
 		return
 	}
 
-	slate.Transaction.Body.Inputs = inputs
+	slate.Transaction.Body.Inputs = append(slate.Transaction.Body.Inputs, inputs...)
 
 	payerNonce, err := t.respond(slate, outputs, blindExcess[:])
 	if err != nil {
