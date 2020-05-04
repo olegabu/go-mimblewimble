@@ -143,7 +143,7 @@ func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err 
 	return
 }
 
-func (t *Wallet) Pay(inSlateBytes []byte, receiveAmount uint64, receiveAsset string) (outSlateBytes []byte, err error) {
+func (t *Wallet) Pay(inSlateBytes []byte) (outSlateBytes []byte, err error) {
 	var slate = &Slate{}
 	err = json.Unmarshal(inSlateBytes, slate)
 	if err != nil {
@@ -151,9 +151,13 @@ func (t *Wallet) Pay(inSlateBytes []byte, receiveAmount uint64, receiveAsset str
 		return
 	}
 
-	amount := uint64(slate.ReceiveAmount)
 	fee := uint64(slate.Fee)
+
+	amount := uint64(slate.ReceiveAmount)
 	asset := slate.ReceiveAsset
+
+	receiveAmount := uint64(slate.Amount)
+	receiveAsset := slate.Asset
 
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {

@@ -149,13 +149,23 @@ func main() {
 				asset = args[1]
 			}
 
+			var receiveAmount int
+			var receiveAsset string
+			if len(args) == 4 {
+				receiveAmount, err = strconv.Atoi(args[2])
+				if err != nil {
+					return errors.Wrap(err, "cannot parse receive amount")
+				}
+				receiveAsset = args[3]
+			}
+
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
 				return errors.Wrap(err, "cannot create wallet")
 			}
 			defer w.Close()
 
-			slateBytes, err := w.Send(uint64(amount), asset)
+			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset)
 			if err != nil {
 				return errors.Wrap(err, "cannot wallet.Send")
 			}
