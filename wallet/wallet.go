@@ -66,13 +66,13 @@ func (t *Wallet) Close() {
 	secp256k1.ContextDestroy(t.context)
 }
 
-func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error) {
+func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string) (slateBytes []byte, err error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, outputs, savedSlate, err := t.NewSend(amount, 0, asset, change, inputs, 0, "")
+	slateBytes, outputs, savedSlate, err := t.NewSend(amount, 0, asset, change, inputs, receiveAmount, receiveAsset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewSend")
 	}
@@ -143,7 +143,7 @@ func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err 
 	return
 }
 
-func (t *Wallet) Pay(inSlateBytes []byte) (outSlateBytes []byte, err error) {
+func (t *Wallet) Pay(inSlateBytes []byte, receiveAmount uint64, receiveAsset string) (outSlateBytes []byte, err error) {
 	var slate = &Slate{}
 	err = json.Unmarshal(inSlateBytes, slate)
 	if err != nil {
@@ -160,7 +160,7 @@ func (t *Wallet) Pay(inSlateBytes []byte) (outSlateBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	outSlateBytes, outputs, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, 0, "", inSlateBytes)
+	outSlateBytes, outputs, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewReceive")
 	}
@@ -283,7 +283,7 @@ func (t *Wallet) Info() (string, error) {
 		return tableString.String(), errors.Wrap(err, "cannot ListSlates")
 	}
 	slateTable := tablewriter.NewWriter(tableString)
-	slateTable.SetHeader([]string{"id", "amount", "asset", "inputs", "outputs"})
+	slateTable.SetHeader([]string{"id", "send", "receive", "inputs", "outputs"})
 	slateTable.SetCaption(true, "Slates")
 	slateTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, slate := range slates {
@@ -298,7 +298,19 @@ func (t *Wallet) Info() (string, error) {
 			outputs += output.Commit[0:4] + " "
 		}
 
-		slateTable.Append([]string{string(id), strconv.Itoa(int(slate.Amount)), slate.Asset, inputs, outputs})
+		send := ""
+		s := int(slate.Amount)
+		if s != 0 {
+			send = strconv.Itoa(s) + " " + slate.Asset
+		}
+
+		receive := ""
+		r := int(slate.ReceiveAmount)
+		if r != 0 {
+			receive = strconv.Itoa(r) + " " + slate.ReceiveAsset
+		}
+
+		slateTable.Append([]string{string(id), send, receive, inputs, outputs})
 	}
 	slateTable.Render()
 	tableString.WriteByte('\n')

@@ -87,6 +87,64 @@ func TestWalletInvoicePaySingle(t *testing.T) {
 	assert.Equal(t, 1, len(tx.Body.Outputs))
 }
 
+func TestWalletExchange(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	for _, value := range []uint64{1, 2, 3} {
+		_, err := w.Issue(value, "cash")
+		assert.NoError(t, err)
+	}
+
+	for _, value := range []uint64{1, 2} {
+		_, err := w.Issue(value, "apple")
+		assert.NoError(t, err)
+	}
+
+	err := w.Print()
+	assert.NoError(t, err)
+
+	sendAmount := uint64(6)
+	sendAsset := "cash"
+
+	receiveAmount := uint64(3)
+	receiveAsset := "apple"
+
+	slateBytes, err := w.Send(sendAmount, sendAsset, receiveAmount, receiveAsset)
+	assert.NoError(t, err)
+	fmt.Println("send " + string(slateBytes))
+
+	err = w.Print()
+	assert.NoError(t, err)
+
+	responseSlateBytes, err := w.Pay(slateBytes, sendAmount, sendAsset)
+	assert.NoError(t, err)
+	fmt.Println("resp " + string(responseSlateBytes))
+
+	err = w.Print()
+	assert.NoError(t, err)
+
+	txBytes, err := w.Finalize(responseSlateBytes)
+	assert.NoError(t, err)
+	fmt.Println("tx   " + string(txBytes))
+
+	err = w.Print()
+	assert.NoError(t, err)
+
+	tx, err := ledger.ValidateTransactionBytes(txBytes)
+	assert.NoError(t, err)
+
+	err = w.Confirm([]byte(tx.ID.String()))
+	assert.NoError(t, err)
+
+	err = w.Print()
+	assert.NoError(t, err)
+
+	// 5 inputs 1+2+3 cash 1+2 apples, 2 outputs: 6 cash 3 apple
+	assert.Equal(t, 5, len(tx.Body.Inputs))
+	assert.Equal(t, 2, len(tx.Body.Outputs))
+}
+
 func TestTotalIssues(t *testing.T) {
 	w := newTestWallet(t)
 	defer w.Close()
@@ -149,7 +207,7 @@ func TestTotalIssues(t *testing.T) {
 }
 
 func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
-	slateBytes, err := w.Send(amount, asset)
+	slateBytes, err := w.Send(amount, asset, 0, "")
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
 
@@ -190,7 +248,7 @@ func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *l
 	err = w.Print()
 	assert.NoError(t, err)
 
-	responseSlateBytes, err := w.Pay(slateBytes)
+	responseSlateBytes, err := w.Pay(slateBytes, 0, "")
 	assert.NoError(t, err)
 	fmt.Println("pay " + string(responseSlateBytes))
 
