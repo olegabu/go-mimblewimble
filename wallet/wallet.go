@@ -72,9 +72,9 @@ func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receive
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, outputs, savedSlate, err := t.NewSend(amount, 0, asset, change, inputs, receiveAmount, receiveAsset)
+	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewSend")
+		return nil, errors.Wrap(err, "cannot NewSlate")
 	}
 
 	for _, o := range outputs {
@@ -92,58 +92,7 @@ func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receive
 	return
 }
 
-func (t *Wallet) Invoice(amount uint64, asset string) (slateBytes []byte, err error) {
-	slateBytes, walletOutput, savedSlate, err := t.NewInvoice(amount, 0, asset)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewInvoice")
-	}
-
-	err = t.db.PutOutput(*walletOutput)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutOutput")
-	}
-
-	err = t.db.PutSenderSlate(savedSlate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
-	}
-
-	return
-}
-
-func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err error) {
-	responseSlateBytes, receiverOutput, receiverSlate, err := t.NewReceive(sendSlateBytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewReceive")
-	}
-
-	err = t.db.PutOutput(*receiverOutput)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutOutput")
-	}
-
-	err = t.db.PutReceiverSlate(receiverSlate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
-	}
-
-	tx := Transaction{
-		Transaction: ledger.Transaction{
-			Transaction: receiverSlate.Transaction,
-			ID:          receiverSlate.ID,
-		},
-		Status: TransactionUnconfirmed,
-	}
-
-	err = t.db.PutTransaction(tx)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutTransaction")
-	}
-
-	return
-}
-
-func (t *Wallet) Pay(inSlateBytes []byte) (outSlateBytes []byte, err error) {
+func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) {
 	var slate = &Slate{}
 	err = json.Unmarshal(inSlateBytes, slate)
 	if err != nil {
@@ -164,7 +113,7 @@ func (t *Wallet) Pay(inSlateBytes []byte) (outSlateBytes []byte, err error) {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	outSlateBytes, outputs, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlateBytes)
+	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlateBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewReceive")
 	}

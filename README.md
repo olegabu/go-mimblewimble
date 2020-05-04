@@ -81,7 +81,7 @@ mw invoice 1
 ```
 The payer can accept the invoice and pay it.
 ```bash
-mw pay slate-invoice-4ef548ba-31bd-4d03-8954-9884cc907d15.json
+mw receive slate-send-4ef548ba-31bd-4d03-8954-9884cc907d15.json
 ```
 Upon receipt of the pay slate from the payer the payee will finalize the exchange to create a transaction, 
 just like in the send-receive scenario with the difference that now it is the payee

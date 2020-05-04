@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) NewSend(
+func (t *Wallet) NewSlate(
 	amount uint64,
 	fee uint64,
 	asset string,
@@ -203,84 +203,7 @@ func (t *Wallet) respond(slate *Slate, outputs []Output, outputBlind []byte) (re
 	return
 }
 
-func (t *Wallet) NewInvoice(
-	amount uint64,
-	fee uint64,
-	asset string,
-) (
-	slateBytes []byte,
-	walletOutput *Output,
-	savedSlate *SavedSlate,
-	err error,
-) {
-	// create receiver output and remember its blinding factor and calculate its public key
-	walletOutput, outputBlind, err := t.newOutput(amount, core.PlainOutput, asset, OutputUnconfirmed)
-	if err != nil {
-		err = errors.Wrap(err, "cannot create receiver output")
-		return
-	}
-
-	outputs := []Output{*walletOutput}
-
-	slateBytes, savedSlate, err = t.newSlate(nil, outputs, 0, fee, "", outputBlind[:], amount, asset)
-	if err != nil {
-		err = errors.Wrap(err, "cannot create newSlate")
-		return
-	}
-
-	return
-}
-
-func (t *Wallet) NewReceive(
-	senderSlateBytes []byte,
-) (
-	receiverSlateBytes []byte,
-	walletOutput *Output,
-	savedSlate *SavedSlate,
-	err error,
-) {
-	var slate = &Slate{}
-	err = json.Unmarshal(senderSlateBytes, slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to slate")
-		return
-	}
-
-	value := uint64(slate.Amount)
-	// fee := uint64(slate.Fee)
-
-	// create receiver output and remember its blinding factor
-	walletOutput, outputBlind, err := t.newOutput(value, core.PlainOutput, slate.Asset, OutputUnconfirmed)
-	if err != nil {
-		err = errors.Wrap(err, "cannot create receiver output")
-		return
-	}
-
-	outputs := []Output{*walletOutput}
-
-	receiverNonce, err := t.respond(slate, outputs, outputBlind)
-	if err != nil {
-		err = errors.Wrap(err, "cannot respond to slate")
-		return
-	}
-
-	receiverSlate := *slate
-
-	receiverSlateBytes, err = json.Marshal(receiverSlate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot marshal slate to json")
-		return
-	}
-
-	savedSlate = &SavedSlate{
-		Slate: receiverSlate,
-		Nonce: receiverNonce,
-	}
-
-	return
-}
-
-func (t *Wallet) NewPay(
+func (t *Wallet) NewResponse(
 	amount uint64,
 	fee uint64,
 	asset string,
@@ -288,7 +211,7 @@ func (t *Wallet) NewPay(
 	walletInputs []Output,
 	receiveAmount uint64,
 	receiveAsset string,
-	invoiceSlateBytes []byte,
+	inSlateBytes []byte,
 ) (
 	slateBytes []byte,
 	outputs []Output,
@@ -309,7 +232,7 @@ func (t *Wallet) NewPay(
 	}
 
 	var slate = &Slate{}
-	err = json.Unmarshal(invoiceSlateBytes, slate)
+	err = json.Unmarshal(inSlateBytes, slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot unmarshal json to slate")
 		return
@@ -317,23 +240,23 @@ func (t *Wallet) NewPay(
 
 	slate.Transaction.Body.Inputs = append(slate.Transaction.Body.Inputs, inputs...)
 
-	payerNonce, err := t.respond(slate, outputs, blindExcess[:])
+	nonce, err := t.respond(slate, outputs, blindExcess[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot respond to slate")
 		return
 	}
 
-	payerSlate := slate
+	outSlate := slate
 
-	slateBytes, err = json.Marshal(payerSlate)
+	slateBytes, err = json.Marshal(outSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal slate to json")
 		return
 	}
 
 	savedSlate = &SavedSlate{
-		Slate: *payerSlate,
-		Nonce: payerNonce,
+		Slate: *outSlate,
+		Nonce: nonce,
 	}
 
 	return
