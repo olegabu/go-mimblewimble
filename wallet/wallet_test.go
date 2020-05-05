@@ -178,7 +178,7 @@ func TestTotalIssues(t *testing.T) {
 	zero := zero32[:]
 
 	// commitment to total tokens issued is with a zero blind TI = 0*G + totalCashIssues*H
-	totalCashIssuesValue := commitValue(totalCashIssues, "cash")
+	totalCashIssuesValue := ledger.CommitValue(totalCashIssues, "cash")
 	totalCashIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalCashIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	assert.NoError(t, err)
 
@@ -202,7 +202,7 @@ func TestTotalIssues(t *testing.T) {
 	}
 
 	// commitment to total coins issued is with a zero blind TI = 0*G + totalAppleIssues*H
-	totalAppleIssuesValue := commitValue(totalAppleIssues, "apple")
+	totalAppleIssuesValue := ledger.CommitValue(totalAppleIssues, "apple")
 	totalAppleIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalAppleIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	assert.NoError(t, err)
 

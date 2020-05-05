@@ -2,11 +2,8 @@ package wallet
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"golang.org/x/crypto/blake2b"
-
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
@@ -453,14 +450,6 @@ func (t *Wallet) NewTransaction(responseSlateBytes []byte, senderSlate *SavedSla
 	return
 }
 
-func commitValue(value uint64, asset string) uint64 {
-	assetHash, _ := blake2b.New256(nil)
-	assetHash.Write([]byte(asset))
-	assetHashBytes := assetHash.Sum(nil)
-	assetHashInt, _ := binary.Uvarint(assetHashBytes)
-	return value * assetHashInt
-}
-
 func (t *Wallet) newOutput(
 	value uint64,
 	features core.OutputFeatures,
@@ -479,7 +468,7 @@ func (t *Wallet) newOutput(
 
 	blind = secret[:]
 
-	commitValue := commitValue(value, asset)
+	commitValue := ledger.CommitValue(value, asset)
 
 	// create commitment to value and blinding factor
 	commitment, err := secp256k1.Commit(
