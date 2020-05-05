@@ -50,14 +50,14 @@ mw issue 1
 mw info
 ```
 Send 1 coin to yourself. This will create a `slate-send-<transaction uuid>.json` file that the receiving party needs to 
-fill in by `mw receive` command. Observe a new `Sent` slate and the input that is now in `Locked` state in your wallet.
+fill in by `mw receive` command. Observe a new slate and the input that is now in `Locked` state in your wallet.
 ```bash
 mw send 1
 mw info
 ```
 Receive 1 coin from yourself. This will create a `slate-receive-<transaction uuid>.json` file that needs to be returned 
 to the sender who will turn it into a transaction by `mw finalize` command. 
-Observe new `Unconfirmed` outputs and a new `Responded` slate.
+Observe new `Unconfirmed` outputs, and a new response slate.
 ```bash
 mw receive slate-send-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
@@ -165,6 +165,7 @@ mw node
 
 Start Sender's wallet in another console to listen for transaction events from the consensus node.
 ```bash
+mw init
 mw listen
 ```
 
@@ -174,7 +175,6 @@ Issue 1 coin to yourself in the wallet. This will create `issue-1.json` transact
  broadcast to the network to get validated and its Coinbase output recorded.
 Observe a new `Coinbase` output in Sender's wallet.
 ```bash
-mw init
 mw issue 1
 mw info
 ```
@@ -193,7 +193,7 @@ mw info
 
 Open Receiver's wallet in another console. 
 
-If you're running it on the same host specify a separate wallet directory via a `--persist` flag 
+If you're running it on the same host specify a separate wallet directory via `--persist` flag 
 or `MW_PERSIST` env variable. 
 Observe Receiver's wallet is empty.
 ```bash
@@ -207,7 +207,7 @@ Start Receiver's wallet in another console in listening mode.
 MW_PERSIST=~/.mw_r mw listen
 ```
 
-Receive the input from Sender's slate file saved in the same folder. In reality users send slates to each other.  
+Receive an input from Sender's slate file saved in the same folder. In reality users send slates to each other.  
 This will create a `slate-receive-<transaction uuid>.json`.
 Observe a new `Unconfirmed` output in Receiver's wallet.
 ```bash
@@ -215,7 +215,7 @@ mw recieve slate-send-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
 ```
 
-### Back to Sender
+### Back to Sender to finalize
 
 Return to Sender's wallet console.
 
@@ -234,7 +234,7 @@ and the new output in the Receiver's turn from `Unconfirmed` to `Confirmed`.
 
 ### Queries
 
-Query consensus node for unspent outputs. 
+You can query the consensus node for unspent outputs. 
 As the results in jsonRPC are base64 encoded, pipe them thru json parser and base64 decoder. 
 ```bash
 # all unspent outputs in the network's ledger 
@@ -243,7 +243,7 @@ curl '0.0.0.0:26657/abci_query?path="output"'
 # view query results decoded
 curl '0.0.0.0:26657/abci_query?path="output"' | jq -r .result.response.value | base64 -d | jq
 
-# query for a specific output
+# query for a specific output by its commit
 curl '0.0.0.0:26657/abci_query?path="output/09543892a4fd6a712850716ba31dc63f242978a606aaf7d995e8d5e7d0f021762f"' | jq -r .result.response.value | base64 -d | jq
 ```
 
