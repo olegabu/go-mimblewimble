@@ -210,9 +210,9 @@ func (t *Wallet) NewResponse(
 	walletInputs []Output,
 	receiveAmount uint64,
 	receiveAsset string,
-	inSlateBytes []byte,
+	inSlate *Slate,
 ) (
-	slateBytes []byte,
+	outSlateBytes []byte,
 	outputs []Output,
 	savedSlate *SavedSlate,
 	err error,
@@ -230,24 +230,17 @@ func (t *Wallet) NewResponse(
 		return
 	}
 
-	var slate = &Slate{}
-	err = json.Unmarshal(inSlateBytes, slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to slate")
-		return
-	}
+	inSlate.Transaction.Body.Inputs = append(inSlate.Transaction.Body.Inputs, inputs...)
 
-	slate.Transaction.Body.Inputs = append(slate.Transaction.Body.Inputs, inputs...)
-
-	nonce, err := t.respond(slate, outputs, blindExcess[:])
+	nonce, err := t.respond(inSlate, outputs, blindExcess[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot respond to slate")
 		return
 	}
 
-	outSlate := slate
+	outSlate := inSlate
 
-	slateBytes, err = json.Marshal(outSlate)
+	outSlateBytes, err = json.Marshal(outSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal slate to json")
 		return

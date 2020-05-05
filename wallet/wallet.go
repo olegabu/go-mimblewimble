@@ -93,27 +93,29 @@ func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receive
 }
 
 func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) {
-	var slate = &Slate{}
-	err = json.Unmarshal(inSlateBytes, slate)
+	var inSlate = &Slate{}
+	err = json.Unmarshal(inSlateBytes, inSlate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to slate")
+		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
 		return
 	}
 
-	fee := uint64(slate.Fee)
+	fee := uint64(inSlate.Fee)
 
-	amount := uint64(slate.ReceiveAmount)
-	asset := slate.ReceiveAsset
+	// my counterparty who sent the inSlate wishes to receive this amount, this is the amount I will send
+	amount := uint64(inSlate.ReceiveAmount)
+	asset := inSlate.ReceiveAsset
 
-	receiveAmount := uint64(slate.Amount)
-	receiveAsset := slate.Asset
+	// my counterparty sends this amount to me, this is the receive amount for me
+	receiveAmount := uint64(inSlate.Amount)
+	receiveAsset := inSlate.Asset
 
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlateBytes)
+	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewReceive")
 	}
