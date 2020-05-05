@@ -3,7 +3,6 @@ package wallet
 import (
 	"encoding/binary"
 	"encoding/json"
-	"github.com/blockcypher/libgrin/core"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -89,12 +88,12 @@ func (t *leveldbDatabase) PutTransaction(transaction Transaction) error {
 	return nil
 }
 
-func outputKey(output Output) []byte {
-	return []byte("output." + output.Asset + "." + output.Commit)
+func outputKey(commit string) []byte {
+	return []byte("output." + commit)
 }
 
-func outputRange(asset string) *util.Range {
-	return util.BytesPrefix([]byte("output." + asset))
+func outputRange() *util.Range {
+	return util.BytesPrefix([]byte("output."))
 }
 
 func transactionKey(id string) []byte {
@@ -107,7 +106,7 @@ func (t *leveldbDatabase) PutOutput(output Output) error {
 		return errors.Wrap(err, "cannot marshal output into json")
 	}
 
-	err = t.db.Put(outputKey(output), outputBytes, nil)
+	err = t.db.Put(outputKey(output.Commit), outputBytes, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot Put output")
 	}
@@ -138,14 +137,14 @@ func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Outpu
 
 	outputs := make([]Output, 0)
 
-	iter := t.db.NewIterator(outputRange(asset), nil)
+	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
 		output := Output{}
 		err = json.Unmarshal(iter.Value(), &output)
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "cannot unmarshal output in iterator")
 		}
-		if output.Status == OutputConfirmed {
+		if output.Asset == asset && output.Status == OutputConfirmed {
 			outputs = append(outputs, output)
 		}
 	}
@@ -239,7 +238,7 @@ func (t *leveldbDatabase) ListTransactions() (transactions []Transaction, err er
 func (t *leveldbDatabase) ListOutputs() (outputs []Output, err error) {
 	outputs = make([]Output, 0)
 
-	iter := t.db.NewIterator(outputRange(""), nil)
+	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
 		output := Output{}
 		err = json.Unmarshal(iter.Value(), &output)
@@ -274,10 +273,8 @@ func (t *leveldbDatabase) GetTransaction(id []byte) (transaction Transaction, er
 	return transaction, nil
 }
 
-func (t *leveldbDatabase) GetOutput(commit string, asset string) (output Output, err error) {
-	o := Output{Output: core.Output{Commit: commit}, Asset: asset}
-
-	outputBytes, err := t.db.Get(outputKey(o), nil)
+func (t *leveldbDatabase) GetOutput(commit string) (output Output, err error) {
+	outputBytes, err := t.db.Get(outputKey(commit), nil)
 	if err != nil {
 		return Output{}, errors.Wrap(err, "cannot Get output")
 	}
@@ -306,7 +303,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 	}
 
 	for _, o := range tx.Body.Inputs {
-		output, err := t.GetOutput(o.Commit, tx.Asset)
+		output, err := t.GetOutput(o.Commit)
 
 		if errors.Cause(err) == leveldb.ErrNotFound {
 			// not my input
@@ -326,7 +323,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 	}
 
 	for _, o := range tx.Body.Outputs {
-		output, err := t.GetOutput(o.Commit, tx.Asset)
+		output, err := t.GetOutput(o.Commit)
 
 		if errors.Cause(err) == leveldb.ErrNotFound {
 			// not my output

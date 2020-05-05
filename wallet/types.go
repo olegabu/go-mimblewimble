@@ -14,7 +14,7 @@ type Database interface {
 	PutOutput(output Output) error
 	GetSenderSlate(id []byte) (slate *SavedSlate, err error)
 	GetTransaction(id []byte) (transaction Transaction, err error)
-	GetOutput(commit string, asset string) (output Output, err error)
+	GetOutput(commit string) (output Output, err error)
 	ListSlates() (slates []SavedSlate, err error)
 	ListTransactions() (transactions []Transaction, err error)
 	ListOutputs() (outputs []Output, err error)
@@ -58,8 +58,9 @@ func (t OutputStatus) String() string {
 
 type Slate struct {
 	libwallet.Slate
-	Asset  string      `json:"asset,omitempty"`
-	Status SlateStatus `json:"status,omitempty"`
+	Asset         string      `json:"asset,omitempty"`
+	ReceiveAmount core.Uint64 `json:"receive_amount,omitempty"`
+	ReceiveAsset  string      `json:"receive_asset,omitempty"`
 }
 
 type SavedSlate struct {
@@ -68,28 +69,9 @@ type SavedSlate struct {
 	Nonce [32]byte `json:"nonce,omitempty"`
 }
 
-type SlateStatus int
-
-const (
-	SlateSent = iota
-	SlateResponded
-)
-
-func (t SlateStatus) String() string {
-	switch t {
-	case SlateSent:
-		return "Sent"
-	case SlateResponded:
-		return "Responded"
-	default:
-		return fmt.Sprintf("%d", int(t))
-	}
-}
-
 type Transaction struct {
 	ledger.Transaction
 	Status TransactionStatus `json:"status,omitempty"`
-	Asset  string            `json:"asset,omitempty"`
 }
 
 type TransactionStatus int

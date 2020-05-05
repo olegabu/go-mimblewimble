@@ -3,9 +3,9 @@ package wallet
 import (
 	"encoding/json"
 	"github.com/tyler-smith/go-bip32"
-	"os"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/blockcypher/libgrin/core"
 	"github.com/olekukonko/tablewriter"
@@ -66,19 +66,19 @@ func (t *Wallet) Close() {
 	secp256k1.ContextDestroy(t.context)
 }
 
-func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error) {
+func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string) (slateBytes []byte, err error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, changeOutput, savedSlate, err := t.NewSend(amount, 0, asset, change, inputs)
+	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewSend")
+		return nil, errors.Wrap(err, "cannot NewSlate")
 	}
 
-	if changeOutput != nil {
-		err = t.db.PutOutput(*changeOutput)
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot PutOutput")
 		}
@@ -92,82 +92,36 @@ func (t *Wallet) Send(amount uint64, asset string) (slateBytes []byte, err error
 	return
 }
 
-func (t *Wallet) Invoice(amount uint64, asset string) (slateBytes []byte, err error) {
-	slateBytes, walletOutput, savedSlate, err := t.NewInvoice(amount, 0, asset)
+func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) {
+	var inSlate = &Slate{}
+	err = json.Unmarshal(inSlateBytes, inSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewInvoice")
-	}
-
-	err = t.db.PutOutput(*walletOutput)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutOutput")
-	}
-
-	err = t.db.PutSenderSlate(savedSlate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
-	}
-
-	return
-}
-
-func (t *Wallet) Receive(sendSlateBytes []byte) (responseSlateBytes []byte, err error) {
-	responseSlateBytes, receiverOutput, receiverSlate, err := t.NewReceive(sendSlateBytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewReceive")
-	}
-
-	err = t.db.PutOutput(*receiverOutput)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutOutput")
-	}
-
-	err = t.db.PutReceiverSlate(receiverSlate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
-	}
-
-	tx := Transaction{
-		Transaction: ledger.Transaction{
-			Transaction: receiverSlate.Transaction,
-			ID:          receiverSlate.ID,
-		},
-		Status: TransactionUnconfirmed,
-		Asset:  receiverSlate.Asset,
-	}
-
-	err = t.db.PutTransaction(tx)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutTransaction")
-	}
-
-	return
-}
-
-func (t *Wallet) Pay(invoiceSlateBytes []byte) (paySlateBytes []byte, err error) {
-	var slate = &Slate{}
-	err = json.Unmarshal(invoiceSlateBytes, slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to slate")
+		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
 		return
 	}
 
-	amount := uint64(slate.Amount)
-	fee := uint64(slate.Fee)
-	asset := slate.Asset
+	fee := uint64(inSlate.Fee)
+
+	// my counterparty who sent the inSlate wishes to receive this amount, this is the amount I will send
+	amount := uint64(inSlate.ReceiveAmount)
+	asset := inSlate.ReceiveAsset
+
+	// my counterparty sends this amount to me, this is the receive amount for me
+	receiveAmount := uint64(inSlate.Amount)
+	receiveAsset := inSlate.Asset
 
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	paySlateBytes, changeOutput, savedSlate, err := t.NewPay(amount, fee, asset, change, inputs, invoiceSlateBytes)
+	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewReceive")
 	}
 
-	if changeOutput != nil {
-		err = t.db.PutOutput(*changeOutput)
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot PutOutput")
 		}
@@ -184,7 +138,6 @@ func (t *Wallet) Pay(invoiceSlateBytes []byte) (paySlateBytes []byte, err error)
 			ID:          savedSlate.ID,
 		},
 		Status: TransactionUnconfirmed,
-		Asset:  asset,
 	}
 
 	err = t.db.PutTransaction(tx)
@@ -196,9 +149,9 @@ func (t *Wallet) Pay(invoiceSlateBytes []byte) (paySlateBytes []byte, err error)
 }
 
 func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
-	responseSlate := Slate{}
+	responseSlate := &Slate{}
 
-	err = json.Unmarshal(responseSlateBytes, &responseSlate)
+	err = json.Unmarshal(responseSlateBytes, responseSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot unmarshal responseSlateBytes")
 	}
@@ -210,7 +163,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	txBytes, tx, err := t.NewTransaction(responseSlateBytes, senderSlate)
+	txBytes, tx, err := t.NewTransaction(responseSlate, senderSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewTransaction")
 	}
@@ -229,6 +182,7 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot create output")
 	}
 
+	// issue kernel excess is a public blind, as input value to an issue is zero: KEI = RI*G + 0*H
 	excess, err := secp256k1.Commit(t.context, blind, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create excess")
@@ -257,10 +211,12 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 	return
 }
 
-func (t *Wallet) Info() error {
+func (t *Wallet) Info() (string, error) {
+	tableString := &strings.Builder{}
+
 	outputs, err := t.db.ListOutputs()
 	if err != nil {
-		return errors.Wrap(err, "cannot ListOutputs")
+		return tableString.String(), errors.Wrap(err, "cannot ListOutputs")
 	}
 
 	// sort outputs decreasing by child key index
@@ -268,22 +224,24 @@ func (t *Wallet) Info() error {
 		return outputs[i].Index > outputs[j].Index
 	})
 
-	outputTable := tablewriter.NewWriter(os.Stdout)
+	outputTable := tablewriter.NewWriter(tableString)
 	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key"})
 	outputTable.SetCaption(true, "Outputs")
+	outputTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, output := range outputs {
 		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:4], strconv.Itoa(int(output.Index))})
 	}
 	outputTable.Render()
-	print("\n")
+	tableString.WriteByte('\n')
 
 	slates, err := t.db.ListSlates()
 	if err != nil {
-		return errors.Wrap(err, "cannot ListSlates")
+		return tableString.String(), errors.Wrap(err, "cannot ListSlates")
 	}
-	slateTable := tablewriter.NewWriter(os.Stdout)
-	slateTable.SetHeader([]string{"id", "status", "amount", "asset", "inputs", "outputs"})
+	slateTable := tablewriter.NewWriter(tableString)
+	slateTable.SetHeader([]string{"id", "send", "receive", "inputs", "outputs"})
 	slateTable.SetCaption(true, "Slates")
+	slateTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, slate := range slates {
 		id, _ := slate.ID.MarshalText()
 
@@ -296,20 +254,31 @@ func (t *Wallet) Info() error {
 			outputs += output.Commit[0:4] + " "
 		}
 
-		slateTable.Append([]string{string(id), slate.Status.String(), strconv.Itoa(int(slate.Amount)), slate.Asset, inputs, outputs})
+		send := ""
+		s := int(slate.Amount)
+		if s != 0 {
+			send = strconv.Itoa(s) + " " + slate.Asset
+		}
+
+		receive := ""
+		r := int(slate.ReceiveAmount)
+		if r != 0 {
+			receive = strconv.Itoa(r) + " " + slate.ReceiveAsset
+		}
+
+		slateTable.Append([]string{string(id), send, receive, inputs, outputs})
 	}
-	//slateTable.SetAutoMergeCells(true)
-	//slateTable.SetRowLine(true)
 	slateTable.Render()
-	print("\n")
+	tableString.WriteByte('\n')
 
 	transactions, err := t.db.ListTransactions()
 	if err != nil {
-		return errors.Wrap(err, "cannot ListTransactions")
+		return tableString.String(), errors.Wrap(err, "cannot ListTransactions")
 	}
-	transactionTable := tablewriter.NewWriter(os.Stdout)
-	transactionTable.SetHeader([]string{"id", "status", "asset", "inputs", "outputs"})
+	transactionTable := tablewriter.NewWriter(tableString)
+	transactionTable.SetHeader([]string{"id", "status", "inputs", "outputs"})
 	transactionTable.SetCaption(true, "Transactions")
+	transactionTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, tx := range transactions {
 		id, _ := tx.ID.MarshalText()
 
@@ -322,13 +291,20 @@ func (t *Wallet) Info() error {
 			outputs += output.Commit[0:4] + " "
 		}
 
-		transactionTable.Append([]string{string(id), tx.Status.String(), tx.Asset, inputs, outputs})
+		transactionTable.Append([]string{string(id), tx.Status.String(), inputs, outputs})
 	}
-	//transactionTable.SetAutoMergeCells(true)
-	//table.SetRowLine(true)
 	transactionTable.Render()
-	print("\n")
+	tableString.WriteByte('\n')
 
+	return tableString.String(), nil
+}
+
+func (t *Wallet) Print() error {
+	s, err := t.Info()
+	if err != nil {
+		return err
+	}
+	print(s)
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
 	"path/filepath"
+	"strings"
 )
 
 var dbFilename string
@@ -145,7 +146,7 @@ func (t *leveldbDatabase) ListAssets() (list map[string]uint64, err error) {
 	iter := t.db.NewIterator(assetRange(), nil)
 	for iter.Next() {
 		currentTotal, _ := binary.Uvarint(iter.Value())
-		list[string(iter.Key())] = currentTotal
+		list[assetFromKey(iter.Key())] = currentTotal
 	}
 	iter.Release()
 	err = iter.Error()
@@ -188,6 +189,11 @@ func kernelRange() *util.Range {
 
 func assetKey(o string) []byte {
 	return []byte("asset." + o)
+}
+
+func assetFromKey(key []byte) string {
+	s := string(key)
+	return strings.Split(s, "asset.")[1]
 }
 
 func assetRange() *util.Range {

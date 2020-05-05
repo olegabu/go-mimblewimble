@@ -149,15 +149,25 @@ func main() {
 				asset = args[1]
 			}
 
+			var receiveAmount int
+			var receiveAsset string
+			if len(args) == 4 {
+				receiveAmount, err = strconv.Atoi(args[2])
+				if err != nil {
+					return errors.Wrap(err, "cannot parse receive amount")
+				}
+				receiveAsset = args[3]
+			}
+
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
 				return errors.Wrap(err, "cannot create wallet")
 			}
 			defer w.Close()
 
-			slateBytes, err := w.Send(uint64(amount), asset)
+			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Send")
+				return errors.Wrap(err, "cannot Send")
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
@@ -194,28 +204,28 @@ func main() {
 			}
 			defer w.Close()
 
-			slateBytes, err := w.Invoice(uint64(amount), asset)
+			slateBytes, err := w.Send(0, "", uint64(amount), asset)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Send")
+				return errors.Wrap(err, "cannot Send")
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
 				return errors.Wrap(err, "cannot parse id from slate")
 			}
-			fileName := "slate-invoice-" + string(id) + ".json"
+			fileName := "slate-send-" + string(id) + ".json"
 			err = ioutil.WriteFile(fileName, slateBytes, 0644)
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
-			fmt.Printf("wrote slate, pass it to the payer to fill in and respond: pay %v \n", fileName)
+			fmt.Printf("wrote slate, pass it to the payer to fill in and respond: receive %v \n", fileName)
 			return nil
 		},
 	}
 
 	var receiveCmd = &cobra.Command{
-		Use:   "receive slate_send_file",
-		Short: "Receives transfer by creating a response slate",
-		Long:  `Creates json file with a response receive slate with own output and partial signature.`,
+		Use:   "receive slate_file",
+		Short: "Receives transfer or pays an invoice or exchange by creating a response slate",
+		Long:  `Creates json file with a response slate with own outputs and outputs and partial signature.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slateFileName := args[0]
@@ -230,9 +240,9 @@ func main() {
 			}
 			defer w.Close()
 
-			responseSlateBytes, err := w.Receive(slateBytes)
+			responseSlateBytes, err := w.Respond(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Receive")
+				return errors.Wrap(err, "cannot Respond")
 			}
 			id, err := wallet.ParseIDFromSlate(responseSlateBytes)
 			if err != nil {
@@ -244,42 +254,6 @@ func main() {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
 			fmt.Printf("wrote slate, pass it back to the sender: finalize %v\n", fileName)
-			return nil
-		},
-	}
-
-	var payCmd = &cobra.Command{
-		Use:   "pay slate_invoice_file",
-		Short: "Pays by responding with a pay slate to an invoice",
-		Long:  `Creates json file with a response pay slate with inputs, change output and partial signature.`,
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			slateFileName := args[0]
-			slateBytes, err := ioutil.ReadFile(slateFileName)
-			if err != nil {
-				return errors.Wrap(err, "cannot read sender slate file "+slateFileName)
-			}
-
-			w, err := wallet.NewWallet(flagPersist)
-			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
-			}
-			defer w.Close()
-
-			responseSlateBytes, err := w.Pay(slateBytes)
-			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Receive")
-			}
-			id, err := wallet.ParseIDFromSlate(responseSlateBytes)
-			if err != nil {
-				return errors.Wrap(err, "cannot parse id from slate")
-			}
-			fileName := "slate-pay-" + string(id) + ".json"
-			err = ioutil.WriteFile(fileName, responseSlateBytes, 0644)
-			if err != nil {
-				return errors.Wrap(err, "cannot write file "+fileName)
-			}
-			fmt.Printf("wrote slate, pass it back to the payee: finalize %v\n", fileName)
 			return nil
 		},
 	}
@@ -304,7 +278,7 @@ func main() {
 
 			txBytes, err := w.Finalize(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Finalize")
+				return errors.Wrap(err, "cannot Finalize")
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
@@ -373,9 +347,9 @@ func main() {
 			}
 			defer w.Close()
 
-			err = w.Info()
+			err = w.Print()
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Info")
+				return errors.Wrap(err, "cannot wallet.Print")
 			}
 			return nil
 		},
@@ -461,9 +435,9 @@ func main() {
 				if err != nil {
 					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", string(transactionId)).Error())
 				} else {
-					err = w.Info()
+					err = w.Print()
 					if err != nil {
-						fmt.Println(errors.Wrap(err, "cannot wallet.Info").Error())
+						fmt.Println(errors.Wrap(err, "cannot wallet.Print").Error())
 					}
 				}
 			})
@@ -500,8 +474,8 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, payCmd,
-		finalizeCmd, confirmCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
+	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, confirmCmd,
+		validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
 	dir, err := homedir.Dir()
 	if err != nil {

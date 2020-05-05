@@ -29,6 +29,14 @@ func Parse(bytes []byte) (tx *Transaction, issue *Issue, err error) {
 	}
 }
 
+func CommitValue(value uint64, asset string) uint64 {
+	assetHash, _ := blake2b.New256(nil)
+	assetHash.Write([]byte(asset))
+	assetHashBytes := assetHash.Sum(nil)
+	assetHashInt, _ := binary.Uvarint(assetHashBytes)
+	return value * assetHashInt
+}
+
 func ValidateTransaction(ledgerTx *Transaction) (err error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
@@ -132,7 +140,7 @@ func ValidateState(outputs []core.Output, kernels []core.TxKernel, assets map[st
 		totalIssues += t
 	}
 
-	msg = fmt.Sprintf("%d outputs %d kernels %d types of assets %d total assets issued", len(outputs), len(kernels), len(assets), totalIssues)
+	msg = fmt.Sprintf("%d outputs, %d kernels, %d types of assets, %d total assets", len(outputs), len(kernels), len(assets), totalIssues)
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
@@ -143,6 +151,7 @@ func ValidateState(outputs []core.Output, kernels []core.TxKernel, assets map[st
 
 	outputCommitments := make([]*secp256k1.Commitment, 0)
 	excessCommitments := make([]*secp256k1.Commitment, 0)
+	issueCommitments := make([]*secp256k1.Commitment, 0)
 
 	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*4096)
 	if err != nil {
@@ -189,10 +198,23 @@ func ValidateState(outputs []core.Output, kernels []core.TxKernel, assets map[st
 	}
 
 	// commitment to total tokens issued is with a zero blind TI = 0*G + totalIssues*H
-	totalIssuesBlind := [32]byte{} // zero
-	totalIssuesCommitment, err := secp256k1.Commit(context, totalIssuesBlind[:], totalIssues, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	zero32 := [32]byte{}
+	zero := zero32[:]
+
+	for asset, total := range assets {
+		issueValue := CommitValue(total, asset)
+		issueCommitment, e := secp256k1.Commit(context, zero, issueValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+		if e != nil {
+			err = errors.Wrap(e, "cannot Commit issueValue")
+			return
+		}
+		issueCommitments = append(issueCommitments, issueCommitment)
+	}
+
+	// sum up commitments to total number of all assets issued
+	totalIssuesCommitment, err := secp256k1.CommitSum(context, issueCommitments, nil)
 	if err != nil {
-		err = errors.Wrap(err, "cannot Commit totalIssues")
+		err = errors.Wrap(err, "cannot CommitSum issueCommitments")
 		return
 	}
 
