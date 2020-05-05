@@ -149,16 +149,16 @@ func TestTotalIssues(t *testing.T) {
 	w := newTestWallet(t)
 	defer w.Close()
 
-	outputCommitments := make([]*secp256k1.Commitment, 0)
-	excessCommitments := make([]*secp256k1.Commitment, 0)
+	var outputCommitments []*secp256k1.Commitment
+	var excessCommitments []*secp256k1.Commitment
 
-	var totalIssues uint64
+	var totalCashIssues uint64
 
 	// issue several tokens of the same asset, sum total number issued,
 	// collect issue kernel excesses into excessCommitments;
-	// issue kernel excess is a public blind, as input value to an issue is zero KEI = RI*G + 0*H
+	// issue kernel excess is a public blind, as input value to an issue is zero: KEI = RI*G + 0*H
 	for _, value := range []uint64{1, 2, 3} {
-		totalIssues += value
+		totalCashIssues += value
 		issueBytes, err := w.Issue(value, "cash")
 		assert.NoError(t, err)
 		issue := ledger.Issue{}
@@ -167,14 +167,45 @@ func TestTotalIssues(t *testing.T) {
 		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
 		assert.NoError(t, err)
 		excessCommitments = append(excessCommitments, issueExcess)
+
+		//issueCommit, err := secp256k1.CommitmentFromString(issue.Output.Commit)
+		//assert.NoError(t, err)
+		//outputCommitments = append(outputCommitments, issueCommit)
 	}
 
-	// commitment to total tokens issued is with a zero blind TI = 0*G + totalIssues*H
-	totalIssuesBlind := [32]byte{} // zero
-	totalIssuesCommitment, err := secp256k1.Commit(w.context, totalIssuesBlind[:], totalIssues, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	// zero blind used to calculate commitments to total value
+	var zero32 [32]byte
+	zero := zero32[:]
+
+	// commitment to total tokens issued is with a zero blind TI = 0*G + totalCashIssues*H
+	totalCashIssuesValue := commitValue(totalCashIssues, "cash")
+	totalCashIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalCashIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	assert.NoError(t, err)
 
-	// transfer 5 out of total issued 6 to have 2 outputs: receiver 5 and change 1
+	var totalAppleIssues uint64
+
+	// issue several tokens of another asset, sum total number issued
+	for _, value := range []uint64{1, 2, 3} {
+		totalAppleIssues += value
+		issueBytes, err := w.Issue(value, "apple")
+		assert.NoError(t, err)
+		issue := ledger.Issue{}
+		err = json.Unmarshal(issueBytes, &issue)
+		assert.NoError(t, err)
+		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
+		assert.NoError(t, err)
+		excessCommitments = append(excessCommitments, issueExcess)
+
+		issueCommit, err := secp256k1.CommitmentFromString(issue.Output.Commit)
+		assert.NoError(t, err)
+		outputCommitments = append(outputCommitments, issueCommit)
+	}
+
+	// commitment to total coins issued is with a zero blind TI = 0*G + totalAppleIssues*H
+	totalAppleIssuesValue := commitValue(totalAppleIssues, "apple")
+	totalAppleIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalAppleIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	assert.NoError(t, err)
+
 	tx := testSendReceive(t, w, 5, "cash")
 
 	// collect outputs into outputCommitments
@@ -184,10 +215,10 @@ func TestTotalIssues(t *testing.T) {
 		outputCommitments = append(outputCommitments, com)
 	}
 
-	// add transfer transaction kernel excess to excessCommitments
-	transferExcess, err := secp256k1.CommitmentFromString(tx.Body.Kernels[0].Excess)
+	// add transaction kernel excess to excessCommitments
+	txExcess, err := secp256k1.CommitmentFromString(tx.Body.Kernels[0].Excess)
 	assert.NoError(t, err)
-	excessCommitments = append(excessCommitments, transferExcess)
+	excessCommitments = append(excessCommitments, txExcess)
 
 	// add kernel offset to excessCommitments
 	offsetBytes, _ := hex.DecodeString(tx.Offset)
@@ -196,8 +227,12 @@ func TestTotalIssues(t *testing.T) {
 	excessCommitments = append(excessCommitments, kernelOffset)
 
 	// subtract all kernel excesses (from issues and transfers) from all remaining outputs
-	// sum(O) - (sum(KE) + sum(offset)*G + sum(KEI))
+	// sum(outputs) - (sum(KE) + sum(offset)*G + sum(KEI))
 	sumCommitment, err := secp256k1.CommitSum(w.context, outputCommitments, excessCommitments)
+	assert.NoError(t, err)
+
+	// sum up commitments to total number of both assets issued
+	totalIssuesCommitment, err := secp256k1.CommitSum(w.context, []*secp256k1.Commitment{totalCashIssuesCommitment, totalAppleIssuesCommitment}, nil)
 	assert.NoError(t, err)
 
 	// difference of remaining outputs and all excesses should equal to the commitment to value of total issued;
@@ -214,7 +249,6 @@ func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *
 	err = w.Print()
 	assert.NoError(t, err)
 
-	//responseSlateBytes, err := w.Receive(slateBytes)
 	responseSlateBytes, err := w.Respond(slateBytes)
 	assert.NoError(t, err)
 	fmt.Println("resp " + string(responseSlateBytes))

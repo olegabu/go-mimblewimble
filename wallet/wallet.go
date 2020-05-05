@@ -180,6 +180,7 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 		return nil, errors.Wrap(err, "cannot create output")
 	}
 
+	// issue kernel excess is a public blind, as input value to an issue is zero: KEI = RI*G + 0*H
 	excess, err := secp256k1.Commit(t.context, blind, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create excess")
