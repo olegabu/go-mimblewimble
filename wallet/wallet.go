@@ -149,9 +149,9 @@ func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) 
 }
 
 func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
-	responseSlate := Slate{}
+	responseSlate := &Slate{}
 
-	err = json.Unmarshal(responseSlateBytes, &responseSlate)
+	err = json.Unmarshal(responseSlateBytes, responseSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot unmarshal responseSlateBytes")
 	}
@@ -163,7 +163,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	txBytes, tx, err := t.NewTransaction(responseSlateBytes, senderSlate)
+	txBytes, tx, err := t.NewTransaction(responseSlate, senderSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewTransaction")
 	}

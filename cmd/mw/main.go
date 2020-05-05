@@ -167,7 +167,7 @@ func main() {
 
 			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Send")
+				return errors.Wrap(err, "cannot Send")
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
@@ -206,7 +206,7 @@ func main() {
 
 			slateBytes, err := w.Send(0, "", uint64(amount), asset)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Send")
+				return errors.Wrap(err, "cannot Send")
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
@@ -242,7 +242,7 @@ func main() {
 
 			responseSlateBytes, err := w.Respond(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Receive")
+				return errors.Wrap(err, "cannot Respond")
 			}
 			id, err := wallet.ParseIDFromSlate(responseSlateBytes)
 			if err != nil {
@@ -278,7 +278,7 @@ func main() {
 
 			txBytes, err := w.Finalize(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Finalize")
+				return errors.Wrap(err, "cannot Finalize")
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
