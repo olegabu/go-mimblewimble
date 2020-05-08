@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
@@ -10,6 +11,7 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/blake2b"
 )
 
 func (t *Wallet) NewSlate(
@@ -155,13 +157,31 @@ func (t *Wallet) inputsAndOutputs(
 	var inputBlinds [][]byte
 	for _, input := range walletInputs {
 		inputsTotal += input.Value
+
 		// re-create child secret key from its saved index and use it as this input's blind
 		secret, e := t.secret(input.Index)
 		if e != nil {
 			err = errors.Wrapf(e, "cannot get secret for input with key index %d", input.Index)
 			return
 		}
-		inputBlinds = append(inputBlinds, secret[:])
+
+		blind := secret[:]
+
+		assetSecret, e := t.secret(input.AssetIndex)
+		if e != nil {
+			err = errors.Wrapf(e, "cannot get assetSecret for input with key index %d", input.AssetIndex)
+			return
+		}
+
+		assetBlind := assetSecret[:]
+
+		valueAssetBlindFactor := make([]byte, 32)
+		assetBlindInt, _ := binary.Uvarint(assetBlind)
+		binary.PutUvarint(valueAssetBlindFactor, input.Value*assetBlindInt)
+
+		inputBlinds = append(inputBlinds, blind)
+		inputBlinds = append(inputBlinds, valueAssetBlindFactor)
+
 		inputs = append(inputs, core.Input{Features: input.Features, Commit: input.Commit})
 	}
 
@@ -531,14 +551,31 @@ func (t *Wallet) newOutput(
 
 	blind = secret[:]
 
-	commitValue := ledger.CommitValue(value, asset)
+	assetSecret, assetIndex, err := t.newSecret()
+	if err != nil {
+		err = errors.Wrap(err, "cannot get newSecret")
+		return
+	}
 
-	// create commitment to value and blinding factor
+	assetBlind := assetSecret[:]
+
+	assetHash, _ := blake2b.New256(nil)
+	assetHash.Write([]byte(asset))
+	seed := assetHash.Sum(nil)[:32]
+
+	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(t.context, seed, assetBlind)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create commitment to asset")
+		return
+	}
+	//serializedAssetCommitment := secp256k1.GeneratorSerialize(t.context, assetCommitment)
+
+	// create commitment to value with asset specific generator
 	commitment, err := secp256k1.Commit(
 		t.context,
 		blind,
-		commitValue,
-		&secp256k1.GeneratorH,
+		value,
+		assetCommitment,
 		&secp256k1.GeneratorG)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create commitment to value")
@@ -550,14 +587,14 @@ func (t *Wallet) newOutput(
 		t.context,
 		nil,
 		nil,
-		commitValue,
+		value,
 		blind[:],
 		blind[:],
 		nil,
 		nil,
 		nil)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create bullet proof")
+		err = errors.Wrap(err, "cannot create bulletproof")
 		return
 	}
 
@@ -567,10 +604,11 @@ func (t *Wallet) newOutput(
 			Commit:   commitment.String(),
 			Proof:    hex.EncodeToString(proof),
 		},
-		Value:  value,
-		Asset:  asset,
-		Index:  index,
-		Status: status,
+		Value:      value,
+		Asset:      asset,
+		Index:      index,
+		AssetIndex: assetIndex,
+		Status:     status,
 	}
 
 	return
