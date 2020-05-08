@@ -2,7 +2,6 @@ package wallet
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
@@ -12,6 +11,7 @@ import (
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
+	"math/big"
 )
 
 func (t *Wallet) NewSlate(
@@ -175,12 +175,13 @@ func (t *Wallet) inputsAndOutputs(
 
 		assetBlind := assetSecret[:]
 
-		valueAssetBlindFactor := make([]byte, 32)
-		assetBlindInt, _ := binary.Uvarint(assetBlind)
-		binary.PutUvarint(valueAssetBlindFactor, input.Value*assetBlindInt)
+		v := new(big.Int).SetUint64(input.Value)
+		ab := new(big.Int).SetBytes(assetBlind)
+		vab := new(big.Int).Mul(v, ab)
+		valueAssetBlind := vab.Bytes()
 
 		inputBlinds = append(inputBlinds, blind)
-		inputBlinds = append(inputBlinds, valueAssetBlindFactor)
+		inputBlinds = append(inputBlinds, valueAssetBlind)
 
 		inputs = append(inputs, core.Input{Features: input.Features, Commit: input.Commit})
 	}
