@@ -47,7 +47,7 @@ func ValidateTransaction(ledgerTx *Transaction) (err error) {
 	tx := &ledgerTx.Transaction
 
 	errSig := validateSignature(context, tx)
-	errPrf := validateBulletproofs(context, tx.Body.Outputs)
+	//errPrf := validateBulletproofs(context, tx.Body.Outputs)
 	errSum := validateCommitmentsSum(context, tx)
 
 	var errs []string
@@ -57,9 +57,9 @@ func ValidateTransaction(ledgerTx *Transaction) (err error) {
 	if errSum != nil {
 		errs = append(errs, "validateCommitmentsSum")
 	}
-	if errPrf != nil {
-		errs = append(errs, "validateBulletproofs")
-	}
+	//if errPrf != nil {
+	//	errs = append(errs, "validateBulletproofs")
+	//}
 
 	if len(errs) > 0 {
 		return errors.Errorf("Transaction validation failed [%s]", strings.Join(errs, ", "))

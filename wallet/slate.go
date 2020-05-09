@@ -167,6 +167,8 @@ func (t *Wallet) inputsAndOutputs(
 
 		blind := secret[:]
 
+		inputBlinds = append(inputBlinds, blind)
+
 		assetSecret, e := t.secret(input.AssetIndex)
 		if e != nil {
 			err = errors.Wrapf(e, "cannot get assetSecret for input with key index %d", input.AssetIndex)
@@ -175,12 +177,8 @@ func (t *Wallet) inputsAndOutputs(
 
 		assetBlind := assetSecret[:]
 
-		v := new(big.Int).SetUint64(input.Value)
-		ab := new(big.Int).SetBytes(assetBlind)
-		vab := new(big.Int).Mul(v, ab)
-		valueAssetBlind := vab.Bytes()
+		valueAssetBlind := valueAssetBlindFactor(input.Value, assetBlind)
 
-		inputBlinds = append(inputBlinds, blind)
 		inputBlinds = append(inputBlinds, valueAssetBlind)
 
 		inputs = append(inputs, core.Input{Features: input.Features, Commit: input.Commit})
@@ -534,6 +532,14 @@ func (t *Wallet) NewTransaction(responseSlate *Slate, senderSlate *SavedSlate) (
 	return
 }
 
+func valueAssetBlindFactor(value uint64, assetBlind []byte) (bytes []byte) {
+	v := new(big.Int).SetUint64(value)
+	ab := new(big.Int).SetBytes(assetBlind)
+	vab := new(big.Int).Mul(v, ab)
+	bytes = vab.Bytes()
+	return
+}
+
 func (t *Wallet) newOutput(
 	value uint64,
 	features core.OutputFeatures,
@@ -541,7 +547,7 @@ func (t *Wallet) newOutput(
 	status OutputStatus,
 ) (
 	walletOutput *Output,
-	blind []byte,
+	sumBlinds []byte,
 	err error,
 ) {
 	secret, index, err := t.newSecret()
@@ -550,7 +556,7 @@ func (t *Wallet) newOutput(
 		return
 	}
 
-	blind = secret[:]
+	blind := secret[:]
 
 	assetSecret, assetIndex, err := t.newSecret()
 	if err != nil {
@@ -559,6 +565,29 @@ func (t *Wallet) newOutput(
 	}
 
 	assetBlind := assetSecret[:]
+
+	valueAssetBlind := valueAssetBlindFactor(value, assetBlind)
+
+	sumBlinds32, err := secp256k1.BlindSum(t.context, [][]byte{blind, valueAssetBlind}, nil)
+	if err != nil {
+		err = errors.Wrap(err, "cannot BlindSum")
+		return
+	}
+	sumBlinds = sumBlinds32[:]
+
+	//ret, err := secp256k1.BlindGeneratorBlindSum(t.context, []uint64{value}, [][]byte{assetBlind}, [][]byte{blind}, 0)
+	//if err != nil {
+	//	err = errors.Wrap(err, "cannot BlindGeneratorBlindSum")
+	//	return
+	//}
+	//r := ret[0][:]
+	//
+	//sumBlinds322, err := secp256k1.BlindSum(t.context, [][]byte{r}, [][]byte{blind})
+	//if err != nil {
+	//	err = errors.Wrap(err, "cannot BlindSum")
+	//	return
+	//}
+	//sumBlinds = sumBlinds322[:]
 
 	assetHash, _ := blake2b.New256(nil)
 	assetHash.Write([]byte(asset))
@@ -589,8 +618,8 @@ func (t *Wallet) newOutput(
 		nil,
 		nil,
 		value,
-		blind[:],
-		blind[:],
+		sumBlinds,
+		sumBlinds,
 		nil,
 		nil,
 		nil)
