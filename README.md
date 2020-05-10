@@ -23,7 +23,7 @@ sudo apt-get install autoconf libtool libgmp3-dev
 ## Build and test
 
 ```bash
-go install ./...
+go install -ldflags "-linkmode external -extldflags -static" ./...
 
 go test -v ./wallet ./ledger
 ```

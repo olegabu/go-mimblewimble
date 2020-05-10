@@ -21,3 +21,4 @@ tx-*.json
 issue-*.json
 
 data
+/mytestnet/

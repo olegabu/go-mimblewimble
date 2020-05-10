@@ -50,9 +50,9 @@ func init() {
 func postInitCommands(commands []*cobra.Command) {
 	for _, c := range commands {
 		presetRequiredFlags(c)
-		if c.HasSubCommands() {
-			postInitCommands(c.Commands())
-		}
+		//if c.HasSubCommands() {
+		//	postInitCommands(c.Commands())
+		//}
 	}
 }
 
@@ -488,6 +488,13 @@ func main() {
 	// Tendermint commands
 
 	tendermintRootCmd := tendermintCmd.RootCmd
+
+	//var hostnames []string
+
+	//tendermintCmd.TestnetFilesCmd.Flags().StringArrayVar(&hostnames, "hostname", []string{},
+	//	"Manually override all hostnames of validators and non-validators (use --hostname multiple times for multiple hosts)")
+
+	//tendermintCmd.TestnetFilesCmd.Flags().Set("hostname", "")
 
 	tendermintRootCmd.AddCommand(
 		tendermintCmd.GenValidatorCmd,
