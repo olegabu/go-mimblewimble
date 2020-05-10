@@ -488,6 +488,7 @@ func main() {
 	// Tendermint commands
 
 	tendermintRootCmd := tendermintCmd.RootCmd
+
 	tendermintRootCmd.AddCommand(
 		tendermintCmd.GenValidatorCmd,
 		tendermintCmd.InitFilesCmd,
@@ -505,9 +506,10 @@ func main() {
 
 	tendermintBaseCmd := cli.PrepareBaseCmd(tendermintRootCmd, "TM", os.ExpandEnv(filepath.Join("$HOME", cfg.DefaultTendermintDir)))
 
-	rootCmd.AddCommand(tendermintRootCmd)
+	rootCmd.AddCommand(tendermintBaseCmd.Command)
 
-	if err := tendermintBaseCmd.Execute(); err != nil {
-		panic(err)
+	err = rootCmd.Execute()
+	if err != nil {
+		os.Exit(1)
 	}
 }
