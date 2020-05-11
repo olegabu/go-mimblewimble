@@ -1,6 +1,6 @@
-#  Experimental wallet and library for Mimblewimble
+#  An experimental wallet and library for Mimblewimble
 
-This is a toy. Do not use for production.
+This is a toy. Do not use in anything serious (yet).
 
 ## Prerequisites
 
@@ -219,14 +219,11 @@ mw info
 
 Return to Sender's wallet console.
 
-Finalize the transaction. This will create a `tx-<transaction uuid>.json`.
+Post the transaction: finalize to create a `tx-<transaction uuid>.json` 
+and broadcast it to consensus network to get recorded in the ledger.
 ```bash
-mw finalize slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+mw post slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
-```
-Broadcast this transaction to consensus network to get recorded in the ledger.
-```bash
-mw broadcast tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 ```
 Observe both Sender's and Receiver's listening wallets get a transaction event and update their databases.
 See original Coinbase output turn to `Spent` in Sender's wallet, 
@@ -235,19 +232,19 @@ and the new output in the Receiver's turn from `Unconfirmed` to `Confirmed`.
 ### Queries
 
 You can query the consensus node for unspent outputs. 
-As the results in jsonRPC are base64 encoded, pipe them thru json parser and base64 decoder. 
+ 
 ```bash
 # all unspent outputs in the network's ledger 
 curl '0.0.0.0:26657/abci_query?path="output"'
 
-# view query results decoded
+# as the results in jsonRPC are base64 encoded, pipe them thru json parser and base64 decoder
 curl '0.0.0.0:26657/abci_query?path="output"' | jq -r .result.response.value | base64 -d | jq
 
 # query for a specific output by its commit
 curl '0.0.0.0:26657/abci_query?path="output/09543892a4fd6a712850716ba31dc63f242978a606aaf7d995e8d5e7d0f021762f"' | jq -r .result.response.value | base64 -d | jq
 ```
 
-Similarly, you can query for kernel excesses of all transactions recorded, and numbers of total coins issued per asset.
+Similarly, you can query for kernel excesses of all transactions recorded, and total tokens issued per asset.
 ```bash
 curl '0.0.0.0:26657/abci_query?path="kernel"' | jq -r .result.response.value | base64 -d | jq
 curl '0.0.0.0:26657/abci_query?path="asset"' | jq -r .result.response.value | base64 -d | jq
@@ -258,5 +255,96 @@ sum all unspent outputs and kernel excesses known to the network, and validate n
 ```bash
 curl '0.0.0.0:26657/abci_query?path="validate"'
 ```
+
+## Local test network
+
+Create a consensus network of validating nodes in docker containers on a local host.
+
+### Create
+
+This creates a network called `mytestnet` of the minimum 4 nodes required for BFT consensus. 
+To create more nodes, or a different network, pass arguments: `./localnet.sh 31 test2`. 
+```bash
+./localnet.sh
+``` 
+In this script `mw tendermint testnet` generates node config files in `mytestnet` folder, 
+then `docker run` commands create containers out of a standard Linux image with folders mapped to the
+generated configs and the folder where `mw` is installed, and run them with `mw node`.
+
+### Sender
+
+The first user Sender creates his wallet on the host in the default `~/.mw` folder and connects to `node0`
+at the default address `tcp://0.0.0.0:26657`.
+
+Connect to the node to listen for events.
+```bash
+mw init
+mw listen
+```
+
+Open another console and issue and send `apple` commodity tokens.
+```bash
+mw issue 10 apple
+mw broadcast issue-10.json
+mw send 1 apple
+```
+
+### Receiver
+
+User Receiver creates his wallet in `~/.mw_r` folder and connects to `node2` at `tcp://0.0.0.0:26659`.
+Note the client port 26657 maps to host's 26659.
+
+Connect to the node to listen for events.
+```bash
+export MW_PERSIST=~/.mw_r
+export MW_ADDRESS=tcp://0.0.0.0:26659
+mw init
+mw listen
+```
+
+Open another console and receive the transfer.
+```bash
+export MW_PERSIST=~/.mw_r
+export MW_ADDRESS=tcp://0.0.0.0:26659
+mw receive slate-send-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json 
+```
+
+### Back to Sender to finalize
+
+Sender finalizes and broadcasts the transaction.
+```bash
+mw post slate-receive-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
+```
+
+Observe in the listening consoles a `transfer` event from node0 update Sender's wallet,
+and the Receiver's from the event received from node2. 
+
+Issue more tokens and observe `issue` events in both listening consoles: 
+the network validates and propagates transactions. 
+```bash
+mw issue 1 $ && mw broadcast issue-1.json
+```
+
+Now pause one container to reduce the consensus to 3 nodes and observe the events still
+propagate thru the network to the listening wallets.
+```bash
+docker pause node1
+mw issue 1 $ && mw broadcast issue-1.json
+```
+
+Pause another container and observe the events no longer propagate as the number of failed
+nodes 2 exceed BFT threshold `3f+1` for 4 nodes.
+```bash
+docker pause node3
+mw issue 1 orange && mw broadcast issue-1.json
+```
+
+Bring back at least one failed node and see the network recover and validate 
+and propagate missed transactions.
+```bash
+docker unpause node3
+``` 
+
+
 
 

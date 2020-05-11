@@ -122,7 +122,7 @@ func main() {
 
 			txBytes, err := w.Issue(uint64(amount), asset)
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Issue")
+				return errors.Wrap(err, "cannot Issue")
 			}
 			fileName := "issue-" + args[0] + ".json"
 			err = ioutil.WriteFile(fileName, txBytes, 0644)
@@ -253,14 +253,14 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
-			fmt.Printf("wrote slate, pass it back to the sender: finalize %v\n", fileName)
+			fmt.Printf("wrote slate, pass it back to the sender: finalize or post %v\n", fileName)
 			return nil
 		},
 	}
 
 	var finalizeCmd = &cobra.Command{
 		Use:   "finalize slate_receive_file",
-		Short: "Finalizes transfer by creating a transaction from the response slate",
+		Short: "Finalizes transfer by creating a transaction from a response slate",
 		Long:  `Creates a json file with a transaction to be sent to the network to get validated.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -308,7 +308,7 @@ func main() {
 
 			err = w.Confirm([]byte(args[0]))
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Confirm")
+				return errors.Wrap(err, "cannot Confirm")
 			}
 			fmt.Println("confirmed transaction: marked inputs as spent and outputs as confirmed")
 			return nil
@@ -349,7 +349,7 @@ func main() {
 
 			err = w.Print()
 			if err != nil {
-				return errors.Wrap(err, "cannot wallet.Print")
+				return errors.Wrap(err, "cannot Print")
 			}
 			return nil
 		},
@@ -386,6 +386,59 @@ func main() {
 		"",
 		"tcp://0.0.0.0:26657",
 		"address of tendermint socket to broadcast to")
+
+	var postCmd = &cobra.Command{
+		Use:   "post slate_receive_file",
+		Short: "Finalizes transfer by creating a transaction from a response slate then broadcasts the transaction",
+		Long:  `Creates a json file with a transaction to get validated then broadcasts the transaction to the network synchronously.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slateFileName := args[0]
+			slateBytes, err := ioutil.ReadFile(slateFileName)
+			if err != nil {
+				return errors.Wrap(err, "cannot read receiver slate file "+slateFileName)
+			}
+
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
+
+			txBytes, err := w.Finalize(slateBytes)
+			if err != nil {
+				return errors.Wrap(err, "cannot Finalize")
+			}
+			id, err := wallet.ParseIDFromSlate(slateBytes)
+			if err != nil {
+				return errors.Wrap(err, "cannot parse id from slate")
+			}
+			fileName := "tx-" + string(id) + ".json"
+			err = ioutil.WriteFile(fileName, txBytes, 0644)
+			if err != nil {
+				return errors.Wrap(err, "cannot write file "+fileName)
+			}
+			fmt.Printf("wrote %v, sending it to the network to get validated\n", fileName)
+
+			client, err := abci.NewClient(flagAddress)
+			if err != nil {
+				return errors.Wrap(err, "cannot get new client")
+			}
+			defer client.Stop()
+
+			err = client.Broadcast(txBytes)
+			if err != nil {
+				return errors.Wrap(err, "cannot client.Broadcast")
+			}
+
+			return nil
+		},
+	}
+	postCmd.Flags().StringVarP(&flagAddress,
+		"address",
+		"",
+		"tcp://0.0.0.0:26657",
+		"address of tendermint socket to post to")
 
 	var eventsCmd = &cobra.Command{
 		Use:   "events",
@@ -433,11 +486,11 @@ func main() {
 
 				err = w.Confirm(transactionId)
 				if err != nil {
-					fmt.Println(errors.Wrapf(err, "cannot wallet.Confirm transaction %v", string(transactionId)).Error())
+					fmt.Println(errors.Wrapf(err, "cannot Confirm transaction %v", string(transactionId)).Error())
 				} else {
 					err = w.Print()
 					if err != nil {
-						fmt.Println(errors.Wrap(err, "cannot wallet.Print").Error())
+						fmt.Println(errors.Wrap(err, "cannot Print").Error())
 					}
 				}
 			})
@@ -474,7 +527,7 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, confirmCmd,
+	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, postCmd, confirmCmd,
 		validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
 	dir, err := homedir.Dir()
@@ -488,13 +541,6 @@ func main() {
 	// Tendermint commands
 
 	tendermintRootCmd := tendermintCmd.RootCmd
-
-	//var hostnames []string
-
-	//tendermintCmd.TestnetFilesCmd.Flags().StringArrayVar(&hostnames, "hostname", []string{},
-	//	"Manually override all hostnames of validators and non-validators (use --hostname multiple times for multiple hosts)")
-
-	//tendermintCmd.TestnetFilesCmd.Flags().Set("hostname", "")
 
 	tendermintRootCmd.AddCommand(
 		tendermintCmd.GenValidatorCmd,
