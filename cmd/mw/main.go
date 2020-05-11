@@ -315,6 +315,27 @@ func main() {
 		},
 	}
 
+	var cancelCmd = &cobra.Command{
+		Use:   "cancel transaction_id",
+		Short: "Tells the wallet the transaction is canceled",
+		Long:  `Tells the wallet the transaction is canceled so the inputs become spendable and outputs are canceled.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			w, err := wallet.NewWallet(flagPersist)
+			if err != nil {
+				return errors.Wrap(err, "cannot create wallet")
+			}
+			defer w.Close()
+
+			err = w.Cancel([]byte(args[0]))
+			if err != nil {
+				return errors.Wrap(err, "cannot Cancel")
+			}
+			fmt.Println("canceled transaction: marked inputs as spendable and outputs canceled")
+			return nil
+		},
+	}
+
 	var validateCmd = &cobra.Command{
 		Use:   "validate transaction_file",
 		Short: "Validates transaction",
@@ -527,8 +548,8 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, postCmd, confirmCmd,
-		validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
+	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, postCmd,
+		confirmCmd, cancelCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
 	dir, err := homedir.Dir()
 	if err != nil {
