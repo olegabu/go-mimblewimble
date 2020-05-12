@@ -290,12 +290,20 @@ func (t *leveldbDatabase) GetOutput(commit string) (output Output, err error) {
 }
 
 func (t *leveldbDatabase) Confirm(transactionID []byte) error {
+	return t.update(transactionID, TransactionConfirmed, OutputSpent, OutputConfirmed)
+}
+
+func (t *leveldbDatabase) Cancel(transactionID []byte) error {
+	return t.update(transactionID, TransactionCanceled, OutputConfirmed, OutputCanceled)
+}
+
+func (t *leveldbDatabase) update(transactionID []byte, transactionStatus TransactionStatus, inputStatus OutputStatus, outputStatus OutputStatus) error {
 	tx, err := t.GetTransaction(transactionID)
 	if err != nil {
 		return errors.Wrap(err, "cannot GetTransaction")
 	}
 
-	tx.Status = TransactionConfirmed
+	tx.Status = transactionStatus
 
 	err = t.PutTransaction(tx)
 	if err != nil {
@@ -314,7 +322,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 			return errors.Wrap(err, "cannot GetOutput")
 		}
 
-		output.Status = OutputSpent
+		output.Status = inputStatus
 
 		err = t.PutOutput(output)
 		if err != nil {
@@ -334,7 +342,7 @@ func (t *leveldbDatabase) Confirm(transactionID []byte) error {
 			return errors.Wrap(err, "cannot GetOutput")
 		}
 
-		output.Status = OutputConfirmed
+		output.Status = outputStatus
 
 		err = t.PutOutput(output)
 		if err != nil {

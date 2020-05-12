@@ -20,6 +20,7 @@ type Database interface {
 	ListOutputs() (outputs []Output, err error)
 	GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error)
 	Confirm(transactionID []byte) error
+	Cancel(transactionID []byte) error
 	NextIndex() (uint32, error)
 	Close()
 }
@@ -39,6 +40,7 @@ const (
 	OutputConfirmed
 	OutputLocked
 	OutputSpent
+	OutputCanceled
 )
 
 func (t OutputStatus) String() string {
@@ -51,6 +53,8 @@ func (t OutputStatus) String() string {
 		return "Locked"
 	case OutputSpent:
 		return "Spent"
+	case OutputCanceled:
+		return "Canceled"
 	default:
 		return fmt.Sprintf("%d", int(t))
 	}
@@ -79,6 +83,7 @@ type TransactionStatus int
 const (
 	TransactionUnconfirmed = iota
 	TransactionConfirmed
+	TransactionCanceled
 )
 
 func (t TransactionStatus) String() string {
@@ -87,6 +92,8 @@ func (t TransactionStatus) String() string {
 		return "Unconfirmed"
 	case TransactionConfirmed:
 		return "Confirmed"
+	case TransactionCanceled:
+		return "Canceled"
 	default:
 		return fmt.Sprintf("%d", int(t))
 	}
