@@ -528,18 +528,20 @@ func main() {
 		"tcp://0.0.0.0:26657",
 		"address of tendermint socket to subscribe for events")
 
+	var doublespend bool
 	var nodeCmd = &cobra.Command{
 		Use:   "node",
 		Short: "Runs blockchain node",
 		Long:  `Runs Tendermint node with built in Mimblewimble ABCI app.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := abci.Start(flagPersist)
+			err := abci.Start(flagPersist, doublespend)
 			if err != nil {
 				return errors.Wrap(err, "cannot abci.Start")
 			}
 			return nil
 		},
 	}
+	nodeCmd.Flags().BoolVar(&doublespend, "doublespend", false, "Double spend inputs for testing")
 
 	rootCmd = &cobra.Command{
 		Use:          "mw",

@@ -15,14 +15,16 @@ import (
 )
 
 type MWApplication struct {
-	db     ledger.Database
-	logger log.Logger
+	db          ledger.Database
+	logger      log.Logger
+	doublespend bool
 }
 
-func NewMWApplication(db ledger.Database) *MWApplication {
+func NewMWApplication(db ledger.Database, doublespend bool) *MWApplication {
 	return &MWApplication{
-		db:     db,
-		logger: log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
+		db:          db,
+		logger:      log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
+		doublespend: doublespend,
 	}
 }
 
@@ -88,7 +90,7 @@ func (app *MWApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.Re
 			return abcitypes.ResponseDeliverTx{Code: http.StatusUnauthorized, GasWanted: 1, Log: errors.Wrap(err, "transaction is invalid").Error()}
 		}
 
-		err = ledger.PersistTransaction(tx, app.db)
+		err = ledger.PersistTransaction(tx, app.db, app.doublespend)
 		if err != nil {
 			return abcitypes.ResponseDeliverTx{Code: http.StatusInternalServerError, Log: errors.Wrap(err, "cannot persist transaction").Error()}
 		}
