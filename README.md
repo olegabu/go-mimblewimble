@@ -2,6 +2,14 @@
 
 This is a toy. Do not use in anything serious (yet).
 
+* [Prerequisites](#prerequisites)
+* [Build and test](#build-and-test)
+* [Demo offline wallet](#demo-offline-wallet)
+* [Demo consensus node and two online wallets](#demo-consensus-node-and-two-online-wallets)
+* [Local test network](#local-test-network)
+    + [Crash Fault Tolerance](#crash-fault-tolerance)
+    + [Byzantine Fault Tolerance](#byzantine-fault-tolerance)
+
 ## Prerequisites
 
 Install Golang ([instructions](https://github.com/golang/go/wiki/Ubuntu)).
@@ -330,7 +338,7 @@ the network validates and propagates transactions.
 mw issue 1 $ && mw broadcast issue-1.json
 ```
 
-#### Fail a node
+#### Fail nodes
 
 Now pause one container to reduce the consensus to 3 nodes and observe the events still
 propagate thru the network to the listening wallets.
@@ -376,7 +384,7 @@ mw send 1 apple
 
 #### Receiver
 
-Connect to the node2 to listen for events.
+Connect to node2 to listen for events.
 ```bash
 export MW_PERSIST=~/.mw_r
 export MW_ADDRESS=tcp://0.0.0.0:26659
@@ -432,7 +440,7 @@ sudo rm -rf mytestnet/ ~/.mw*
 ```
 
 Repeat the above exercise of sending, canceling and sending again. 
-Observe no events propagate: the consensus is split between 2 correct and 2 double spending nodes.
+Observe no events propagate: the consensus is split between 2 correct and 2 malicious nodes.
 
 Recreate the network with 3 double spending nodes out of 4.
 ```bash
