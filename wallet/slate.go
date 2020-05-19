@@ -179,7 +179,7 @@ func (t *Wallet) inputsAndOutputs(
 		assetBlind := assetSecret[:]
 
 		//valueAssetBlind := valueAssetBlindFactor(input.Value, assetBlind)
-		valueAssetBlind, e := secp256k1.CalcBlinds(input.Value, assetBlind, blind)
+		valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(input.Value, assetBlind, blind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot calculate valueAssetBlind")
 		}
@@ -578,7 +578,7 @@ func (t *Wallet) newOutput(
 		return
 	}*/
 
-	sumBlinds32, e := secp256k1.CalcBlinds(value, assetBlind, blind)
+	sumBlinds32, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind, blind)
 	if e != nil {
 		err = errors.Wrap(e, "cannot calculate sumBlinds32")
 	}
