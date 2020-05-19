@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
-	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
-	"math/big"
+
+	"github.com/olegabu/go-mimblewimble/ledger"
 )
 
 func (t *Wallet) NewSlate(
@@ -167,7 +168,7 @@ func (t *Wallet) inputsAndOutputs(
 
 		blind := secret[:]
 
-		inputBlinds = append(inputBlinds, blind)
+		//inputBlinds = append(inputBlinds, blind)
 
 		assetSecret, e := t.secret(input.AssetIndex)
 		if e != nil {
@@ -177,9 +178,12 @@ func (t *Wallet) inputsAndOutputs(
 
 		assetBlind := assetSecret[:]
 
-		valueAssetBlind := valueAssetBlindFactor(input.Value, assetBlind)
-
-		inputBlinds = append(inputBlinds, valueAssetBlind)
+		//valueAssetBlind := valueAssetBlindFactor(input.Value, assetBlind)
+		valueAssetBlind, e := secp256k1.CalcBlinds(input.Value, assetBlind, blind)
+		if e != nil {
+			err = errors.Wrap(e, "cannot calculate valueAssetBlind")
+		}
+		inputBlinds = append(inputBlinds, valueAssetBlind[:])
 
 		inputs = append(inputs, core.Input{Features: input.Features, Commit: input.Commit})
 	}
@@ -532,13 +536,13 @@ func (t *Wallet) NewTransaction(responseSlate *Slate, senderSlate *SavedSlate) (
 	return
 }
 
-func valueAssetBlindFactor(value uint64, assetBlind []byte) (bytes []byte) {
+/*func valueAssetBlindFactor(value uint64, assetBlind []byte) (bytes []byte) {
 	v := new(big.Int).SetUint64(value)
 	ab := new(big.Int).SetBytes(assetBlind)
 	vab := new(big.Int).Mul(v, ab)
 	bytes = vab.Bytes()
 	return
-}
+}*/
 
 func (t *Wallet) newOutput(
 	value uint64,
@@ -566,12 +570,17 @@ func (t *Wallet) newOutput(
 
 	assetBlind := assetSecret[:]
 
-	valueAssetBlind := valueAssetBlindFactor(value, assetBlind)
+	/*valueAssetBlind := valueAssetBlindFactor(value, assetBlind)
 
 	sumBlinds32, err := secp256k1.BlindSum(t.context, [][]byte{blind, valueAssetBlind}, nil)
 	if err != nil {
 		err = errors.Wrap(err, "cannot BlindSum")
 		return
+	}*/
+
+	sumBlinds32, e := secp256k1.CalcBlinds(value, assetBlind, blind)
+	if e != nil {
+		err = errors.Wrap(e, "cannot calculate sumBlinds32")
 	}
 	sumBlinds = sumBlinds32[:]
 

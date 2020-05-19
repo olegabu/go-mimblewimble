@@ -2,7 +2,7 @@ module github.com/olegabu/go-mimblewimble
 
 go 1.14
 
-//replace github.com/olegabu/go-secp256k1-zkp => ../go-secp256k1-zkp
+replace github.com/olegabu/go-secp256k1-zkp v0.2.6 => ../go-secp256k1-zkp
 
 require (
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
@@ -18,7 +18,7 @@ require (
 	github.com/hyperledger/fabric-amcl v0.0.0-20200128223036-d1aa2665426a // indirect
 	github.com/miekg/pkcs11 v1.0.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/olegabu/go-secp256k1-zkp v0.2.3
+	github.com/olegabu/go-secp256k1-zkp v0.2.6
 	github.com/olekukonko/tablewriter v0.0.2
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
 	github.com/pkg/errors v0.9.1
