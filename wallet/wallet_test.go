@@ -167,19 +167,10 @@ func TestTotalIssues(t *testing.T) {
 		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
 		assert.NoError(t, err)
 		excessCommitments = append(excessCommitments, issueExcess)
-
-		//issueCommit, err := secp256k1.CommitmentFromString(issue.Output.Commit)
-		//assert.NoError(t, err)
-		//outputCommitments = append(outputCommitments, issueCommit)
 	}
 
-	// zero blind used to calculate commitments to total value
-	var zero32 [32]byte
-	zero := zero32[:]
-
-	// commitment to total tokens issued is with a zero blind TI = 0*G + totalCashIssues*H
-	totalCashIssuesValue := ledger.CommitValue(totalCashIssues, "cash")
-	totalCashIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalCashIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	// commitment to total tokens issued is with a zero blind TI = 0*G + totalCashIssues*hash("cash")*H
+	totalCashIssuesCommitment, err := ledger.MultiplyValueAssetGenerator(totalCashIssues, "cash")
 	assert.NoError(t, err)
 
 	var totalAppleIssues uint64
@@ -201,9 +192,8 @@ func TestTotalIssues(t *testing.T) {
 		outputCommitments = append(outputCommitments, issueCommit)
 	}
 
-	// commitment to total coins issued is with a zero blind TI = 0*G + totalAppleIssues*H
-	totalAppleIssuesValue := ledger.CommitValue(totalAppleIssues, "apple")
-	totalAppleIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalAppleIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	// commitment to total coins issued is with a zero blind TI = 0*G + totalAppleIssues*hash("apple")*H
+	totalAppleIssuesCommitment, err := ledger.MultiplyValueAssetGenerator(totalAppleIssues, "apple")
 	assert.NoError(t, err)
 
 	tx := testSendReceive(t, w, 5, "cash")
@@ -310,7 +300,7 @@ func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *l
 	return
 }
 
-func TestInfo(t *testing.T) {
+func TestPrint(t *testing.T) {
 	dir := testDbDir()
 	w, err := NewWallet(dir)
 	assert.NoError(t, err)

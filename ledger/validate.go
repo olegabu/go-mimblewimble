@@ -29,12 +29,34 @@ func Parse(bytes []byte) (tx *Transaction, issue *Issue, err error) {
 	}
 }
 
-func CommitValue(value uint64, asset string) uint64 {
+func MultiplyValueAssetGenerator(value uint64, asset string) (com *secp256k1.Commitment, err error) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+	defer secp256k1.ContextDestroy(context)
+
+	var zero32 [32]byte
+	zero := zero32[:]
+
 	assetHash, _ := blake2b.New256(nil)
 	assetHash.Write([]byte(asset))
-	assetHashBytes := assetHash.Sum(nil)
-	assetHashInt, _ := binary.Uvarint(assetHashBytes)
-	return value * assetHashInt
+	cashSeed := assetHash.Sum(nil)[:32]
+
+	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(context, cashSeed, zero)
+	if err != nil {
+		err = errors.Wrap(err, "cannot GeneratorGenerateBlinded")
+		return
+	}
+
+	com, err = secp256k1.Commit(context, zero, value, assetCommitment, &secp256k1.GeneratorG)
+	if err != nil {
+		err = errors.Wrap(err, "cannot Commit")
+		return
+	}
+
+	return
 }
 
 func ValidateTransaction(ledgerTx *Transaction) (err error) {
@@ -197,15 +219,10 @@ func ValidateState(outputs []core.Output, kernels []core.TxKernel, assets map[st
 		return
 	}
 
-	// commitment to total tokens issued is with a zero blind TI = 0*G + totalIssues*H
-	zero32 := [32]byte{}
-	zero := zero32[:]
-
 	for asset, total := range assets {
-		issueValue := CommitValue(total, asset)
-		issueCommitment, e := secp256k1.Commit(context, zero, issueValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+		issueCommitment, e := MultiplyValueAssetGenerator(total, asset)
 		if e != nil {
-			err = errors.Wrap(e, "cannot Commit issueValue")
+			err = errors.Wrap(e, "cannot MultiplyValueAssetGenerator")
 			return
 		}
 		issueCommitments = append(issueCommitments, issueCommitment)

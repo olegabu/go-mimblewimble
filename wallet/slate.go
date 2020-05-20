@@ -178,8 +178,7 @@ func (t *Wallet) inputsAndOutputs(
 
 		assetBlind := assetSecret[:]
 
-		//valueAssetBlind := valueAssetBlindFactor(input.Value, assetBlind)
-		valueAssetBlind, e := secp256k1.CalcBlinds(input.Value, assetBlind, blind)
+		valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(input.Value, assetBlind, blind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot calculate valueAssetBlind")
 		}
@@ -536,14 +535,6 @@ func (t *Wallet) NewTransaction(responseSlate *Slate, senderSlate *SavedSlate) (
 	return
 }
 
-/*func valueAssetBlindFactor(value uint64, assetBlind []byte) (bytes []byte) {
-	v := new(big.Int).SetUint64(value)
-	ab := new(big.Int).SetBytes(assetBlind)
-	vab := new(big.Int).Mul(v, ab)
-	bytes = vab.Bytes()
-	return
-}*/
-
 func (t *Wallet) newOutput(
 	value uint64,
 	features core.OutputFeatures,
@@ -570,33 +561,11 @@ func (t *Wallet) newOutput(
 
 	assetBlind := assetSecret[:]
 
-	/*valueAssetBlind := valueAssetBlindFactor(value, assetBlind)
-
-	sumBlinds32, err := secp256k1.BlindSum(t.context, [][]byte{blind, valueAssetBlind}, nil)
-	if err != nil {
-		err = errors.Wrap(err, "cannot BlindSum")
-		return
-	}*/
-
-	sumBlinds32, e := secp256k1.CalcBlinds(value, assetBlind, blind)
+	sumBlinds32, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind, blind)
 	if e != nil {
 		err = errors.Wrap(e, "cannot calculate sumBlinds32")
 	}
 	sumBlinds = sumBlinds32[:]
-
-	//ret, err := secp256k1.BlindGeneratorBlindSum(t.context, []uint64{value}, [][]byte{assetBlind}, [][]byte{blind}, 0)
-	//if err != nil {
-	//	err = errors.Wrap(err, "cannot BlindGeneratorBlindSum")
-	//	return
-	//}
-	//r := ret[0][:]
-	//
-	//sumBlinds322, err := secp256k1.BlindSum(t.context, [][]byte{r}, [][]byte{blind})
-	//if err != nil {
-	//	err = errors.Wrap(err, "cannot BlindSum")
-	//	return
-	//}
-	//sumBlinds = sumBlinds322[:]
 
 	assetHash, _ := blake2b.New256(nil)
 	assetHash.Write([]byte(asset))
@@ -607,7 +576,6 @@ func (t *Wallet) newOutput(
 		err = errors.Wrap(err, "cannot create commitment to asset")
 		return
 	}
-	//serializedAssetCommitment := secp256k1.GeneratorSerialize(t.context, assetCommitment)
 
 	// create commitment to value with asset specific generator
 	commitment, err := secp256k1.Commit(

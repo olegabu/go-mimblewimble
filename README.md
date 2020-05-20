@@ -17,7 +17,7 @@ echo "export PATH=$PATH:~/go/bin" >> ~/.bashrc && \
 
 Install tools.
 ```bash
-sudo apt-get install autoconf libtool libgmp3-dev
+sudo apt-get install autoconf libtool libgmp3-dev jq
 ```
 
 ## Build and test
