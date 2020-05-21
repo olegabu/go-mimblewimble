@@ -9,7 +9,6 @@ require (
 	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
 	github.com/Shopify/sarama v1.26.1 // indirect
-	github.com/blockcypher/libgrin v2.0.0+incompatible
 	github.com/cmars/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/fsouza/go-dockerclient v1.6.4 // indirect
 	github.com/google/uuid v1.1.1

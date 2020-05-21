@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/blockcypher/libgrin/core"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/olegabu/go-mimblewimble/ledger"
@@ -24,9 +23,9 @@ func TestSlateSendReceive(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	input2, _, err := w.newOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*input1, *input2}
 
@@ -62,7 +61,7 @@ func TestSlateSendReceiveSingle(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(inputValue, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(inputValue, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*input1}
 
@@ -101,9 +100,9 @@ func TestSlateExchange(t *testing.T) {
 	receiveAmount := uint64(100)
 	receiveAsset := "apple"
 
-	sendInput1, _, err := w.newOutput(uint64(1), core.CoinbaseOutput, sendAsset, OutputUnconfirmed)
+	sendInput1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	sendInput2, _, err := w.newOutput(sendInputValue-1, core.CoinbaseOutput, sendAsset, OutputUnconfirmed)
+	sendInput2, _, err := w.newOutput(sendInputValue-1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	sendInputs := []Output{*sendInput1, *sendInput2}
 
@@ -115,9 +114,9 @@ func TestSlateExchange(t *testing.T) {
 	receiveInputValue := uint64(200)
 	receiveChange := receiveInputValue - receiveAmount - fee
 
-	receiveInput1, _, err := w.newOutput(uint64(1), core.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
+	receiveInput1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	receiveInput2, _, err := w.newOutput(receiveInputValue-1, core.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
+	receiveInput2, _, err := w.newOutput(receiveInputValue-1, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	receiveInputs := []Output{*receiveInput1, *receiveInput2}
 
@@ -168,9 +167,9 @@ func TestNewExchange(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	input2, _, err := w.newOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*input1, *input2}
 
@@ -203,9 +202,9 @@ func TestSlateInvoicePay(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(uint64(1), core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	input2, _, err := w.newOutput(inputValue-1, core.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
 	inputs := []Output{*input1, *input2}
 

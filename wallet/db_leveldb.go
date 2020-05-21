@@ -46,7 +46,7 @@ func (t *leveldbDatabase) PutSenderSlate(slate *SavedSlate) error {
 		return errors.Wrap(err, "cannot marshal SenderSlate into json")
 	}
 
-	err = t.db.Put(senderSlateKey(slate.ID.String()), slateBytes, nil)
+	err = t.db.Put(senderSlateKey(slate.Transaction.ID.String()), slateBytes, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot Put slate")
 	}
@@ -64,7 +64,7 @@ func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
 		return errors.Wrap(err, "cannot marshal ReceiverSlate into json")
 	}
 
-	err = t.db.Put(receiverSlateKey(slate.ID.String()), slateBytes, nil)
+	err = t.db.Put(receiverSlateKey(slate.Transaction.ID.String()), slateBytes, nil)
 	if err != nil {
 		return errors.Wrap(err, "cannot Put slate")
 	}

@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/blockcypher/libgrin/core"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 
@@ -133,11 +132,8 @@ func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) 
 	}
 
 	tx := Transaction{
-		Transaction: ledger.Transaction{
-			Transaction: savedSlate.Transaction,
-			ID:          savedSlate.ID,
-		},
-		Status: TransactionUnconfirmed,
+		Transaction: savedSlate.Transaction,
+		Status:      TransactionUnconfirmed,
 	}
 
 	err = t.db.PutTransaction(tx)
@@ -156,7 +152,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 		return nil, errors.Wrap(err, "cannot unmarshal responseSlateBytes")
 	}
 
-	id, _ := responseSlate.ID.MarshalText()
+	id, _ := responseSlate.Transaction.ID.MarshalText()
 
 	senderSlate, err := t.db.GetSenderSlate(id)
 	if err != nil {
@@ -177,7 +173,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, blind, err := t.newOutput(value, core.CoinbaseOutput, asset, OutputConfirmed)
+	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
@@ -197,8 +193,8 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 		Output: walletOutput.Output,
 		Asset:  asset,
 		Value:  value,
-		Kernel: core.TxKernel{
-			Features: core.CoinbaseKernel,
+		Kernel: ledger.TxKernel{
+			Features: ledger.CoinbaseKernel,
 			Excess:   excess.String(),
 		},
 	}
@@ -243,7 +239,7 @@ func (t *Wallet) Info() (string, error) {
 	slateTable.SetCaption(true, "Slates")
 	slateTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, slate := range slates {
-		id, _ := slate.ID.MarshalText()
+		id, _ := slate.Transaction.ID.MarshalText()
 
 		var inputs = ""
 		for _, input := range slate.Transaction.Body.Inputs {
@@ -318,7 +314,7 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot unmarshal slate from json")
 	}
-	id, err := slate.ID.MarshalText()
+	id, err := slate.Transaction.ID.MarshalText()
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot marshal from uuid")
 	}

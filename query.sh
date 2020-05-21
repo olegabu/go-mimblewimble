@@ -1,0 +1,1 @@
+curl -s "localhost:26657/abci_query?path=\"$1\"" | jq -r .result.response.value | base64 -d | jq

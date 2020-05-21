@@ -3,7 +3,6 @@ package abci
 import (
 	"encoding/json"
 	"fmt"
-	_ "github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 	abcitypes "github.com/tendermint/tendermint/abci/types"

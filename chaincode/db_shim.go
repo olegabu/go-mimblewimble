@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/blockcypher/libgrin/core"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
@@ -22,7 +21,7 @@ func (t *shimDatabase) Close() {
 	return
 }
 
-func (t *shimDatabase) InputExists(input core.Input) error {
+func (t *shimDatabase) InputExists(input ledger.Input) error {
 	o, err := t.stub.GetState(t.outputKey(input.Commit))
 	if err != nil || o == nil {
 		return errors.Wrapf(err, "cannot GetState input %v", input)
@@ -31,7 +30,7 @@ func (t *shimDatabase) InputExists(input core.Input) error {
 	return nil
 }
 
-func (t *shimDatabase) SpendInput(input core.Input) error {
+func (t *shimDatabase) SpendInput(input ledger.Input) error {
 	err := t.stub.DelState(t.outputKey(input.Commit))
 	if err != nil {
 		return errors.Wrapf(err, "cannot DelState input %v", input)
@@ -39,7 +38,7 @@ func (t *shimDatabase) SpendInput(input core.Input) error {
 	return nil
 }
 
-func (t *shimDatabase) PutOutput(o core.Output) error {
+func (t *shimDatabase) PutOutput(o ledger.Output) error {
 	bytes, _ := json.Marshal(o)
 	err := t.stub.PutState(t.outputKey(o.Commit), bytes)
 	if err != nil {
@@ -48,7 +47,7 @@ func (t *shimDatabase) PutOutput(o core.Output) error {
 	return nil
 }
 
-func (t *shimDatabase) PutKernel(o core.TxKernel) error {
+func (t *shimDatabase) PutKernel(o ledger.TxKernel) error {
 	bytes, _ := json.Marshal(o)
 	err := t.stub.PutState(t.kernelKey(o), bytes)
 	if err != nil {
@@ -65,8 +64,8 @@ func (t *shimDatabase) Commit() (err error) {
 	return
 }
 
-func (t *shimDatabase) GetOutput(id []byte) (output core.Output, err error) {
-	output = core.Output{}
+func (t *shimDatabase) GetOutput(id []byte) (output ledger.Output, err error) {
+	output = ledger.Output{}
 
 	outputBytes, err := t.stub.GetState(t.outputKey(string(id)))
 	if err != nil {
@@ -78,8 +77,8 @@ func (t *shimDatabase) GetOutput(id []byte) (output core.Output, err error) {
 	return
 }
 
-func (t *shimDatabase) ListOutputs() (list []core.Output, err error) {
-	list = make([]core.Output, 0)
+func (t *shimDatabase) ListOutputs() (list []ledger.Output, err error) {
+	list = make([]ledger.Output, 0)
 
 	iter, err := t.stub.GetStateByPartialCompositeKey("output", nil)
 	if err != nil {
@@ -92,7 +91,7 @@ func (t *shimDatabase) ListOutputs() (list []core.Output, err error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "cannot iter.Next")
 		}
-		o := core.Output{}
+		o := ledger.Output{}
 		err = json.Unmarshal(kv.Value, &o)
 		list = append(list, o)
 	}
@@ -100,8 +99,8 @@ func (t *shimDatabase) ListOutputs() (list []core.Output, err error) {
 	return
 }
 
-func (t *shimDatabase) ListKernels() (list []core.TxKernel, err error) {
-	list = make([]core.TxKernel, 0)
+func (t *shimDatabase) ListKernels() (list []ledger.TxKernel, err error) {
+	list = make([]ledger.TxKernel, 0)
 
 	iter, err := t.stub.GetStateByPartialCompositeKey("kernel", nil)
 	if err != nil {
@@ -114,7 +113,7 @@ func (t *shimDatabase) ListKernels() (list []core.TxKernel, err error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "cannot iter.Next")
 		}
-		o := core.TxKernel{}
+		o := ledger.TxKernel{}
 		err = json.Unmarshal(kv.Value, &o)
 		list = append(list, o)
 	}
@@ -139,7 +138,7 @@ func (t *shimDatabase) outputKey(commit string) string {
 	return key
 }
 
-func (t *shimDatabase) kernelKey(k core.TxKernel) string {
+func (t *shimDatabase) kernelKey(k ledger.TxKernel) string {
 	key, _ := t.stub.CreateCompositeKey("kernel", []string{k.Excess})
 	return key
 }

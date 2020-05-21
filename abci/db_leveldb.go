@@ -3,7 +3,6 @@ package abci
 import (
 	"encoding/binary"
 	"encoding/json"
-	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -42,7 +41,7 @@ func (t *leveldbDatabase) Close() {
 	}
 }
 
-func (t *leveldbDatabase) InputExists(input core.Input) error {
+func (t *leveldbDatabase) InputExists(input ledger.Input) error {
 	_, err := t.db.Get(outputKey(input.Commit), nil)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get input %v", input)
@@ -51,18 +50,18 @@ func (t *leveldbDatabase) InputExists(input core.Input) error {
 	return nil
 }
 
-func (t *leveldbDatabase) SpendInput(input core.Input) error {
+func (t *leveldbDatabase) SpendInput(input ledger.Input) error {
 	t.currentBatch.Delete(outputKey(input.Commit))
 	return nil
 }
 
-func (t *leveldbDatabase) PutOutput(o core.Output) error {
+func (t *leveldbDatabase) PutOutput(o ledger.Output) error {
 	bytes, _ := json.Marshal(o)
 	t.currentBatch.Put(outputKey(o.Commit), bytes)
 	return nil
 }
 
-func (t *leveldbDatabase) PutKernel(o core.TxKernel) error {
+func (t *leveldbDatabase) PutKernel(o ledger.TxKernel) error {
 	bytes, _ := json.Marshal(o)
 	t.currentBatch.Put(kernelKey(o.Excess), bytes)
 	return nil
@@ -80,8 +79,8 @@ func (t *leveldbDatabase) Commit() (err error) {
 	return
 }
 
-func (t *leveldbDatabase) GetOutput(id []byte) (output core.Output, err error) {
-	output = core.Output{}
+func (t *leveldbDatabase) GetOutput(id []byte) (output ledger.Output, err error) {
+	output = ledger.Output{}
 
 	outputBytes, err := t.db.Get(outputKey(string(id)), nil)
 	if err != nil {
@@ -94,12 +93,12 @@ func (t *leveldbDatabase) GetOutput(id []byte) (output core.Output, err error) {
 	return
 }
 
-func (t *leveldbDatabase) ListOutputs() (list []core.Output, err error) {
-	list = make([]core.Output, 0)
+func (t *leveldbDatabase) ListOutputs() (list []ledger.Output, err error) {
+	list = make([]ledger.Output, 0)
 
 	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
-		o := core.Output{}
+		o := ledger.Output{}
 		err = json.Unmarshal(iter.Value(), &o)
 		list = append(list, o)
 	}
@@ -109,12 +108,12 @@ func (t *leveldbDatabase) ListOutputs() (list []core.Output, err error) {
 	return
 }
 
-func (t *leveldbDatabase) ListKernels() (list []core.TxKernel, err error) {
-	list = make([]core.TxKernel, 0)
+func (t *leveldbDatabase) ListKernels() (list []ledger.TxKernel, err error) {
+	list = make([]ledger.TxKernel, 0)
 
 	iter := t.db.NewIterator(kernelRange(), nil)
 	for iter.Next() {
-		o := core.TxKernel{}
+		o := ledger.TxKernel{}
 		err = json.Unmarshal(iter.Value(), &o)
 		list = append(list, o)
 	}

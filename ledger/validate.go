@@ -5,9 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strings"
-
-	"github.com/blockcypher/libgrin/core"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/blake2b"
@@ -59,32 +56,26 @@ func MultiplyValueAssetGenerator(value uint64, asset string) (com *secp256k1.Com
 	return
 }
 
-func ValidateTransaction(ledgerTx *Transaction) (err error) {
+func ValidateTransaction(tx *Transaction) (err error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
 		return errors.Wrap(err, "cannot ContextCreate")
 	}
 	defer secp256k1.ContextDestroy(context)
 
-	tx := &ledgerTx.Transaction
-
-	errSig := validateSignature(context, tx)
-	//errPrf := validateBulletproofs(context, tx.Body.Outputs)
-	errSum := validateCommitmentsSum(context, tx)
-
-	var errs []string
-	if errSig != nil {
-		errs = append(errs, "validateSignature")
+	var errs []error
+	if err := validateCommitmentsSum(context, tx); err != nil {
+		errs = append(errs, errors.Wrap(err, "validateCommitmentsSum"))
 	}
-	if errSum != nil {
-		errs = append(errs, "validateCommitmentsSum")
+	if err := validateSignature(context, tx); err != nil {
+		errs = append(errs, errors.Wrap(err, "validateSignature"))
 	}
-	//if errPrf != nil {
-	//	errs = append(errs, "validateBulletproofs")
-	//}
+	if err := validateBulletproofs(context, tx.Body.Outputs); err != nil {
+		errs = append(errs, errors.Wrap(err, "validateBulletproofs"))
+	}
 
 	if len(errs) > 0 {
-		return errors.Errorf("Transaction validation failed [%s]", strings.Join(errs, ", "))
+		return errors.Errorf("Transaction validation failed %v", errs)
 	}
 
 	return nil
@@ -98,7 +89,7 @@ func ValidateIssue(issue *Issue) error {
 
 	defer secp256k1.ContextDestroy(context)
 
-	err = validateBulletproofs(context, []core.Output{issue.Output})
+	err = validateBulletproofs(context, []Output{issue.Output})
 	if err != nil {
 		return errors.Wrap(err, "cannot validateBulletproofs")
 	}
@@ -156,7 +147,7 @@ func ValidateIssueBytes(issueBytes []byte) (ledgerIssue *Issue, err error) {
 	return
 }
 
-func ValidateState(outputs []core.Output, kernels []core.TxKernel, assets map[string]uint64) (msg string, err error) {
+func ValidateState(outputs []Output, kernels []TxKernel, assets map[string]uint64) (msg string, err error) {
 	var totalIssues uint64
 	for _, t := range assets {
 		totalIssues += t
@@ -246,7 +237,7 @@ func ValidateState(outputs []core.Output, kernels []core.TxKernel, assets map[st
 	return
 }
 
-func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
+func validateSignature(context *secp256k1.Context, tx *Transaction) error {
 	if len(tx.Body.Kernels) != 1 {
 		return errors.New("expected one kernel in transaction")
 	}
@@ -296,7 +287,7 @@ func validateSignature(context *secp256k1.Context, tx *core.Transaction) error {
 // msg = hash(features)                       for coinbase kernels
 //       hash(features || fee)                for plain kernels
 //       hash(features || fee || lock_height) for height locked kernels
-func KernelSignatureMessage(kernel core.TxKernel) []byte {
+func KernelSignatureMessage(kernel TxKernel) []byte {
 
 	featuresBytes := []byte{byte(kernel.Features)}
 	feeBytes := make([]byte, 8)
@@ -306,9 +297,9 @@ func KernelSignatureMessage(kernel core.TxKernel) []byte {
 
 	hash, _ := blake2b.New256(nil)
 	hash.Write(featuresBytes)
-	if kernel.Features == core.PlainKernel {
+	if kernel.Features == PlainKernel {
 		hash.Write(feeBytes)
-	} else if kernel.Features == core.HeightLockedKernel {
+	} else if kernel.Features == HeightLockedKernel {
 		hash.Write(feeBytes)
 		hash.Write(lockHeightBytes)
 	}
@@ -317,7 +308,7 @@ func KernelSignatureMessage(kernel core.TxKernel) []byte {
 
 func CalculateExcess(
 	context *secp256k1.Context,
-	tx *core.Transaction,
+	tx *Transaction,
 	fee uint64,
 ) (
 	kernelExcess *secp256k1.Commitment,
@@ -380,7 +371,7 @@ func CalculateExcess(
 
 func validateCommitmentsSum(
 	context *secp256k1.Context,
-	tx *core.Transaction,
+	tx *Transaction,
 ) error {
 	if len(tx.Body.Kernels) != 1 {
 		return errors.New("expected one kernel in the slate")
@@ -402,7 +393,7 @@ func validateCommitmentsSum(
 
 func validateBulletproofs(
 	context *secp256k1.Context,
-	outputs []core.Output,
+	outputs []Output,
 ) error {
 	scratch, err := secp256k1.ScratchSpaceCreate(context, 1024*4096)
 	if err != nil {
@@ -426,31 +417,31 @@ func validateBulletproofs(
 
 func validateBulletproof(
 	context *secp256k1.Context,
-	output core.Output,
+	output Output,
 	scratch *secp256k1.ScratchSpace,
 	generators *secp256k1.BulletproofGenerators,
 ) error {
-	proof, err := hex.DecodeString(output.Proof)
-	if err != nil {
-		return errors.Wrap(err, "cannot decode Proof from hex")
-	}
-
-	commit, err := secp256k1.CommitmentFromString(output.Commit)
-	if err != nil {
-		return errors.Wrap(err, "cannot decode Commit from hex")
-	}
-
-	err = secp256k1.BulletproofRangeproofVerifySingle(
-		context,
-		scratch,
-		generators,
-		proof,
-		commit,
-		nil,
-	)
-	if err != nil {
-		return errors.New("cannot BulletproofRangeproofVerify")
-	}
+	//proof, err := hex.DecodeString(output.Proof)
+	//if err != nil {
+	//	return errors.Wrap(err, "cannot decode Proof from hex")
+	//}
+	//
+	//commit, err := secp256k1.CommitmentFromString(output.Commit)
+	//if err != nil {
+	//	return errors.Wrap(err, "cannot decode Commit from hex")
+	//}
+	//
+	//err = secp256k1.BulletproofRangeproofVerifySingle(
+	//	context,
+	//	scratch,
+	//	generators,
+	//	proof,
+	//	commit,
+	//	nil,
+	//)
+	//if err != nil {
+	//	return errors.New("cannot BulletproofRangeproofVerify")
+	//}
 
 	return nil
 }
