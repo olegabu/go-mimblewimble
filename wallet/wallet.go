@@ -308,6 +308,10 @@ func (t *Wallet) Confirm(transactionID []byte) error {
 	return t.db.Confirm(transactionID)
 }
 
+func (t *Wallet) Cancel(transactionID []byte) error {
+	return t.db.Cancel(transactionID)
+}
+
 func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	slate := Slate{}
 	err = json.Unmarshal(slateBytes, &slate)

@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func PersistTransaction(tx *Transaction, db Database) error {
+func PersistTransaction(tx *Transaction, db Database, doublespend bool) error {
 	// check if inputs exist and mark them spent
 	for i, input := range tx.Body.Inputs {
 		err := db.InputExists(input)
@@ -14,9 +14,11 @@ func PersistTransaction(tx *Transaction, db Database) error {
 			return errors.Wrapf(err, "input does not exist: %v at position %v", input.Commit, i)
 		}
 
-		err = db.SpendInput(input)
-		if err != nil {
-			return errors.Wrapf(err, "cannot mark input as spent: %v at position %v", input.Commit, i)
+		if !doublespend {
+			err = db.SpendInput(input)
+			if err != nil {
+				return errors.Wrapf(err, "cannot mark input as spent: %v at position %v", input.Commit, i)
+			}
 		}
 	}
 
