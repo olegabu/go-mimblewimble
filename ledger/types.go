@@ -218,15 +218,15 @@ type Output struct {
 	Proof string `json:"proof"`
 	// Pedersen commitment to asset
 	AssetCommit string `json:"asset_commit"`
-	// A proof that the commitment is in the right range
-	SurjectionProof string `json:"surjection_proof"`
+	// Surjection proof
+	AssetProof string `json:"asset_proof"`
 }
 
 type Issue struct {
-	Output     Output   `json:"output"`
-	Value      uint64   `json:"value"`
-	Asset      string   `json:"asset,omitempty"`
-	AssetSig   []byte   `json:"asset_sig,omitempty"`
-	IssuerCert []byte   `json:"issue_cert,omitempty"`
-	Kernel     TxKernel `json:"kernel,omitempty"`
+	Output Output `json:"output"`
+	Value  uint64 `json:"value"`
+	Asset  string `json:"asset,omitempty"`
+	//AssetSig   []byte   `json:"asset_sig,omitempty"`
+	//IssuerCert []byte   `json:"issue_cert,omitempty"`
+	Kernel TxKernel `json:"kernel,omitempty"`
 }

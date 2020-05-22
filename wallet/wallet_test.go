@@ -83,6 +83,51 @@ func TestWalletIssue(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestWalletIssueChangeAssetBlind(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	issueBytes, err := w.Issue(1, "cash")
+	assert.NoError(t, err)
+
+	err = w.Print()
+	assert.NoError(t, err)
+
+	issue := ledger.Issue{}
+	err = json.Unmarshal(issueBytes, &issue)
+	assert.NoError(t, err)
+
+	seed := ledger.AssetSeed("cash")
+
+	// change asset blind and expect to fail bulletproof validation
+	assetBlindInvalid, _ := w.nonce()
+
+	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(w.context, seed, assetBlindInvalid[:])
+	assert.NoError(t, err)
+
+	issue.Output.AssetCommit = assetCommitment.String()
+
+	issueBytes, err = json.Marshal(issue)
+	assert.NoError(t, err)
+
+	_, err = ledger.ValidateIssueBytes(issueBytes)
+	assert.Error(t, err)
+
+	// change asset blind back to the one saved in the wallet and expect to pass validation
+	assetBlindValid, _ := w.secret(1)
+
+	assetCommitment, err = secp256k1.GeneratorGenerateBlinded(w.context, seed, assetBlindValid[:])
+	assert.NoError(t, err)
+
+	issue.Output.AssetCommit = assetCommitment.String()
+
+	issueBytes, err = json.Marshal(issue)
+	assert.NoError(t, err)
+
+	_, err = ledger.ValidateIssueBytes(issueBytes)
+	assert.NoError(t, err)
+}
+
 func TestWalletInvoicePaySingle(t *testing.T) {
 	w := newTestWallet(t)
 	defer w.Close()

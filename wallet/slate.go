@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/blake2b"
-
-	"github.com/olegabu/go-mimblewimble/ledger"
 )
 
 func (t *Wallet) NewSlate(
@@ -510,6 +508,14 @@ func (t *Wallet) NewTransaction(responseSlate *Slate, senderSlate *SavedSlate) (
 	tx.Body.Kernels[0].Excess = kernelExcess.String()
 	tx.Body.Kernels[0].ExcessSig = hex.EncodeToString(excessSig[:])
 
+	//for _, output := range tx.Body.Outputs {
+	//	e := t.addSurjectionProof(&output, tx.Body.Inputs)
+	//	if e != nil {
+	//		err = errors.Wrap(e, "cannot addSurjectionProof")
+	//		return
+	//	}
+	//}
+
 	ledgerTxBytes, err = json.Marshal(tx)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal tx to json")
@@ -556,9 +562,7 @@ func (t *Wallet) newOutput(
 	}
 	sumBlinds = sumBlinds32[:]
 
-	assetHash, _ := blake2b.New256(nil)
-	assetHash.Write([]byte(asset))
-	seed := assetHash.Sum(nil)[:32]
+	seed := ledger.AssetSeed(asset)
 
 	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(t.context, seed, assetBlind)
 	if err != nil {
@@ -578,8 +582,8 @@ func (t *Wallet) newOutput(
 		return
 	}
 
-	// create bullet proof to value
-	proof, err := secp256k1.BulletproofRangeproofProveSingle(
+	// create range proof to value with blinded H: assetCommitment
+	proof, err := secp256k1.BulletproofRangeproofProveSingleCustomGen(
 		t.context,
 		nil,
 		nil,
@@ -588,7 +592,8 @@ func (t *Wallet) newOutput(
 		blind,
 		nil,
 		nil,
-		nil)
+		nil,
+		assetCommitment)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create bulletproof")
 		return
@@ -596,9 +601,10 @@ func (t *Wallet) newOutput(
 
 	walletOutput = &Output{
 		Output: ledger.Output{
-			Features: features,
-			Commit:   commitment.String(),
-			Proof:    hex.EncodeToString(proof),
+			Features:    features,
+			Commit:      commitment.String(),
+			Proof:       hex.EncodeToString(proof),
+			AssetCommit: assetCommitment.String(),
 		},
 		Value:      value,
 		Asset:      asset,
@@ -632,3 +638,80 @@ func (t *Wallet) sumPubKeys(
 
 	return
 }
+
+//  Surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
+//	The sender must create both change outputs and outputs which she wishes to acquire as a result of this transaction,
+//	because she must generate blinding factors for them to be available for later spending.
+//func (t *Wallet) addSurjectionProof(output *Output, inputs []ledger.Input) (err error) {
+//	var fixedInputAssetTags []secp256k1.FixedAssetTag
+//
+//	var inputIndex int
+//	var inputBlindingKeys [][]byte
+//	var fixedOutputAssetTag *secp256k1.FixedAssetTag
+//	var ephemeralInputTags []secp256k1.Generator
+//	var ephemeralOutputTag *secp256k1.Generator
+//
+//	outputAssetSeed := ledger.AssetSeed(output.Asset)
+//
+//	fixedOutputAssetTag, err = secp256k1.FixedAssetTagParse(outputAssetSeed)
+//
+//	for _, input := range inputs {
+//		var fixedAssetTag *secp256k1.FixedAssetTag
+//		var tokenCommitment *secp256k1.Generator
+//
+//		inputAssetSeed := ledger.AssetSeed(input.Asset)
+//
+//		fixedAssetTag, err = secp256k1.FixedAssetTagParse(inputAssetSeed)
+//
+//		if err != nil {
+//			return
+//		}
+//		fixedInputAssetTags = append(fixedInputAssetTags, *fixedAssetTag)
+//
+//		inputAssetSecret, e := t.secret(input.AssetIndex)
+//		if e != nil {
+//			err = errors.Wrapf(e, "cannot get inputAssetSecret")
+//			return
+//		}
+//		inputAssetBlind := inputAssetSecret[:]
+//
+//		tokenCommitment, err = secp256k1.GeneratorGenerateBlinded(t.context, inputAssetSeed, inputAssetBlind)
+//		if err != nil {
+//			return
+//		}
+//		ephemeralInputTags = append(ephemeralInputTags, *tokenCommitment)
+//
+//		inputBlindingKeys = append(inputBlindingKeys, inputAssetBlind)
+//	}
+//
+//	outputAssetSecret, e := t.secret(output.AssetIndex)
+//	if e != nil {
+//		err = errors.Wrapf(e, "cannot get outputAssetSecret")
+//		return
+//	}
+//	outputAssetBlind := outputAssetSecret[:]
+//
+//	ephemeralOutputTag, err = secp256k1.GeneratorGenerateBlinded(t.context, outputAssetSeed, outputAssetBlind[:])
+//
+//	if err != nil {
+//		return
+//	}
+//
+//	seed32 := secp256k1.Random256()
+//	var proof *secp256k1.Surjectionproof
+//	_, proof, inputIndex, err = secp256k1.SurjectionproofAllocateInitialized(t.context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
+//
+//	if len(inputBlindingKeys) < inputIndex {
+//		return errors.Wrap(nil, "input not found")
+//	}
+//	err = secp256k1.SurjectionproofGenerate(t.context, proof, ephemeralInputTags[:], *ephemeralOutputTag, inputIndex, inputBlindingKeys[inputIndex][:], outputAssetBlind[:])
+//	if err != nil {
+//		return
+//	}
+//
+//	var proofBytes []byte
+//	proofBytes, err = secp256k1.SurjectionproofSerialize(t.context, proof)
+//	(*output).AssetProof = hex.EncodeToString(proofBytes)
+//
+//	return nil
+//}

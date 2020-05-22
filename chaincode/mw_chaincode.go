@@ -53,7 +53,7 @@ func (t *MWChaincode) transfer(stub shim.ChaincodeStubInterface, args []string) 
 		return pb.Response{Status: http.StatusUnauthorized, Message: "transaction is invalid: " + err.Error()}
 	}
 
-	err = ledger.PersistTransaction(tx, t.db)
+	err = ledger.PersistTransaction(tx, t.db, false)
 	if err != nil {
 		return pb.Response{Status: http.StatusInternalServerError, Message: "cannot persist transaction: " + err.Error()}
 	}

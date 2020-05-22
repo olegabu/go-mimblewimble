@@ -26,6 +26,12 @@ func Parse(bytes []byte) (tx *Transaction, issue *Issue, err error) {
 	}
 }
 
+func AssetSeed(asset string) []byte {
+	assetHash, _ := blake2b.New256(nil)
+	assetHash.Write([]byte(asset))
+	return assetHash.Sum(nil)[:32]
+}
+
 func MultiplyValueAssetGenerator(value uint64, asset string) (com *secp256k1.Commitment, err error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
@@ -37,11 +43,9 @@ func MultiplyValueAssetGenerator(value uint64, asset string) (com *secp256k1.Com
 	var zero32 [32]byte
 	zero := zero32[:]
 
-	assetHash, _ := blake2b.New256(nil)
-	assetHash.Write([]byte(asset))
-	cashSeed := assetHash.Sum(nil)[:32]
+	seed := AssetSeed(asset)
 
-	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(context, cashSeed, zero)
+	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(context, seed, zero)
 	if err != nil {
 		err = errors.Wrap(err, "cannot GeneratorGenerateBlinded")
 		return
@@ -421,27 +425,64 @@ func validateBulletproof(
 	scratch *secp256k1.ScratchSpace,
 	generators *secp256k1.BulletproofGenerators,
 ) error {
-	//proof, err := hex.DecodeString(output.Proof)
-	//if err != nil {
-	//	return errors.Wrap(err, "cannot decode Proof from hex")
-	//}
-	//
-	//commit, err := secp256k1.CommitmentFromString(output.Commit)
-	//if err != nil {
-	//	return errors.Wrap(err, "cannot decode Commit from hex")
-	//}
-	//
-	//err = secp256k1.BulletproofRangeproofVerifySingle(
-	//	context,
-	//	scratch,
-	//	generators,
-	//	proof,
-	//	commit,
-	//	nil,
-	//)
-	//if err != nil {
-	//	return errors.New("cannot BulletproofRangeproofVerify")
-	//}
+	proof, err := hex.DecodeString(output.Proof)
+	if err != nil {
+		return errors.Wrap(err, "cannot decode Proof from hex")
+	}
+
+	commit, err := secp256k1.CommitmentFromString(output.Commit)
+	if err != nil {
+		return errors.Wrap(err, "cannot decode Commit from hex")
+	}
+
+	assetCommit, err := secp256k1.GeneratorFromString(output.AssetCommit)
+	if err != nil {
+		return errors.Wrap(err, "cannot decode AssetCommit from hex")
+	}
+
+	err = secp256k1.BulletproofRangeproofVerifySingleCustomGen(
+		context,
+		scratch,
+		generators,
+		proof,
+		commit,
+		nil,
+		assetCommit,
+	)
+	if err != nil {
+		return errors.New("cannot BulletproofRangeproofVerifySingleCustomGen")
+	}
 
 	return nil
+}
+
+func validateSurjectionProof(ctx *secp256k1.Context, output Output, inputs []Input) error {
+	outputAssetCommitmentBytes, err := hex.DecodeString(output.AssetCommit)
+	if err != nil {
+		return errors.Wrapf(err, "cannot DecodeString outputAssetCommitmentBytes")
+	}
+
+	ephemeralOutputTag, err := secp256k1.GeneratorParse(ctx, outputAssetCommitmentBytes)
+	if err != nil {
+		return errors.Wrapf(err, "cannot GeneratorParse ephemeralOutputTag")
+	}
+
+	var ephemeralInputTags []secp256k1.Generator
+	for _, input := range inputs {
+		var ephemeralInputTag *secp256k1.Generator
+		var inputAssetCommitmentBytes []byte
+		inputAssetCommitmentBytes, err = hex.DecodeString(input.AssetCommit)
+		ephemeralInputTag, err = secp256k1.GeneratorParse(ctx, inputAssetCommitmentBytes)
+		if err != nil {
+			return errors.Wrapf(err, "cannot GeneratorParse ephemeralInputTag")
+		}
+		ephemeralInputTags = append(ephemeralInputTags, *ephemeralInputTag)
+	}
+
+	proof, err := secp256k1.SurjectionproofParse(ctx, []byte(output.AssetProof))
+	if err != nil {
+		return errors.Wrapf(err, "cannot SurjectionproofParse")
+	}
+
+	return secp256k1.SurjectionproofVerify(ctx, &proof, ephemeralInputTags, *ephemeralOutputTag)
 }

@@ -135,10 +135,9 @@ mw info
 
 ### Validate transactions
 
-You can validate any transaction serialized in [Grin](https://github.com/mimblewimble/grin) format.
+You can validate any transaction serialized to a file.
 ```bash
 mw validate tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
-mw validate 1_grin_repost.json
 ```
 
 ## Demo consensus node and two online wallets
