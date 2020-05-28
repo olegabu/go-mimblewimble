@@ -77,6 +77,9 @@ func ValidateTransaction(tx *Transaction) (err error) {
 	if err := validateBulletproofs(context, tx.Body.Outputs); err != nil {
 		errs = append(errs, errors.Wrap(err, "validateBulletproofs"))
 	}
+	if err := validateSurjectionProofs(context, tx.Body.Outputs, tx.Body.Inputs); err != nil {
+		errs = append(errs, errors.Wrap(err, "validateSurjectionProofs"))
+	}
 
 	if len(errs) > 0 {
 		return errors.Errorf("Transaction validation failed %v", errs)
@@ -312,32 +315,14 @@ func KernelSignatureMessage(kernel TxKernel) []byte {
 
 func CalculateExcess(
 	context *secp256k1.Context,
-	tx *Transaction,
+	inputCommitments []*secp256k1.Commitment,
+	outputCommitments []*secp256k1.Commitment,
+	offsetBytes []byte,
 	fee uint64,
 ) (
 	kernelExcess *secp256k1.Commitment,
 	err error,
 ) {
-	var inputCommitments, outputCommitments []*secp256k1.Commitment
-
-	// collect input commitments
-	for _, input := range tx.Body.Inputs {
-		com, err := secp256k1.CommitmentFromString(input.Commit) // secp256k1.CommitmentParse(context, secp256k1.Unhex(input.Commit))
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing input commitment")
-		}
-		inputCommitments = append(inputCommitments, com)
-	}
-
-	// collect output commitments
-	for _, output := range tx.Body.Outputs {
-		com, err := secp256k1.CommitmentFromString(output.Commit)
-		if err != nil {
-			return nil, errors.Wrap(err, "error parsing output commitment")
-		}
-		outputCommitments = append(outputCommitments, com)
-	}
-
 	// add fee output into appropriate collection
 	//TODO explore logic of negative fee
 	if fee != 0 {
@@ -357,7 +342,6 @@ func CalculateExcess(
 	}
 
 	// add kernel offset to inputs
-	offsetBytes, _ := hex.DecodeString(tx.Offset)
 	kernelOffset, err := secp256k1.Commit(context, offsetBytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
 		return nil, errors.Wrap(err, "error calculating offset commitment")
@@ -373,16 +357,38 @@ func CalculateExcess(
 	return
 }
 
-func validateCommitmentsSum(
-	context *secp256k1.Context,
-	tx *Transaction,
-) error {
+func validateCommitmentsSum(context *secp256k1.Context, tx *Transaction) error {
 	if len(tx.Body.Kernels) != 1 {
 		return errors.New("expected one kernel in the slate")
 	}
 	kernel := tx.Body.Kernels[0]
 
-	kernelExcess, err := CalculateExcess(context, tx, uint64(kernel.Fee))
+	var inputCommitments, outputCommitments []*secp256k1.Commitment
+
+	// collect input commitments
+	for _, input := range tx.Body.Inputs {
+		com, err := secp256k1.CommitmentFromString(input.Commit) // secp256k1.CommitmentParse(context, secp256k1.Unhex(input.Commit))
+		if err != nil {
+			return errors.Wrap(err, "error parsing input commitment")
+		}
+		inputCommitments = append(inputCommitments, com)
+	}
+
+	// collect output commitments
+	for _, output := range tx.Body.Outputs {
+		com, err := secp256k1.CommitmentFromString(output.Commit)
+		if err != nil {
+			return errors.Wrap(err, "error parsing output commitment")
+		}
+		outputCommitments = append(outputCommitments, com)
+	}
+
+	offsetBytes, err := hex.DecodeString(tx.Offset)
+	if err != nil {
+		return errors.Wrap(err, "cannot get offsetBytes")
+	}
+
+	kernelExcess, err := CalculateExcess(context, inputCommitments, outputCommitments, offsetBytes, uint64(kernel.Fee))
 	if err != nil {
 		return errors.Wrap(err, "cannot calculate kernel excess")
 	}
@@ -450,7 +456,22 @@ func validateBulletproof(
 		assetCommit,
 	)
 	if err != nil {
-		return errors.New("cannot BulletproofRangeproofVerifySingleCustomGen")
+		return errors.Wrap(err, "cannot BulletproofRangeproofVerifySingleCustomGen")
+	}
+
+	return nil
+}
+
+func validateSurjectionProofs(
+	context *secp256k1.Context,
+	outputs []Output,
+	inputs []Input,
+) error {
+	for i, output := range outputs {
+		err := validateSurjectionProof(context, output, inputs)
+		if err != nil {
+			return errors.Wrapf(err, "cannot validateSurjectionProof output #%d: %v", i, output)
+		}
 	}
 
 	return nil
@@ -479,7 +500,12 @@ func validateSurjectionProof(ctx *secp256k1.Context, output Output, inputs []Inp
 		ephemeralInputTags = append(ephemeralInputTags, *ephemeralInputTag)
 	}
 
-	proof, err := secp256k1.SurjectionproofParse(ctx, []byte(output.AssetProof))
+	assetProofBytes, err := hex.DecodeString(output.AssetProof)
+	if err != nil {
+		return errors.Wrapf(err, "cannot get assetProofBytes")
+	}
+
+	proof, err := secp256k1.SurjectionproofParse(ctx, assetProofBytes)
 	if err != nil {
 		return errors.Wrapf(err, "cannot SurjectionproofParse")
 	}

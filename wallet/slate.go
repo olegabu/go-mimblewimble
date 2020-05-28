@@ -16,16 +16,16 @@ func (t *Wallet) NewSlate(
 	fee uint64,
 	asset string,
 	change uint64,
-	walletInputs []Output,
+	walletInputs []SavedOutput,
 	receiveAmount uint64,
 	receiveAsset string,
 ) (
 	slateBytes []byte,
-	outputs []Output,
-	savedSlate *SavedSlate,
+	walletOutputs []SavedOutput,
+	walletSlate *SavedSlate,
 	err error,
 ) {
-	inputs, outputs, blindExcess, err := t.inputsAndOutputs(
+	slateInputs, walletOutputs, blindExcess, err := t.inputsAndOutputs(
 		amount,
 		fee,
 		asset,
@@ -34,7 +34,7 @@ func (t *Wallet) NewSlate(
 		receiveAmount,
 		receiveAsset)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create slate inputs and outputs")
+		err = errors.Wrap(err, "cannot create slateInputs and walletOutputs")
 		return
 	}
 
@@ -71,9 +71,9 @@ func (t *Wallet) NewSlate(
 		return
 	}
 
-	var coreOutputs []ledger.Output
-	for _, o := range outputs {
-		coreOutputs = append(coreOutputs, o.Output)
+	var slateOutputs []SlateOutput
+	for _, o := range walletOutputs {
+		slateOutputs = append(slateOutputs, o.SlateOutput)
 	}
 
 	slate := &Slate{
@@ -83,12 +83,12 @@ func (t *Wallet) NewSlate(
 			BlockHeaderVersion: 2,
 		},
 		NumParticipants: 2,
-		Transaction: ledger.Transaction{
+		Transaction: SlateTransaction{
 			ID:     uuid.New(),
 			Offset: hex.EncodeToString(kernelOffset[:]),
-			Body: ledger.TransactionBody{
-				Inputs:  inputs,
-				Outputs: coreOutputs,
+			Body: SlateTransactionBody{
+				Inputs:  slateInputs,
+				Outputs: slateOutputs,
 				Kernels: []ledger.TxKernel{{
 					Features:   ledger.PlainKernel,
 					Fee:        ledger.Uint64(fee),
@@ -115,7 +115,7 @@ func (t *Wallet) NewSlate(
 		ReceiveAsset:  receiveAsset,
 	}
 
-	savedSlate = &SavedSlate{
+	walletSlate = &SavedSlate{
 		Slate: *slate,
 		Nonce: nonce,
 		Blind: sumBlinds,
@@ -135,51 +135,61 @@ func (t *Wallet) inputsAndOutputs(
 	fee uint64,
 	asset string,
 	change uint64,
-	walletInputs []Output,
+	walletInputs []SavedOutput,
 	receiveAmount uint64,
 	receiveAsset string,
 ) (
-	inputs []ledger.Input,
-	outputs []Output,
+	slateInputs []SlateInput,
+	walletOutputs []SavedOutput,
 	blindExcess [32]byte,
 	err error,
 ) {
-	// loop thru wallet inputs to turn them into slate inputs, sum their values,
-	// collect input blinding factors (negative)
+	// loop thru wallet slateInputs to turn them into slateInputs, sum their values,
+	// collect walletInput blinding factors (negative)
 	var inputsTotal uint64
 	var inputBlinds [][]byte
-	for _, input := range walletInputs {
-		inputsTotal += input.Value
+	for _, walletInput := range walletInputs {
+		inputsTotal += walletInput.Value
 
-		// re-create child secret key from its saved index and use it as this input's blind
-		secret, e := t.secret(input.Index)
+		// re-create child secret key from its saved index and use it as this walletInput's blind
+		secret, e := t.secret(walletInput.Index)
 		if e != nil {
-			err = errors.Wrapf(e, "cannot get secret for input with key index %d", input.Index)
+			err = errors.Wrapf(e, "cannot get secret for walletInput with key index %d", walletInput.Index)
 			return
 		}
 
 		blind := secret[:]
 
-		//inputBlinds = append(inputBlinds, blind)
-
-		assetSecret, e := t.secret(input.AssetIndex)
+		assetSecret, e := t.secret(walletInput.AssetIndex)
 		if e != nil {
-			err = errors.Wrapf(e, "cannot get assetSecret for input with key index %d", input.AssetIndex)
+			err = errors.Wrapf(e, "cannot get assetSecret for walletInput with key index %d", walletInput.AssetIndex)
 			return
 		}
 
 		assetBlind := assetSecret[:]
 
-		valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(input.Value, assetBlind, blind)
+		// r + v*r_a
+		valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(walletInput.Value, assetBlind, blind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot calculate valueAssetBlind")
+			return
 		}
+
 		inputBlinds = append(inputBlinds, valueAssetBlind[:])
 
-		inputs = append(inputs, ledger.Input{Features: input.Features, Commit: input.Commit})
+		slateInput := SlateInput{
+			Input: ledger.Input{
+				Features:    walletInput.Features,
+				Commit:      walletInput.Commit,
+				AssetCommit: walletInput.AssetCommit,
+			},
+			AssetBlind: hex.EncodeToString(assetBlind),
+		}
+
+		slateInputs = append(slateInputs, slateInput)
 	}
 
-	// make sure that amounts provided in input parameters do sum up (inputsValue - amount - fee - change == 0)
+	// make sure that amounts provided in walletInput parameters do sum up (inputsValue - amount - fee - change == 0)
 	if amount+change+fee != inputsTotal {
 		err = errors.New("amounts don't sum up (amount + change + fee != inputsTotal)")
 		return
@@ -195,20 +205,20 @@ func (t *Wallet) inputsAndOutputs(
 			return
 		}
 		outputBlinds = append(outputBlinds, changeBlind)
-		outputs = append(outputs, *changeOutput)
+		walletOutputs = append(walletOutputs, *changeOutput)
 	}
 
 	if receiveAmount > 0 {
 		receiveOutput, receiveBlind, e := t.newOutput(receiveAmount, ledger.PlainOutput, receiveAsset, OutputUnconfirmed)
 		if e != nil {
-			err = errors.Wrap(e, "cannot get newOutput for exchange")
+			err = errors.Wrap(e, "cannot create receive output")
 			return
 		}
 		outputBlinds = append(outputBlinds, receiveBlind)
-		outputs = append(outputs, *receiveOutput)
+		walletOutputs = append(walletOutputs, *receiveOutput)
 	}
 
-	// sum up inputs(-) and outputs(+) blinding factors
+	// sum up slateInputs(-) and walletOutputs(+) blinding factors
 	blindExcess, err = secp256k1.BlindSum(t.context, outputBlinds, inputBlinds)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create blinding excess sum")
@@ -223,17 +233,17 @@ func (t *Wallet) NewResponse(
 	fee uint64,
 	asset string,
 	change uint64,
-	walletInputs []Output,
+	walletInputs []SavedOutput,
 	receiveAmount uint64,
 	receiveAsset string,
 	inSlate *Slate,
 ) (
 	outSlateBytes []byte,
-	outputs []Output,
-	savedSlate *SavedSlate,
+	walletOutputs []SavedOutput,
+	walletSlate *SavedSlate,
 	err error,
 ) {
-	inputs, outputs, blindExcess, err := t.inputsAndOutputs(
+	slateInputs, walletOutputs, blindExcess, err := t.inputsAndOutputs(
 		amount,
 		fee,
 		asset,
@@ -242,15 +252,15 @@ func (t *Wallet) NewResponse(
 		receiveAmount,
 		receiveAsset)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create slate inputs and outputs")
+		err = errors.Wrap(err, "cannot create slateInputs and walletOutputs")
 		return
 	}
 
-	inSlate.Transaction.Body.Inputs = append(inSlate.Transaction.Body.Inputs, inputs...)
+	inSlate.Transaction.Body.Inputs = append(inSlate.Transaction.Body.Inputs, slateInputs...)
 
 	// add responder output (receiver's in Send, payer's change in Invoice)
-	for _, o := range outputs {
-		inSlate.Transaction.Body.Outputs = append(inSlate.Transaction.Body.Outputs, o.Output)
+	for _, o := range walletOutputs {
+		inSlate.Transaction.Body.Outputs = append(inSlate.Transaction.Body.Outputs, o.SlateOutput)
 	}
 
 	receiverPublicBlind, err := t.pubKeyFromSecretKey(blindExcess[:])
@@ -322,23 +332,28 @@ func (t *Wallet) NewResponse(
 		MessageSig:        nil,
 	})
 
-	outSlate := inSlate
-
-	outSlateBytes, err = json.Marshal(outSlate)
+	outSlateBytes, err = json.Marshal(inSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal slate to json")
 		return
 	}
 
-	savedSlate = &SavedSlate{
-		Slate: *outSlate,
+	walletSlate = &SavedSlate{
+		Slate: *inSlate,
 		Nonce: receiverNonce,
 	}
 
 	return
 }
 
-func (t *Wallet) NewTransaction(responseSlate *Slate, senderSlate *SavedSlate) (ledgerTxBytes []byte, walletTx Transaction, err error) {
+func (t *Wallet) NewTransaction(
+	responseSlate *Slate,
+	senderSlate *SavedSlate,
+) (
+	ledgerTxBytes []byte,
+	walletTx SavedTransaction,
+	err error,
+) {
 	// get secret keys from sender's responseSlate that has blind and secret nonces
 	senderBlind := senderSlate.Blind[:]
 	senderNonce := senderSlate.Nonce[:]
@@ -472,13 +487,44 @@ func (t *Wallet) NewTransaction(responseSlate *Slate, senderSlate *SavedSlate) (
 		return
 	}
 
-	tx := responseSlate.Transaction
+	slateTx := responseSlate.Transaction
 
-	// calculate kernel excess as a sum of commitments of inputs, outputs and kernel offset,
-	// that would produce a *Commitment type result
-	kernelExcess, err := ledger.CalculateExcess(t.context, &tx, uint64(responseSlate.Fee))
+	var inputCommitments, outputCommitments []*secp256k1.Commitment
+
+	// collect input commitments
+	for _, input := range slateTx.Body.Inputs {
+		com, e := secp256k1.CommitmentFromString(input.Commit)
+		if e != nil {
+			err = errors.Wrap(e, "error parsing input commitment")
+			return
+		}
+		inputCommitments = append(inputCommitments, com)
+	}
+
+	// collect output commitments
+	for _, output := range slateTx.Body.Outputs {
+		com, e := secp256k1.CommitmentFromString(output.Commit)
+		if e != nil {
+			err = errors.Wrap(e, "error parsing output commitment")
+			return
+		}
+		outputCommitments = append(outputCommitments, com)
+	}
+
+	offsetBytes, err := hex.DecodeString(slateTx.Offset)
 	if err != nil {
-		err = errors.Wrap(err, "cannot calculate final kernel excess")
+		err = errors.Wrap(err, "cannot get offsetBytes")
+		return
+	}
+
+	kernelExcess, err := ledger.CalculateExcess(
+		t.context,
+		inputCommitments,
+		outputCommitments,
+		offsetBytes,
+		uint64(slateTx.Body.Kernels[0].Fee))
+	if err != nil {
+		err = errors.Wrap(err, "cannot calculate kernel excess")
 		return
 	}
 
@@ -505,25 +551,40 @@ func (t *Wallet) NewTransaction(responseSlate *Slate, senderSlate *SavedSlate) (
 
 	excessSig := secp256k1.AggsigSignatureSerialize(t.context, &finalSig)
 
-	tx.Body.Kernels[0].Excess = kernelExcess.String()
-	tx.Body.Kernels[0].ExcessSig = hex.EncodeToString(excessSig[:])
+	ledgerTx := ledger.Transaction{
+		Offset: slateTx.Offset,
+		ID:     slateTx.ID,
+		Body: ledger.TransactionBody{
+			Kernels: []ledger.TxKernel{
+				{
+					Excess:    kernelExcess.String(),
+					ExcessSig: hex.EncodeToString(excessSig[:]),
+				},
+			},
+		},
+	}
 
-	//for _, output := range tx.Body.Outputs {
-	//	e := t.addSurjectionProof(&output, tx.Body.Inputs)
-	//	if e != nil {
-	//		err = errors.Wrap(e, "cannot addSurjectionProof")
-	//		return
-	//	}
-	//}
+	for _, o := range slateTx.Body.Inputs {
+		ledgerTx.Body.Inputs = append(ledgerTx.Body.Inputs, o.Input)
+	}
 
-	ledgerTxBytes, err = json.Marshal(tx)
+	for _, o := range slateTx.Body.Outputs {
+		e := t.addSurjectionProof(&o, slateTx.Body.Inputs, senderSlate.Asset)
+		if e != nil {
+			err = errors.Wrap(e, "cannot addSurjectionProof")
+			return
+		}
+		ledgerTx.Body.Outputs = append(ledgerTx.Body.Outputs, o.Output)
+	}
+
+	ledgerTxBytes, err = json.Marshal(ledgerTx)
 	if err != nil {
-		err = errors.Wrap(err, "cannot marshal tx to json")
+		err = errors.Wrap(err, "cannot marshal ledgerTx to json")
 		return
 	}
 
-	walletTx = Transaction{
-		Transaction: tx,
+	walletTx = SavedTransaction{
+		Transaction: ledgerTx,
 		Status:      TransactionUnconfirmed,
 	}
 
@@ -536,7 +597,7 @@ func (t *Wallet) newOutput(
 	asset string,
 	status OutputStatus,
 ) (
-	walletOutput *Output,
+	walletOutput *SavedOutput,
 	sumBlinds []byte,
 	err error,
 ) {
@@ -564,7 +625,13 @@ func (t *Wallet) newOutput(
 
 	seed := ledger.AssetSeed(asset)
 
-	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(t.context, seed, assetBlind)
+	assetTag, err := secp256k1.FixedAssetTagParse(seed)
+	if err != nil {
+		err = errors.Wrap(err, "cannot get assetTag")
+		return
+	}
+
+	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(t.context, assetTag.Slice(), assetBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create commitment to asset")
 		return
@@ -599,16 +666,21 @@ func (t *Wallet) newOutput(
 		return
 	}
 
-	walletOutput = &Output{
-		Output: ledger.Output{
-			Features:    features,
-			Commit:      commitment.String(),
-			Proof:       hex.EncodeToString(proof),
-			AssetCommit: assetCommitment.String(),
+	walletOutput = &SavedOutput{
+		SlateOutput: SlateOutput{
+			Output: ledger.Output{
+				Input: ledger.Input{
+					Features:    features,
+					Commit:      commitment.String(),
+					AssetCommit: assetCommitment.String(),
+				},
+				Proof: hex.EncodeToString(proof),
+			},
+			AssetBlind: hex.EncodeToString(assetBlind),
 		},
 		Value:      value,
-		Asset:      asset,
 		Index:      index,
+		Asset:      asset,
 		AssetIndex: assetIndex,
 		Status:     status,
 	}
@@ -642,76 +714,119 @@ func (t *Wallet) sumPubKeys(
 //  Surjection proof proves that for a particular output there is at least one corresponding input with the same asset id.
 //	The sender must create both change outputs and outputs which she wishes to acquire as a result of this transaction,
 //	because she must generate blinding factors for them to be available for later spending.
-//func (t *Wallet) addSurjectionProof(output *Output, inputs []ledger.Input) (err error) {
-//	var fixedInputAssetTags []secp256k1.FixedAssetTag
-//
-//	var inputIndex int
-//	var inputBlindingKeys [][]byte
-//	var fixedOutputAssetTag *secp256k1.FixedAssetTag
-//	var ephemeralInputTags []secp256k1.Generator
-//	var ephemeralOutputTag *secp256k1.Generator
-//
-//	outputAssetSeed := ledger.AssetSeed(output.Asset)
-//
-//	fixedOutputAssetTag, err = secp256k1.FixedAssetTagParse(outputAssetSeed)
-//
-//	for _, input := range inputs {
-//		var fixedAssetTag *secp256k1.FixedAssetTag
-//		var tokenCommitment *secp256k1.Generator
-//
-//		inputAssetSeed := ledger.AssetSeed(input.Asset)
-//
-//		fixedAssetTag, err = secp256k1.FixedAssetTagParse(inputAssetSeed)
-//
-//		if err != nil {
-//			return
-//		}
-//		fixedInputAssetTags = append(fixedInputAssetTags, *fixedAssetTag)
-//
-//		inputAssetSecret, e := t.secret(input.AssetIndex)
-//		if e != nil {
-//			err = errors.Wrapf(e, "cannot get inputAssetSecret")
-//			return
-//		}
-//		inputAssetBlind := inputAssetSecret[:]
-//
-//		tokenCommitment, err = secp256k1.GeneratorGenerateBlinded(t.context, inputAssetSeed, inputAssetBlind)
-//		if err != nil {
-//			return
-//		}
-//		ephemeralInputTags = append(ephemeralInputTags, *tokenCommitment)
-//
-//		inputBlindingKeys = append(inputBlindingKeys, inputAssetBlind)
-//	}
-//
-//	outputAssetSecret, e := t.secret(output.AssetIndex)
-//	if e != nil {
-//		err = errors.Wrapf(e, "cannot get outputAssetSecret")
-//		return
-//	}
-//	outputAssetBlind := outputAssetSecret[:]
-//
-//	ephemeralOutputTag, err = secp256k1.GeneratorGenerateBlinded(t.context, outputAssetSeed, outputAssetBlind[:])
-//
-//	if err != nil {
-//		return
-//	}
-//
-//	seed32 := secp256k1.Random256()
-//	var proof *secp256k1.Surjectionproof
-//	_, proof, inputIndex, err = secp256k1.SurjectionproofAllocateInitialized(t.context, fixedInputAssetTags, 1, fixedOutputAssetTag, 10, seed32[:])
-//
-//	if len(inputBlindingKeys) < inputIndex {
-//		return errors.Wrap(nil, "input not found")
-//	}
-//	err = secp256k1.SurjectionproofGenerate(t.context, proof, ephemeralInputTags[:], *ephemeralOutputTag, inputIndex, inputBlindingKeys[inputIndex][:], outputAssetBlind[:])
-//	if err != nil {
-//		return
-//	}
-//
-//	var proofBytes []byte
-//	proofBytes, err = secp256k1.SurjectionproofSerialize(t.context, proof)
-//	(*output).AssetProof = hex.EncodeToString(proofBytes)
-//
-//	return nil
-//}
+func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, asset string /*, outputAsset string, inputAsset string*/) (err error) {
+	var fixedInputTags []secp256k1.FixedAssetTag
+	var inputAssetBlinds [][]byte
+	var fixedOutputTag *secp256k1.FixedAssetTag
+	var ephemeralInputTags []secp256k1.Generator
+	var ephemeralOutputTag *secp256k1.Generator
+
+	outputAssetSeed := ledger.AssetSeed(asset)
+
+	fixedOutputTag, err = secp256k1.FixedAssetTagParse(outputAssetSeed)
+
+	ephemeralOutputTag, err = secp256k1.GeneratorFromString(output.AssetCommit)
+	if err != nil {
+		return
+	}
+
+	for _, input := range inputs {
+		var assetTag *secp256k1.FixedAssetTag
+		var assetGenerator *secp256k1.Generator
+
+		assetGenerator, e := secp256k1.GeneratorFromString(input.AssetCommit)
+		if e != nil {
+			err = errors.Wrap(e, "cannot get assetGenerator")
+			return
+		}
+
+		assetSeed := ledger.AssetSeed(asset)
+
+		assetTag, e = secp256k1.FixedAssetTagParse(assetSeed)
+		if e != nil {
+			err = errors.Wrap(e, "cannot get assetTag")
+			return
+		}
+
+		fixedInputTags = append(fixedInputTags, *assetTag)
+
+		//inputAssetSecret, e := t.secret(input.AssetIndex)
+		//if e != nil {
+		//	err = errors.Wrap(e, "cannot get inputAssetSecret")
+		//	return
+		//}
+		//assetBlind := inputAssetSecret[:]
+
+		assetBlind, e := hex.DecodeString(input.AssetBlind)
+		if e != nil {
+			err = errors.Wrap(e, "cannot get assetBlind")
+			return
+		}
+
+		//assetGenerator, err = secp256k1.GeneratorGenerateBlinded(t.context, assetSeed, assetBlind)
+		//if err != nil {
+		//	return
+		//}
+		//ephemeralInputTags = append(ephemeralInputTags, *assetGenerator)
+
+		ephemeralInputTags = append(ephemeralInputTags, *assetGenerator)
+
+		inputAssetBlinds = append(inputAssetBlinds, assetBlind)
+	}
+
+	//outputAssetSecret, e := t.secret(output.AssetIndex)
+	//if e != nil {
+	//	err = errors.Wrapf(e, "cannot get outputAssetSecret")
+	//	return
+	//}
+	//outputAssetBlind := outputAssetSecret[:]
+	//
+	//ephemeralOutputTag, err = secp256k1.GeneratorGenerateBlinded(t.context, outputAssetSeed, outputAssetBlind[:])
+
+	//if err != nil {
+	//	return
+	//}
+
+	outputAssetBlind, err := hex.DecodeString(output.AssetBlind)
+	if err != nil {
+		return
+	}
+
+	seed32 := secp256k1.Random256()
+
+	inputTagsToUse := len(inputs)
+	maxIterations := 100
+
+	_, proof, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
+		t.context,
+		fixedInputTags,
+		inputTagsToUse,
+		fixedOutputTag,
+		maxIterations,
+		seed32[:])
+
+	if inputTagsToUse < inputIndex {
+		return errors.New("input not found")
+	}
+
+	err = secp256k1.SurjectionproofGenerate(
+		t.context,
+		proof,
+		ephemeralInputTags[:],
+		*ephemeralOutputTag,
+		inputIndex,
+		inputAssetBlinds[inputIndex][:],
+		outputAssetBlind[:])
+	if err != nil {
+		return
+	}
+
+	proofBytes, err := secp256k1.SurjectionproofSerialize(t.context, proof)
+	if err != nil {
+		return
+	}
+
+	output.AssetProof = hex.EncodeToString(proofBytes)
+
+	return nil
+}

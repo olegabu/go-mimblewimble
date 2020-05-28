@@ -210,14 +210,9 @@ func (s *OutputFeatures) UnmarshalJSON(b []byte) error {
 // wallet implementations with a way to identify their outputs for wallet
 // reconstruction.
 type Output struct {
-	// Options for an output's structure or use
-	Features OutputFeatures `json:"features"`
-	// The homomorphic commitment representing the output amount
-	Commit string `json:"commit"`
+	Input
 	// A proof that the commitment is in the right range
 	Proof string `json:"proof"`
-	// Pedersen commitment to asset
-	AssetCommit string `json:"asset_commit"`
 	// Surjection proof
 	AssetProof string `json:"asset_proof"`
 }

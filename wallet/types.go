@@ -2,34 +2,47 @@ package wallet
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
 )
 
 type Database interface {
 	PutSenderSlate(slate *SavedSlate) error
 	PutReceiverSlate(slate *SavedSlate) error
-	PutTransaction(tx Transaction) error
-	PutOutput(output Output) error
+	PutTransaction(tx SavedTransaction) error
+	PutOutput(output SavedOutput) error
 	GetSenderSlate(id []byte) (slate *SavedSlate, err error)
-	GetTransaction(id []byte) (transaction Transaction, err error)
-	GetOutput(commit string) (output Output, err error)
+	GetTransaction(id []byte) (transaction SavedTransaction, err error)
+	GetOutput(commit string) (output SavedOutput, err error)
 	ListSlates() (slates []SavedSlate, err error)
-	ListTransactions() (transactions []Transaction, err error)
-	ListOutputs() (outputs []Output, err error)
-	GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error)
+	ListTransactions() (transactions []SavedTransaction, err error)
+	ListOutputs() (outputs []SavedOutput, err error)
+	GetInputs(amount uint64, asset string) (inputs []SavedOutput, change uint64, err error)
 	Confirm(transactionID []byte) error
 	Cancel(transactionID []byte) error
 	NextIndex() (uint32, error)
 	Close()
 }
 
-type Output struct {
+type SlateInput struct {
+	ledger.Input
+	//Asset      string       `json:"asset,omitempty"`
+	AssetBlind string `json:"asset_blind"`
+}
+
+type SlateOutput struct {
 	ledger.Output
+	//Asset      string       `json:"asset,omitempty"`
+	AssetBlind string `json:"asset_blind"`
+}
+
+type SavedOutput struct {
+	SlateOutput
 	Index      uint32       `json:"index"`
 	AssetIndex uint32       `json:"asset_index"`
 	Value      uint64       `json:"value"`
-	Status     OutputStatus `json:"status,omitempty"`
 	Asset      string       `json:"asset,omitempty"`
+	Status     OutputStatus `json:"status,omitempty"`
 }
 
 type OutputStatus int
@@ -65,7 +78,7 @@ type Slate struct {
 	// The number of participants intended to take part in this transaction
 	NumParticipants uint `json:"num_participants"`
 	// The core transaction data: inputs, outputs, kernels, kernel offset
-	Transaction ledger.Transaction `json:"tx"`
+	Transaction SlateTransaction `json:"tx"`
 	// base amount (excluding fee)
 	Amount ledger.Uint64 `json:"amount"`
 	// fee amount
@@ -116,7 +129,19 @@ type SavedSlate struct {
 	Nonce [32]byte `json:"nonce,omitempty"`
 }
 
-type Transaction struct {
+type SlateTransactionBody struct {
+	Inputs  []SlateInput      `json:"inputs"`
+	Outputs []SlateOutput     `json:"outputs"`
+	Kernels []ledger.TxKernel `json:"kernels"`
+}
+
+type SlateTransaction struct {
+	Offset string               `json:"offset"`
+	Body   SlateTransactionBody `json:"body"`
+	ID     uuid.UUID            `json:"id,omitempty"`
+}
+
+type SavedTransaction struct {
 	ledger.Transaction
 	Status TransactionStatus `json:"status,omitempty"`
 }

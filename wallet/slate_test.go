@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,7 +28,7 @@ func TestSlateSendReceive(t *testing.T) {
 	assert.NoError(t, err)
 	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	inputs := []Output{*input1, *input2}
+	inputs := []SavedOutput{*input1, *input2}
 
 	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, 0, "")
 	assert.NoError(t, err)
@@ -63,7 +64,7 @@ func TestSlateSendReceiveSingle(t *testing.T) {
 
 	input1, _, err := w.newOutput(inputValue, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	inputs := []Output{*input1}
+	inputs := []SavedOutput{*input1}
 
 	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, 0, "")
 	assert.NoError(t, err)
@@ -104,7 +105,7 @@ func TestSlateExchange(t *testing.T) {
 	assert.NoError(t, err)
 	sendInput2, _, err := w.newOutput(sendInputValue-1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	sendInputs := []Output{*sendInput1, *sendInput2}
+	sendInputs := []SavedOutput{*sendInput1, *sendInput2}
 
 	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(sendAmount, fee, sendAsset, sendChange, sendInputs, receiveAmount, receiveAsset)
 	assert.NoError(t, err)
@@ -118,7 +119,7 @@ func TestSlateExchange(t *testing.T) {
 	assert.NoError(t, err)
 	receiveInput2, _, err := w.newOutput(receiveInputValue-1, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	receiveInputs := []Output{*receiveInput1, *receiveInput2}
+	receiveInputs := []SavedOutput{*receiveInput1, *receiveInput2}
 
 	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(receiveAmount, fee, receiveAsset, receiveChange, receiveInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
 	assert.NoError(t, err)
@@ -171,7 +172,7 @@ func TestNewExchange(t *testing.T) {
 	assert.NoError(t, err)
 	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	inputs := []Output{*input1, *input2}
+	inputs := []SavedOutput{*input1, *input2}
 
 	exchangeAmount := uint64(100)
 	exchangeAsset := "apple"
@@ -206,7 +207,7 @@ func TestSlateInvoicePay(t *testing.T) {
 	assert.NoError(t, err)
 	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
 	assert.NoError(t, err)
-	inputs := []Output{*input1, *input2}
+	inputs := []SavedOutput{*input1, *input2}
 
 	paySlateBytes, changeOutput, paySavedSlate, err := w.NewResponse(amount, fee, asset, change, inputs, 0, "", &invoiceSavedSlate.Slate)
 	assert.NoError(t, err)
@@ -235,12 +236,32 @@ func TestExcess(t *testing.T) {
 	assert.NoError(t, err)
 
 	fee := uint64(slate.Fee)
-	kex, err := ledger.CalculateExcess(context, &slate.Transaction, fee)
+
+	var inputCommitments, outputCommitments []*secp256k1.Commitment
+
+	// collect input commitments
+	for _, input := range slate.Transaction.Body.Inputs {
+		com, err := secp256k1.CommitmentFromString(input.Commit) // secp256k1.CommitmentParse(context, secp256k1.Unhex(input.Commit))
+		assert.NoError(t, err)
+		inputCommitments = append(inputCommitments, com)
+	}
+
+	// collect output commitments
+	for _, output := range slate.Transaction.Body.Outputs {
+		com, err := secp256k1.CommitmentFromString(output.Commit)
+		assert.NoError(t, err)
+		outputCommitments = append(outputCommitments, com)
+	}
+
+	offsetBytes, err := hex.DecodeString(slate.Transaction.Offset)
+	assert.NoError(t, err)
+
+	kex, err := ledger.CalculateExcess(context, inputCommitments, outputCommitments, offsetBytes, fee)
 	assert.NoError(t, err)
 	fmt.Printf("ledger.CalculateExcess: %s\n", kex.String())
 
 	kex0 := slate.Transaction.Body.Kernels[0].Excess
-	fmt.Printf("slate.Transaction.Body.Kernels[0].Excess: %s\n", kex0)
+	fmt.Printf("slate.SavedTransaction.Body.Kernels[0].Excess: %s\n", kex0)
 
 	assert.Equal(t, kex0, kex.String())
 }
@@ -303,3 +324,166 @@ var slateFinal []byte = []byte(`{
     }],
     "payment_proof": null
 }`)
+
+func TestSurjectionLoop(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		TestSurjection(t)
+	}
+}
+
+func TestSurjection(t *testing.T) {
+	const (
+		nInputs       = 10
+		outputIndex   = 9
+		maxIterations = 100
+	)
+	var (
+		assetNames         = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
+		fixedInputTags     [nInputs]secp256k1.FixedAssetTag
+		ephemeralInputTags [nInputs]secp256k1.Generator
+		inputAssetBlinds   [nInputs][32]byte
+		seed               = secp256k1.Random256()
+	)
+
+	none, _ := secp256k1.ContextCreate(secp256k1.ContextNone)
+	vrfy, _ := secp256k1.ContextCreate(secp256k1.ContextVerify)
+	both, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
+
+	// generate test data
+	for i := 0; i < nInputs; i++ {
+		assetSeed := ledger.AssetSeed(assetNames[i])
+		assetTag, err := secp256k1.FixedAssetTagParse(assetSeed[:])
+		assert.NoError(t, err)
+		assetBlind := secp256k1.Random256()
+		assetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, assetTag.Slice(), assetBlind[:])
+		assert.NoError(t, err)
+		ephemeralInputTags[i] = *assetGenerator
+		fixedInputTags[i] = *assetTag
+		inputAssetBlinds[i] = assetBlind
+	}
+
+	outputAssetSeed := ledger.AssetSeed(assetNames[outputIndex])
+	fixedOutputTag, err := secp256k1.FixedAssetTagParse(outputAssetSeed[:])
+	assert.NoError(t, err)
+	outputAssetBlind := secp256k1.Random256()
+	outputAssetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, fixedOutputTag.Slice(), outputAssetBlind[:])
+	assert.NoError(t, err)
+	ephemeralOutputTag := *outputAssetGenerator
+
+	// check allocate_initialized
+	iterations, proofOnHeap, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
+		none,
+		fixedInputTags[:],
+		nInputs,
+		fixedOutputTag,
+		maxIterations,
+		seed[:])
+	assert.NoError(t, err)
+	defer secp256k1.SurjectionproofDestroy(proofOnHeap)
+
+	t.Log(iterations, inputIndex)
+
+	// check generate
+	err = secp256k1.SurjectionproofGenerate(
+		both,
+		proofOnHeap,
+		ephemeralInputTags[:],
+		ephemeralOutputTag,
+		inputIndex,
+		inputAssetBlinds[inputIndex][:],
+		outputAssetBlind[:])
+	assert.NoError(t, err)
+
+	// check verify
+	err = secp256k1.SurjectionproofVerify(
+		vrfy,
+		proofOnHeap,
+		ephemeralInputTags[:],
+		ephemeralOutputTag)
+	assert.NoError(t, err)
+}
+
+func TestSurjectionOutputs(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	input1, _, err := w.newOutput(2, ledger.CoinbaseOutput, "cash", OutputUnconfirmed)
+	assert.NoError(t, err)
+
+	//input2, _, err := w.newOutput(1, ledger.CoinbaseOutput, "cash", OutputUnconfirmed)
+	//assert.NoError(t, err)
+
+	inputs := []SavedOutput{*input1 /*, *input2*/}
+
+	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(2, 0, "cash", 0, inputs, 0, "")
+	assert.NoError(t, err)
+	fmt.Printf("send %s\n", string(senderSlateBytes))
+
+	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(0, 0, "", 0, nil, 2, "cash", &senderSavedSlate.Slate)
+	assert.NoError(t, err)
+	fmt.Printf("resp %s\n", string(responseSlateBytes))
+
+	txBytes, _, err := w.NewTransaction(&responseSavedSlate.Slate, senderSavedSlate)
+	assert.NoError(t, err)
+	fmt.Printf("tran %s\n", string(txBytes))
+
+	tr, err := ledger.ValidateTransactionBytes(txBytes)
+	assert.NoError(t, err)
+	assert.NotNil(t, tr)
+
+	//// generate test data
+	//for i := 0; i < nInputs; i++ {
+	//	assetSeed := ledger.AssetSeed(assetNames[i])
+	//	assetTag, err := secp256k1.FixedAssetTagParse(assetSeed[:])
+	//	assert.NoError(t, err)
+	//	assetBlind := secp256k1.Random256()
+	//	assetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, assetTag.Slice(), assetBlind[:])
+	//	assert.NoError(t, err)
+	//
+	//	ephemeralInputTags[i] = *assetGenerator
+	//	fixedInputTags[i] = *assetTag
+	//	inputAssetBlinds[i] = assetBlind
+	//}
+	//
+	//outputIndex := 9
+	//outputAssetSeed := ledger.AssetSeed(assetNames[outputIndex])
+	//fixedOutputTag, err := secp256k1.FixedAssetTagParse(outputAssetSeed[:])
+	//assert.NoError(t, err)
+	//inputAssetBlind := inputAssetBlinds[outputIndex]
+	//outputAssetBlind := secp256k1.Random256()
+	//outputAssetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, fixedOutputTag.Slice(), outputAssetBlind[:])
+	//assert.NoError(t, err)
+	//ephemeralOutputTag := *outputAssetGenerator
+	//
+	//// check allocate_initialized
+	//iterations, proofOnHeap, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
+	//	none,
+	//	fixedInputTags[:],
+	//	nInputs,
+	//	fixedOutputTag,
+	//	maxIterations,
+	//	seed[:])
+	//assert.NoError(t, err)
+	//defer secp256k1.SurjectionproofDestroy(proofOnHeap)
+	//
+	//t.Log(iterations, inputIndex)
+	//
+	//// check generate
+	//err = secp256k1.SurjectionproofGenerate(
+	//	both,
+	//	proofOnHeap,
+	//	ephemeralInputTags[:],
+	//	ephemeralOutputTag,
+	//	inputIndex,
+	//	inputAssetBlind[:],
+	//	outputAssetBlind[:])
+	//assert.NoError(t, err)
+	//
+	//// check verify
+	//err = secp256k1.SurjectionproofVerify(
+	//	vrfy,
+	//	proofOnHeap,
+	//	ephemeralInputTags[:],
+	//	ephemeralOutputTag)
+	//assert.NoError(t, err)
+}

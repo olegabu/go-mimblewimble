@@ -72,7 +72,7 @@ func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
 	return nil
 }
 
-func (t *leveldbDatabase) PutTransaction(transaction Transaction) error {
+func (t *leveldbDatabase) PutTransaction(transaction SavedTransaction) error {
 	transactionBytes, err := json.Marshal(transaction)
 	if err != nil {
 		return errors.Wrap(err, "cannot marshal transaction into json")
@@ -100,7 +100,7 @@ func transactionKey(id string) []byte {
 	return []byte("transaction." + id)
 }
 
-func (t *leveldbDatabase) PutOutput(output Output) error {
+func (t *leveldbDatabase) PutOutput(output SavedOutput) error {
 	outputBytes, err := json.Marshal(output)
 	if err != nil {
 		return errors.Wrap(err, "cannot marshal output into json")
@@ -132,14 +132,14 @@ func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate *SavedSlate, err erro
 	return slate, nil
 }
 
-func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Output, change uint64, err error) {
+func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []SavedOutput, change uint64, err error) {
 	// collect valid outputs whose amount is less or equal to the amount to send
 
-	outputs := make([]Output, 0)
+	outputs := make([]SavedOutput, 0)
 
 	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
-		output := Output{}
+		output := SavedOutput{}
 		err = json.Unmarshal(iter.Value(), &output)
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "cannot unmarshal output in iterator")
@@ -157,7 +157,7 @@ func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Outpu
 
 	// loop thru outputs and collect into inputs only enough to cover the amount
 
-	inputs = make([]Output, 0)
+	inputs = make([]SavedOutput, 0)
 
 	var sumValues uint64
 
@@ -213,12 +213,12 @@ func (t *leveldbDatabase) ListSlates() (slates []SavedSlate, err error) {
 	return slates, nil
 }
 
-func (t *leveldbDatabase) ListTransactions() (transactions []Transaction, err error) {
-	transactions = make([]Transaction, 0)
+func (t *leveldbDatabase) ListTransactions() (transactions []SavedTransaction, err error) {
+	transactions = make([]SavedTransaction, 0)
 
 	iter := t.db.NewIterator(util.BytesPrefix([]byte("transaction")), nil)
 	for iter.Next() {
-		transaction := Transaction{}
+		transaction := SavedTransaction{}
 		err = json.Unmarshal(iter.Value(), &transaction)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot unmarshal transaction in iterator")
@@ -235,12 +235,12 @@ func (t *leveldbDatabase) ListTransactions() (transactions []Transaction, err er
 	return transactions, nil
 }
 
-func (t *leveldbDatabase) ListOutputs() (outputs []Output, err error) {
-	outputs = make([]Output, 0)
+func (t *leveldbDatabase) ListOutputs() (outputs []SavedOutput, err error) {
+	outputs = make([]SavedOutput, 0)
 
 	iter := t.db.NewIterator(outputRange(), nil)
 	for iter.Next() {
-		output := Output{}
+		output := SavedOutput{}
 		err = json.Unmarshal(iter.Value(), &output)
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot unmarshal output in iterator")
@@ -257,33 +257,33 @@ func (t *leveldbDatabase) ListOutputs() (outputs []Output, err error) {
 	return outputs, nil
 }
 
-func (t *leveldbDatabase) GetTransaction(id []byte) (transaction Transaction, err error) {
+func (t *leveldbDatabase) GetTransaction(id []byte) (transaction SavedTransaction, err error) {
 	transactionBytes, err := t.db.Get(transactionKey(string(id)), nil)
 	if err != nil {
-		return Transaction{}, errors.Wrap(err, "cannot Get transaction")
+		return SavedTransaction{}, errors.Wrap(err, "cannot Get transaction")
 	}
 
-	transaction = Transaction{}
+	transaction = SavedTransaction{}
 
 	err = json.Unmarshal(transactionBytes, &transaction)
 	if err != nil {
-		return Transaction{}, errors.Wrap(err, "cannot unmarshal transactionBytes")
+		return SavedTransaction{}, errors.Wrap(err, "cannot unmarshal transactionBytes")
 	}
 
 	return transaction, nil
 }
 
-func (t *leveldbDatabase) GetOutput(commit string) (output Output, err error) {
+func (t *leveldbDatabase) GetOutput(commit string) (output SavedOutput, err error) {
 	outputBytes, err := t.db.Get(outputKey(commit), nil)
 	if err != nil {
-		return Output{}, errors.Wrap(err, "cannot Get output")
+		return SavedOutput{}, errors.Wrap(err, "cannot Get output")
 	}
 
-	output = Output{}
+	output = SavedOutput{}
 
 	err = json.Unmarshal(outputBytes, &output)
 	if err != nil {
-		return Output{}, errors.Wrap(err, "cannot unmarshal outputBytes")
+		return SavedOutput{}, errors.Wrap(err, "cannot unmarshal outputBytes")
 	}
 
 	return output, nil

@@ -131,15 +131,15 @@ func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) 
 		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
 	}
 
-	tx := Transaction{
-		Transaction: savedSlate.Transaction,
-		Status:      TransactionUnconfirmed,
-	}
-
-	err = t.db.PutTransaction(tx)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutTransaction")
-	}
+	//tx := SavedTransaction{
+	//	Transaction: savedSlate.Transaction,
+	//	Status:      TransactionUnconfirmed,
+	//}
+	//
+	//err = t.db.PutTransaction(tx)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "cannot PutTransaction")
+	//}
 
 	return
 }
