@@ -32,5 +32,4 @@ require (
 	github.com/tyler-smith/go-bip32 v0.0.0-20170922074101-2c9cfd177564
 	github.com/tyler-smith/go-bip39 v1.0.2
 	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
-	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 )
