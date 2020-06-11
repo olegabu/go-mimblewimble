@@ -339,8 +339,8 @@ func TestSurjection(t *testing.T) {
 	)
 	var (
 		assetNames         = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
-		fixedInputTags     [nInputs]secp256k1.FixedAssetTag
-		ephemeralInputTags [nInputs]secp256k1.Generator
+		fixedInputTags     [nInputs]*secp256k1.FixedAssetTag
+		ephemeralInputTags [nInputs]*secp256k1.Generator
 		inputAssetBlinds   [nInputs][32]byte
 		seed               = secp256k1.Random256()
 	)
@@ -357,8 +357,8 @@ func TestSurjection(t *testing.T) {
 		assetBlind := secp256k1.Random256()
 		assetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, assetTag.Slice(), assetBlind[:])
 		assert.NoError(t, err)
-		ephemeralInputTags[i] = *assetGenerator
-		fixedInputTags[i] = *assetTag
+		ephemeralInputTags[i] = assetGenerator
+		fixedInputTags[i] = assetTag
 		inputAssetBlinds[i] = assetBlind
 	}
 
@@ -368,7 +368,7 @@ func TestSurjection(t *testing.T) {
 	outputAssetBlind := secp256k1.Random256()
 	outputAssetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, fixedOutputTag.Slice(), outputAssetBlind[:])
 	assert.NoError(t, err)
-	ephemeralOutputTag := *outputAssetGenerator
+	ephemeralOutputTag := outputAssetGenerator
 
 	// check allocate_initialized
 	iterations, proofOnHeap, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
@@ -456,7 +456,8 @@ func TestSurjectionOutputs(t *testing.T) {
 	//ephemeralOutputTag := *outputAssetGenerator
 	//
 	//// check allocate_initialized
-	//iterations, proofOnHeap, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
+	//iterations, proofOnHeap, inputIndex, err := secp256k1.
+	//SurjectionproofAllocateInitialized(
 	//	none,
 	//	fixedInputTags[:],
 	//	nInputs,

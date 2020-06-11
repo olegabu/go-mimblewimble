@@ -488,7 +488,7 @@ func validateSurjectionProof(ctx *secp256k1.Context, output Output, inputs []Inp
 		return errors.Wrapf(err, "cannot GeneratorParse ephemeralOutputTag")
 	}
 
-	var ephemeralInputTags []secp256k1.Generator
+	var ephemeralInputTags []*secp256k1.Generator
 	for _, input := range inputs {
 		var ephemeralInputTag *secp256k1.Generator
 		var inputAssetCommitmentBytes []byte
@@ -497,7 +497,7 @@ func validateSurjectionProof(ctx *secp256k1.Context, output Output, inputs []Inp
 		if err != nil {
 			return errors.Wrapf(err, "cannot GeneratorParse ephemeralInputTag")
 		}
-		ephemeralInputTags = append(ephemeralInputTags, *ephemeralInputTag)
+		ephemeralInputTags = append(ephemeralInputTags, ephemeralInputTag)
 	}
 
 	assetProofBytes, err := hex.DecodeString(output.AssetProof)
@@ -510,5 +510,5 @@ func validateSurjectionProof(ctx *secp256k1.Context, output Output, inputs []Inp
 		return errors.Wrapf(err, "cannot SurjectionproofParse")
 	}
 
-	return secp256k1.SurjectionproofVerify(ctx, &proof, ephemeralInputTags, *ephemeralOutputTag)
+	return secp256k1.SurjectionproofVerify(ctx, proof, ephemeralInputTags, ephemeralOutputTag)
 }

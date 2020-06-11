@@ -715,10 +715,10 @@ func (t *Wallet) sumPubKeys(
 //	The sender must create both change outputs and outputs which she wishes to acquire as a result of this transaction,
 //	because she must generate blinding factors for them to be available for later spending.
 func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, asset string /*, outputAsset string, inputAsset string*/) (err error) {
-	var fixedInputTags []secp256k1.FixedAssetTag
+	var fixedInputTags []*secp256k1.FixedAssetTag
 	var inputAssetBlinds [][]byte
 	var fixedOutputTag *secp256k1.FixedAssetTag
-	var ephemeralInputTags []secp256k1.Generator
+	var ephemeralInputTags []*secp256k1.Generator
 	var ephemeralOutputTag *secp256k1.Generator
 
 	outputAssetSeed := ledger.AssetSeed(asset)
@@ -748,7 +748,7 @@ func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, as
 			return
 		}
 
-		fixedInputTags = append(fixedInputTags, *assetTag)
+		fixedInputTags = append(fixedInputTags, assetTag)
 
 		//inputAssetSecret, e := t.secret(input.AssetIndex)
 		//if e != nil {
@@ -769,7 +769,7 @@ func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, as
 		//}
 		//ephemeralInputTags = append(ephemeralInputTags, *assetGenerator)
 
-		ephemeralInputTags = append(ephemeralInputTags, *assetGenerator)
+		ephemeralInputTags = append(ephemeralInputTags, assetGenerator)
 
 		inputAssetBlinds = append(inputAssetBlinds, assetBlind)
 	}
@@ -813,7 +813,7 @@ func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, as
 		t.context,
 		proof,
 		ephemeralInputTags[:],
-		*ephemeralOutputTag,
+		ephemeralOutputTag,
 		inputIndex,
 		inputAssetBlinds[inputIndex][:],
 		outputAssetBlind[:])
