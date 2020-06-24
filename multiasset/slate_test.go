@@ -1,6 +1,7 @@
 package multiasset
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/magiconair/properties/assert"
 	"github.com/olegabu/go-mimblewimble/wallet"
@@ -11,101 +12,56 @@ import (
 func TestSlate_Process(t *testing.T) {
 
 	type args struct {
-		context      *secp256k1.Context
-		walletInputs []PrivateOutput
-		purchases    []AssetBalance
-		expenses     []AssetBalance
+		wallet    Wallet
+		purchases []AssetBalance
+		expenses  []AssetBalance
+		fee       AssetBalance
 	}
 
 	apples := newAsset("apples")
 	oranges := newAsset("oranges")
+	//oranges := newAsset("oranges")
 
 	dummySecret := secp256k1.Random256()
-	aliceOldOutput := PrivateOutput{
-		SlateOutput: SlateOutput{
-			PublicOutput: PublicOutput{},
-			AssetBlind:   "",
-			Asset:        apples,
+
+	ctx, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
+
+	wallet := Wallet{
+		inputs: []PrivateOutput{
+			{
+				SlateOutput: SlateOutput{
+					PublicOutput: PublicOutput{},
+					AssetBlind:   hex.EncodeToString(dummySecret[:]),
+					Asset:        apples,
+				},
+				ValueBlind: dummySecret,
+				Value:      100,
+				Status:     wallet.OutputConfirmed,
+			},
 		},
-		ValueBlind: dummySecret,
-		Value:      100,
-		Status:     wallet.OutputUnconfirmed,
-	}
-	alicePurchases := []AssetBalance{{
-		Asset: oranges,
-		Value: 10,
-	}}
-
-	aliceExpenses := []AssetBalance{{
-		Asset: apples,
-		Value: 10,
-	}}
-
-	fee := AssetBalance{
-		Asset: apples,
-		Value: 1,
-	}
-	aliceSlate := CreateSlate(alicePurchases, aliceExpenses, fee)
-	context, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
-	walletInputs := []PrivateOutput{aliceOldOutput}
-	bobsSlate := CreateSlate(alicePurchases, aliceExpenses, fee)
-	_, _, _ = bobsSlate.Process(context, walletInputs, alicePurchases, aliceExpenses)
-
-	bobsOutput := PrivateOutput{
-		SlateOutput: SlateOutput{
-			PublicOutput: PublicOutput{},
-			AssetBlind:   "",
-			Asset:        oranges,
-		},
-		ValueBlind: [32]byte{},
-		Value:      11,
-		Status:     wallet.OutputConfirmed,
+		context: ctx,
 	}
 	tests := []struct {
 		name        string
-		slate       Slate
 		args        args
 		wantOutputs []AssetBalance
 		wantErr     bool
 	}{
-		{name: "First round by Alice",
-			slate: aliceSlate,
-			args: struct {
-				context      *secp256k1.Context
-				walletInputs []PrivateOutput
-				purchases    []AssetBalance
-				expenses     []AssetBalance
-			}{
-				context:      context,
-				walletInputs: walletInputs,
-				purchases:    alicePurchases,
-				expenses:     aliceExpenses,
-			},
-			wantOutputs: []AssetBalance{
-				//{Asset: apples, Value: 10},
-				{Asset: apples, Value: 89},
-				{Asset: oranges, Value: 10}},
-			wantErr: false},
-		{name: "Bob's round 2", slate: bobsSlate, args: struct {
-			context      *secp256k1.Context
-			walletInputs []PrivateOutput
-			purchases    []AssetBalance
-			expenses     []AssetBalance
-		}{context: context,
-			walletInputs: []PrivateOutput{bobsOutput},
-			purchases:    aliceExpenses,
-			expenses:     alicePurchases},
-			wantOutputs: []AssetBalance{
-				{Asset: oranges, Value: 1},
-				{Asset: apples, Value: uint64(10)},
-			},
-			wantErr: false,
-		},
+		{name: "1st round", args: struct {
+			wallet    Wallet
+			purchases []AssetBalance
+			expenses  []AssetBalance
+			fee       AssetBalance
+		}{wallet: wallet,
+			purchases: []AssetBalance{{Asset: oranges, Value: 1}},
+			expenses:  []AssetBalance{{Asset: apples, Value: 1}}},
+			wantOutputs: []AssetBalance{{Asset: apples, Value: 99}, {Asset: oranges, Value: 1}},
+			wantErr:     false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			slate := &tt.slate
-			_, outputs, err := slate.Process(tt.args.context, tt.args.walletInputs, tt.args.purchases, tt.args.expenses)
+
+			_, outputs, err := wallet.CreateSlate(tt.args.purchases, tt.args.expenses, tt.args.fee)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Process() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -127,6 +83,50 @@ func TestSlate_Process(t *testing.T) {
 				}
 				assert.Equal(t, found, true, fmt.Sprintf("output %v was not found among created outputs %v", wantedOutput, outputs))
 			}
+		})
+	}
+}
+
+func TestPrivateOutput_tweakedExcess(t *testing.T) {
+	ctx, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	dummySecret := "e9a06e539d6bf5cf1ca5c41b59121fa3df07a338322405a312c67b6349a707e9"
+	dummySecretByteSlice, _ := hex.DecodeString(dummySecret)
+	var dummySecretBytes [32]byte
+	copy(dummySecretBytes[:], dummySecretByteSlice)
+	apples := newAsset("apples")
+	//dummySecret := secp256k1.Random256()
+	type args struct {
+		ctx *secp256k1.Context
+	}
+	tests := []struct {
+		name       string
+		output     PrivateOutput
+		args       args
+		wantExcess []byte
+		wantErr    bool
+	}{
+		{name: "simple", output: PrivateOutput{
+			SlateOutput: SlateOutput{
+				PublicOutput: PublicOutput{},
+				AssetBlind:   dummySecret, //hex.EncodeToString(dummySecret[:]),
+				Asset:        apples,
+			},
+			ValueBlind: dummySecretBytes,
+			Value:      11,
+			Status:     0,
+		}, args: args{ctx: ctx}, wantExcess: []byte{}, wantErr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			_, err := tt.output.tweakedExcess()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("tweakedExcess() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			//if !reflect.DeepEqual(gotExcess, tt.wantExcess) {
+			//	t.Errorf("tweakedExcess() gotExcess = %v, want %v", gotExcess, tt.wantExcess)
+			//}
 		})
 	}
 }

@@ -130,7 +130,7 @@ type PublicSlate struct {
 	// is receiver, though this will change for multi-party
 	ParticipantData []libwallet.ParticipantData `json:"participant_data"`
 	// Payment Proof
-	PaymentProof *libwallet.PaymentInfo `json:"payment_proof"`
+	//PaymentProof *libwallet.PaymentInfo `json:"payment_proof"`
 }
 type Slate struct {
 	PublicSlate

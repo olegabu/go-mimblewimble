@@ -8,15 +8,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-func calculateOutputValues(
+type Wallet struct {
+	inputs  []PrivateOutput
+	context *secp256k1.Context
+}
+
+func (w Wallet) calculateOutputValues(
 	fee AssetBalance,
-	walletInputs []PrivateOutput, // the assets Alice owns hence pays with
-	expenses []AssetBalance) ( //the assets Alice pays with
-	spentInputs []SlateInput,
-	inputBlinds [][]byte,
+	expenses []AssetBalance) ( //the assets Alice spends
+	spentInputs []PrivateOutput,
+	//inputBlinds [][]byte,
 	changeValues map[Asset]uint64, //helper map for change outputs
 	err error,
 ) {
+	inputs := w.inputs
 	// Group all expenses by asset id to make the tallying easier
 	totalExpenseByAsset := make(map[Asset]uint64)
 	//initialize output helper map
@@ -31,7 +36,7 @@ func calculateOutputValues(
 
 	//initialize inputs helper maps
 	myBalance := make(map[Asset]uint64)
-	for _, input := range walletInputs {
+	for _, input := range inputs {
 		myBalance[input.Asset] += input.Value
 	}
 
@@ -43,20 +48,12 @@ func calculateOutputValues(
 		}
 	}
 
-	//spentInputMap := make(map[string]*PrivateOutput)
 	changeValues = make(map[Asset]uint64)
 
 	for asset, value := range totalExpenseByAsset {
 		remainder := value
-		for _, input := range walletInputs {
-			//spentInputMap[input.Commit.ValueCommitment] = &input
-			spentInputs = append(spentInputs, SlateInput{
-				Input:      input.Input,
-				Asset:      asset,
-				AssetBlind: input.AssetBlind,
-			})
-
-			inputBlinds = append(inputBlinds, input.ValueBlind[:])
+		for _, input := range inputs {
+			spentInputs = append(spentInputs, input)
 			if input.Value >= remainder {
 				changeValues[asset] = input.Value - remainder
 				remainder = 0
@@ -70,7 +67,8 @@ func calculateOutputValues(
 	return
 }
 
-func createOutput(context *secp256k1.Context, balance AssetBalance) (privateOutput PrivateOutput, slateOutput SlateOutput, err error) {
+func (w *Wallet) createOutput(balance AssetBalance) (privateOutput PrivateOutput, err error) {
+	context := w.context
 	var assetCommitment *secp256k1.Generator
 	var serializedAssetCommitment [33]byte
 	var valueBlind, assetBlind [32]byte
@@ -119,16 +117,16 @@ func createOutput(context *secp256k1.Context, balance AssetBalance) (privateOutp
 		Proof:           hex.EncodeToString(proof),
 		SurjectionProof: "",
 	}
-	slateOutput = SlateOutput{
-		PublicOutput: publicOutput,
-		AssetBlind:   hex.EncodeToString(assetBlind[:]),
-		Asset:        asset,
-	}
+
 	privateOutput = PrivateOutput{
-		SlateOutput: slateOutput,
-		ValueBlind:  valueBlind,
-		Value:       value,
-		Status:      0,
+		SlateOutput: SlateOutput{
+			PublicOutput: publicOutput,
+			AssetBlind:   hex.EncodeToString(assetBlind[:]),
+			Asset:        asset,
+		},
+		ValueBlind: valueBlind,
+		Value:      value,
+		Status:     0,
 	}
 
 	return
