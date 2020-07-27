@@ -150,12 +150,12 @@ func TestWalletExchange(t *testing.T) {
 	w := newTestWallet(t)
 	defer w.Close()
 
-	for _, value := range []uint64{1, 2, 3} {
+	for _, value := range []uint64{1, 1} {
 		_, err := w.Issue(value, "cash")
 		assert.NoError(t, err)
 	}
 
-	for _, value := range []uint64{1, 2} {
+	for _, value := range []uint64{2, 1} {
 		_, err := w.Issue(value, "apple")
 		assert.NoError(t, err)
 	}
@@ -163,7 +163,7 @@ func TestWalletExchange(t *testing.T) {
 	err := w.Print()
 	assert.NoError(t, err)
 
-	sendAmount := uint64(6)
+	sendAmount := uint64(2)
 	sendAsset := "cash"
 
 	receiveAmount := uint64(3)
@@ -199,8 +199,8 @@ func TestWalletExchange(t *testing.T) {
 	err = w.Print()
 	assert.NoError(t, err)
 
-	// 5 inputs 1+2+3 cash 1+2 apples, 2 outputs: 6 cash 3 apple
-	assert.Equal(t, 5, len(tx.Body.Inputs))
+	// 5 inputs 1+1 cash 1+2 apples, 2 outputs: 6 cash 3 apple
+	assert.Equal(t, 4, len(tx.Body.Inputs))
 	assert.Equal(t, 2, len(tx.Body.Outputs))
 }
 
