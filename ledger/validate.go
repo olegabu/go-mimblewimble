@@ -32,6 +32,14 @@ func AssetSeed(asset string) []byte {
 	return assetHash.Sum(nil)[:32]
 }
 
+func AssetTag(asset string) *secp256k1.FixedAssetTag {
+	tag, err := secp256k1.FixedAssetTagParse(AssetSeed(asset))
+	if err != nil {
+		return nil
+	}
+	return tag
+}
+
 func MultiplyValueAssetGenerator(value uint64, asset string) (com *secp256k1.Commitment, err error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
