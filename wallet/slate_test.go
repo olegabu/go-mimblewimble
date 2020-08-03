@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	//"unsafe"
 
 	"github.com/stretchr/testify/assert"
 
@@ -332,7 +331,7 @@ func TestSurjectionLoop(t *testing.T) {
 	}
 }
 
-func TestSurjectionFail(t *testing.T) {
+func TestSurjection(t *testing.T) {
 	const (
 		nInputs       = 10
 		outputIndex   = 9
@@ -404,104 +403,23 @@ func TestSurjectionFail(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestSurjection(t *testing.T) {
-	const (
-		nInputs       = 10
-		outputIndex   = 9
-		maxIterations = 100
-	)
-	var (
-		assetNames         = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
-		fixedInputTags     [nInputs]*secp256k1.FixedAssetTag
-		ephemeralInputTags [nInputs]*secp256k1.Generator
-		inputAssetBlinds   [nInputs][32]byte
-		seed               = secp256k1.Random256()
-	)
-
-	none, _ := secp256k1.ContextCreate(secp256k1.ContextNone)
-	vrfy, _ := secp256k1.ContextCreate(secp256k1.ContextVerify)
-	both, _ := secp256k1.ContextCreate(secp256k1.ContextBoth)
-
-	// generate test data
-	for i := 0; i < nInputs; i++ {
-		assetSeed := ledger.AssetSeed(assetNames[i])
-		assetTag, err := secp256k1.FixedAssetTagParse(assetSeed[:])
-		assert.NoError(t, err)
-		assetBlind := secp256k1.Random256()
-		assetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, assetTag.Slice(), assetBlind[:])
-		assert.NoError(t, err)
-		ephemeralInputTags[i] = assetGenerator
-		fixedInputTags[i] = assetTag
-		inputAssetBlinds[i] = assetBlind
-	}
-
-	outputAssetSeed := ledger.AssetSeed("o") //assetNames[outputIndex])
-	fixedOutputTag, err := secp256k1.FixedAssetTagParse(outputAssetSeed[:])
-	assert.NoError(t, err)
-	outputAssetBlind := secp256k1.Random256()
-	outputAssetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, fixedOutputTag.Slice(), outputAssetBlind[:])
-	assert.NoError(t, err)
-	ephemeralOutputTag := outputAssetGenerator
-
-	// check allocate_initialized
-	iterations, proofOnHeap, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
-		none,
-		fixedInputTags[:],
-		nInputs,
-		fixedOutputTag,
-		maxIterations,
-		seed[:])
-	assert.NoError(t, err)
-	defer secp256k1.SurjectionproofDestroy(proofOnHeap)
-
-	t.Log(iterations, inputIndex)
-
-	// check generate
-	err = secp256k1.SurjectionproofGenerate(
-		both,
-		proofOnHeap,
-		ephemeralInputTags[:],
-		ephemeralOutputTag,
-		inputIndex,
-		inputAssetBlinds[inputIndex][:],
-		outputAssetBlind[:])
-	assert.NoError(t, err)
-
-	// check verify
-	err = secp256k1.SurjectionproofVerify(
-		vrfy,
-		proofOnHeap,
-		ephemeralInputTags[:],
-		ephemeralOutputTag)
-	assert.NoError(t, err)
-}
-
 func TestSurjectionOutputs(t *testing.T) {
 	w := newTestWallet(t)
 	defer w.Close()
 
-	sendAmount := uint64(2)
-	sendAsset := "cash"
-	receiveAmount := uint64(3)
-	receiveAsset := "apple"
+	input1, _, err := w.newOutput(2, ledger.CoinbaseOutput, "cash", OutputUnconfirmed)
+	assert.NoError(t, err)
 
-	sendInput1, _, err := w.newOutput(1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
-	assert.NoError(t, err)
-	sendInput2, _, err := w.newOutput(1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
-	assert.NoError(t, err)
-	sendWalletInputs := []SavedOutput{*sendInput1, *sendInput2}
+	//input2, _, err := w.newOutput(1, ledger.CoinbaseOutput, "cash", OutputUnconfirmed)
+	//assert.NoError(t, err)
 
-	receiveInput1, _, err := w.newOutput(2, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
-	assert.NoError(t, err)
-	receiveInput2, _, err := w.newOutput(1, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
-	assert.NoError(t, err)
-	receiveWalletInputs := []SavedOutput{*receiveInput1, *receiveInput2}
+	inputs := []SavedOutput{*input1 /*, *input2*/}
 
-	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(sendAmount, 0, sendAsset, 0, sendWalletInputs, receiveAmount, receiveAsset)
+	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(2, 0, "cash", 0, inputs, 0, "")
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(receiveAmount, 0, receiveAsset, 0, receiveWalletInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(0, 0, "", 0, nil, 2, "cash", &senderSavedSlate.Slate)
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
@@ -512,50 +430,61 @@ func TestSurjectionOutputs(t *testing.T) {
 	tr, err := ledger.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
 	assert.NotNil(t, tr)
+
+	//// generate test data
+	//for i := 0; i < nInputs; i++ {
+	//	assetSeed := ledger.AssetSeed(assetNames[i])
+	//	assetTag, err := secp256k1.FixedAssetTagParse(assetSeed[:])
+	//	assert.NoError(t, err)
+	//	assetBlind := secp256k1.Random256()
+	//	assetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, assetTag.Slice(), assetBlind[:])
+	//	assert.NoError(t, err)
+	//
+	//	ephemeralInputTags[i] = *assetGenerator
+	//	fixedInputTags[i] = *assetTag
+	//	inputAssetBlinds[i] = assetBlind
+	//}
+	//
+	//outputIndex := 9
+	//outputAssetSeed := ledger.AssetSeed(assetNames[outputIndex])
+	//fixedOutputTag, err := secp256k1.FixedAssetTagParse(outputAssetSeed[:])
+	//assert.NoError(t, err)
+	//inputAssetBlind := inputAssetBlinds[outputIndex]
+	//outputAssetBlind := secp256k1.Random256()
+	//outputAssetGenerator, err := secp256k1.GeneratorGenerateBlinded(both, fixedOutputTag.Slice(), outputAssetBlind[:])
+	//assert.NoError(t, err)
+	//ephemeralOutputTag := *outputAssetGenerator
+	//
+	//// check allocate_initialized
+	//iterations, proofOnHeap, inputIndex, err := secp256k1.
+	//SurjectionproofAllocateInitialized(
+	//	none,
+	//	fixedInputTags[:],
+	//	nInputs,
+	//	fixedOutputTag,
+	//	maxIterations,
+	//	seed[:])
+	//assert.NoError(t, err)
+	//defer secp256k1.SurjectionproofDestroy(proofOnHeap)
+	//
+	//t.Log(iterations, inputIndex)
+	//
+	//// check generate
+	//err = secp256k1.SurjectionproofGenerate(
+	//	both,
+	//	proofOnHeap,
+	//	ephemeralInputTags[:],
+	//	ephemeralOutputTag,
+	//	inputIndex,
+	//	inputAssetBlind[:],
+	//	outputAssetBlind[:])
+	//assert.NoError(t, err)
+	//
+	//// check verify
+	//err = secp256k1.SurjectionproofVerify(
+	//	vrfy,
+	//	proofOnHeap,
+	//	ephemeralInputTags[:],
+	//	ephemeralOutputTag)
+	//assert.NoError(t, err)
 }
-
-func TestSurjectionOutputs100(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		TestSurjectionOutputs(t)
-	}
-}
-
-/*
-// check that a proof with empty n_used_inputs is invalid
-static void test_no_used_inputs_verify(void) {
-    secp256k1_surjectionproof proof;
-    secp256k1_fixed_asset_tag fixed_input_tag;
-    secp256k1_fixed_asset_tag fixed_output_tag;
-    secp256k1_generator ephemeral_input_tags[1];
-    size_t n_ephemeral_input_tags = 1;
-    secp256k1_generator ephemeral_output_tag;
-    unsigned char blinding_key[32];
-    secp256k1_ge output;
-    secp256k1_sha256 sha256_e0;
-    int result;
-
-    // Create proof that doesn't use inputs. secp256k1_surjectionproof_initialize
-    // will not work here since it insists on selecting an input that matches the output.
-    proof.n_inputs = 1;
-    memset(proof.used_inputs, 0, SECP256K1_SURJECTIONPROOF_MAX_N_INPUTS / 8);
-
-    // create different fixed input and output tags
-    secp256k1_rand256(fixed_input_tag.data);
-    secp256k1_rand256(fixed_output_tag.data);
-
-    // blind fixed output tags with random blinding key
-    secp256k1_rand256(blinding_key);
-    CHECK(secp256k1_generator_generate_blinded(ctx, &ephemeral_input_tags[0], fixed_input_tag.data, blinding_key));
-    CHECK(secp256k1_generator_generate_blinded(ctx, &ephemeral_output_tag, fixed_output_tag.data, blinding_key));
-
-    // create "borromean signature" which is just a hash of metadata (pubkeys, etc) in this case
-    secp256k1_generator_load(&output, &ephemeral_output_tag);
-    secp256k1_surjection_genmessage(proof.data, ephemeral_input_tags, 1, &ephemeral_output_tag);
-    secp256k1_sha256_initialize(&sha256_e0);
-    secp256k1_sha256_write(&sha256_e0, proof.data, 32);
-    secp256k1_sha256_finalize(&sha256_e0, proof.data);
-
-    result = secp256k1_surjectionproof_verify(ctx, &proof, ephemeral_input_tags, n_ephemeral_input_tags, &ephemeral_output_tag);
-    CHECK(result <= 0);
-}
-*/

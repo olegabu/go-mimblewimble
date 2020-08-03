@@ -253,7 +253,7 @@ func main() {
 			if err != nil {
 				return errors.Wrap(err, "cannot write file "+fileName)
 			}
-			fmt.Printf("wrote slate, pass it back to the sender: post or finalize %v\n", fileName)
+			fmt.Printf("wrote slate, pass it back to the sender: finalize or post %v\n", fileName)
 			return nil
 		},
 	}
