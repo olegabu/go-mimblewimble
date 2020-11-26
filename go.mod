@@ -17,7 +17,7 @@ require (
 	github.com/hyperledger/fabric-amcl v0.0.0-20200128223036-d1aa2665426a // indirect
 	github.com/miekg/pkcs11 v1.0.3 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/olegabu/go-secp256k1-zkp v0.3.1
+	github.com/olegabu/go-secp256k1-zkp v0.4.0
 	github.com/olekukonko/tablewriter v0.0.2
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
 	github.com/pkg/errors v0.9.1

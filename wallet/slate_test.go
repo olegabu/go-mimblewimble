@@ -333,11 +333,11 @@ func TestSurjectionLoop(t *testing.T) {
 
 func TestSurjection(t *testing.T) {
 	const (
-		nInputs       = 10
-		outputIndex   = 9
-		maxIterations = 100
+		nInputs int = 10
 	)
 	var (
+		//outputIndex int = 9
+		maxIterations int = 100
 		assetNames         = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
 		fixedInputTags     [nInputs]*secp256k1.FixedAssetTag
 		ephemeralInputTags [nInputs]*secp256k1.Generator
@@ -371,7 +371,7 @@ func TestSurjection(t *testing.T) {
 	ephemeralOutputTag := outputAssetGenerator
 
 	// check allocate_initialized
-	iterations, proofOnHeap, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
+	iterations, proofOnHeap, inputIndex, err := secp256k1.SurjectionproofInitialize(
 		none,
 		fixedInputTags[:],
 		nInputs,
@@ -379,7 +379,6 @@ func TestSurjection(t *testing.T) {
 		maxIterations,
 		seed[:])
 	assert.NoError(t, err)
-	defer secp256k1.SurjectionproofDestroy(proofOnHeap)
 
 	t.Log(iterations, inputIndex)
 

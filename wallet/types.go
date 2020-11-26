@@ -27,12 +27,14 @@ type Database interface {
 type SlateInput struct {
 	ledger.Input
 	//Asset      string       `json:"asset,omitempty"`
+	AssetTag   string `json:"asset_tag"`
 	AssetBlind string `json:"asset_blind"`
 }
 
 type SlateOutput struct {
 	ledger.Output
 	//Asset      string       `json:"asset,omitempty"`
+	AssetTag   string `json:"asset_tag"`
 	AssetBlind string `json:"asset_blind"`
 }
 

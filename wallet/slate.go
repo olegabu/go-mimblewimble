@@ -183,6 +183,7 @@ func (t *Wallet) inputsAndOutputs(
 				Commit:      walletInput.Commit,
 				AssetCommit: walletInput.AssetCommit,
 			},
+			AssetTag: walletInput.AssetTag,
 			AssetBlind: hex.EncodeToString(assetBlind),
 		}
 
@@ -676,6 +677,7 @@ func (t *Wallet) newOutput(
 				},
 				Proof: hex.EncodeToString(proof),
 			},
+			AssetTag: assetTag.Hex(),
 			AssetBlind: hex.EncodeToString(assetBlind),
 		},
 		Value:      value,
@@ -721,9 +723,10 @@ func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, as
 	var ephemeralInputTags []*secp256k1.Generator
 	var ephemeralOutputTag *secp256k1.Generator
 
-	outputAssetSeed := ledger.AssetSeed(asset)
+	//outputAssetSeed := ledger.AssetSeed(asset)
+	//fixedOutputTag, err = secp256k1.FixedAssetTagParse(outputAssetSeed)
 
-	fixedOutputTag, err = secp256k1.FixedAssetTagParse(outputAssetSeed)
+	fixedOutputTag, err = secp256k1.FixedAssetTagFromHex(output.AssetTag)
 
 	ephemeralOutputTag, err = secp256k1.GeneratorFromString(output.AssetCommit)
 	if err != nil {
@@ -740,9 +743,11 @@ func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, as
 			return
 		}
 
-		assetSeed := ledger.AssetSeed(asset)
+		//assetSeed := ledger.AssetSeed(asset)
+		//assetTag, e = secp256k1.FixedAssetTagParse(assetSeed)
 
-		assetTag, e = secp256k1.FixedAssetTagParse(assetSeed)
+		assetTag, e = secp256k1.FixedAssetTagFromHex(input.AssetTag)
+
 		if e != nil {
 			err = errors.Wrap(e, "cannot get assetTag")
 			return
@@ -797,7 +802,7 @@ func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, as
 	inputTagsToUse := len(inputs)
 	maxIterations := 100
 
-	_, proof, inputIndex, err := secp256k1.SurjectionproofAllocateInitialized(
+	_, proof, inputIndex, err := secp256k1.SurjectionproofInitialize(
 		t.context,
 		fixedInputTags,
 		inputTagsToUse,
@@ -821,12 +826,14 @@ func (t *Wallet) addSurjectionProof(output *SlateOutput, inputs []SlateInput, as
 		return
 	}
 
-	proofBytes, err := secp256k1.SurjectionproofSerialize(t.context, proof)
-	if err != nil {
-		return
-	}
+	//proofBytes, err := secp256k1.SurjectionproofSerialize(t.context, proof)
+	//if err != nil {
+	//	return
+	//}
 
-	output.AssetProof = hex.EncodeToString(proofBytes)
+	//output.AssetProof = hex.EncodeToString(proofBytes)
+
+	output.AssetProof = proof.String()
 
 	return nil
 }
