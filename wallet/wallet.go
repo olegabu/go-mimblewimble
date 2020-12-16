@@ -2,10 +2,11 @@ package wallet
 
 import (
 	"encoding/json"
-	"github.com/tyler-smith/go-bip32"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/tyler-smith/go-bip32"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
@@ -65,13 +66,13 @@ func (t *Wallet) Close() {
 	secp256k1.ContextDestroy(t.context)
 }
 
-func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string) (slateBytes []byte, err error) {
+func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string, extraData []byte) (slateBytes []byte, err error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset)
+	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset, extraData)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewSlate")
 	}

@@ -19,6 +19,7 @@ func (t *Wallet) NewSlate(
 	walletInputs []SavedOutput,
 	receiveAmount uint64,
 	receiveAsset string,
+	extraData []byte,
 ) (
 	slateBytes []byte,
 	walletOutputs []SavedOutput,
@@ -95,6 +96,7 @@ func (t *Wallet) NewSlate(
 					LockHeight: 0,
 					Excess:     "000000000000000000000000000000000000000000000000000000000000000000",
 					ExcessSig:  "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+					ExtraData:  extraData,
 				}},
 			},
 		},
@@ -183,7 +185,7 @@ func (t *Wallet) inputsAndOutputs(
 				Commit:      walletInput.Commit,
 				AssetCommit: walletInput.AssetCommit,
 			},
-			AssetTag: walletInput.AssetTag,
+			AssetTag:   walletInput.AssetTag,
 			AssetBlind: hex.EncodeToString(assetBlind),
 		}
 
@@ -560,6 +562,7 @@ func (t *Wallet) NewTransaction(
 				{
 					Excess:    kernelExcess.String(),
 					ExcessSig: hex.EncodeToString(excessSig[:]),
+					ExtraData: slateTx.Body.Kernels[0].ExtraData,
 				},
 			},
 		},
@@ -677,7 +680,7 @@ func (t *Wallet) newOutput(
 				},
 				Proof: hex.EncodeToString(proof),
 			},
-			AssetTag: assetTag.Hex(),
+			AssetTag:   assetTag.Hex(),
 			AssetBlind: hex.EncodeToString(assetBlind),
 		},
 		Value:      value,

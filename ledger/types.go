@@ -3,9 +3,10 @@ package ledger
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
+
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"strconv"
 )
 
 type Database interface {
@@ -63,6 +64,8 @@ type TxKernel struct {
 	// The signature proving the excess is a valid public key, which signs
 	// the transaction fee.
 	ExcessSig string `json:"excess_sig"`
+	// Arbitrary extra data
+	ExtraData []byte `json:"extra_data,omitempty"`
 }
 
 // Uint64 is an uint64 that can be unmarshal from a string or uint64 is

@@ -2,6 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strconv"
+
 	"github.com/mitchellh/go-homedir"
 	"github.com/olegabu/go-mimblewimble/abci"
 	"github.com/olegabu/go-mimblewimble/ledger"
@@ -12,10 +17,6 @@ import (
 	tendermintCmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/cli"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -165,7 +166,7 @@ func main() {
 			}
 			defer w.Close()
 
-			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset)
+			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset, nil)
 			if err != nil {
 				return errors.Wrap(err, "cannot Send")
 			}
@@ -204,7 +205,7 @@ func main() {
 			}
 			defer w.Close()
 
-			slateBytes, err := w.Send(0, "", uint64(amount), asset)
+			slateBytes, err := w.Send(0, "", uint64(amount), asset, nil)
 			if err != nil {
 				return errors.Wrap(err, "cannot Send")
 			}
