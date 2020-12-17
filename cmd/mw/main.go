@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/olegabu/go-mimblewimble/abci"
@@ -501,8 +502,11 @@ func main() {
 			err = client.ListenForSuccessfulTxEvents(func(transactionId []byte) {
 
 				w, err := wallet.NewWallet(flagPersist)
-				if err != nil {
-					fmt.Println(errors.Wrap(err, "cannot create wallet"))
+				for err != nil {
+					fmt.Println(errors.Wrap(err, "cannot open wallet"))
+					time.Sleep(100 * time.Millisecond)
+					fmt.Println("trying to open wallet again...")
+					w, err = wallet.NewWallet(flagPersist)
 				}
 				defer w.Close()
 
