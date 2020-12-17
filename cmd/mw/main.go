@@ -241,7 +241,7 @@ func main() {
 			}
 			defer w.Close()
 
-			responseSlateBytes, err := w.Respond(slateBytes)
+			responseSlateBytes, err := w.Respond(slateBytes, nil)
 			if err != nil {
 				return errors.Wrap(err, "cannot Respond")
 			}

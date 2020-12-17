@@ -71,7 +71,21 @@ func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receive
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
+	return t.SendWithSpecificInputs(amount, asset, inputs, change, receiveAmount, receiveAsset, extraData)
+}
 
+func (t *Wallet) SendWithSpecificInputs(
+	amount uint64,
+	asset string,
+	inputs []SavedOutput,
+	change uint64,
+	receiveAmount uint64,
+	receiveAsset string,
+	extraData []byte,
+) (
+	slateBytes []byte,
+	err error,
+) {
 	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset, extraData)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewSlate")
@@ -92,7 +106,7 @@ func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receive
 	return
 }
 
-func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) {
+func (t *Wallet) Respond(inSlateBytes []byte, blind []byte) (outSlateBytes []byte, err error) {
 	var inSlate = &Slate{}
 	err = json.Unmarshal(inSlateBytes, inSlate)
 	if err != nil {
@@ -115,7 +129,7 @@ func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) 
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate)
+	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate, blind)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewReceive")
 	}
@@ -174,7 +188,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed)
+	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}

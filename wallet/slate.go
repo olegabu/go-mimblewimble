@@ -33,7 +33,8 @@ func (t *Wallet) NewSlate(
 		change,
 		walletInputs,
 		receiveAmount,
-		receiveAsset)
+		receiveAsset,
+		nil)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create slateInputs and walletOutputs")
 		return
@@ -140,6 +141,7 @@ func (t *Wallet) inputsAndOutputs(
 	walletInputs []SavedOutput,
 	receiveAmount uint64,
 	receiveAsset string,
+	outputBlind []byte,
 ) (
 	slateInputs []SlateInput,
 	walletOutputs []SavedOutput,
@@ -153,14 +155,18 @@ func (t *Wallet) inputsAndOutputs(
 	for _, walletInput := range walletInputs {
 		inputsTotal += walletInput.Value
 
-		// re-create child secret key from its saved index and use it as this walletInput's blind
-		secret, e := t.secret(walletInput.Index)
-		if e != nil {
-			err = errors.Wrapf(e, "cannot get secret for walletInput with key index %d", walletInput.Index)
-			return
+		var blind []byte
+		if walletInput.Blind == nil {
+			// re-create child secret key from its saved index and use it as this walletInput's blind
+			secret, e := t.secret(walletInput.Index)
+			if e != nil {
+				err = errors.Wrapf(e, "cannot get secret for walletInput with key index %d", walletInput.Index)
+				return
+			}
+			blind = secret[:]
+		} else {
+			blind = walletInput.Blind[:]
 		}
-
-		blind := secret[:]
 
 		assetSecret, e := t.secret(walletInput.AssetIndex)
 		if e != nil {
@@ -202,7 +208,7 @@ func (t *Wallet) inputsAndOutputs(
 
 	// create change output and remember its blinding factor
 	if change > 0 {
-		changeOutput, changeBlind, e := t.newOutput(change, ledger.PlainOutput, asset, OutputUnconfirmed)
+		changeOutput, changeBlind, e := t.newOutput(change, ledger.PlainOutput, asset, OutputUnconfirmed, nil)
 		if e != nil {
 			err = errors.Wrap(e, "cannot create change output")
 			return
@@ -212,7 +218,7 @@ func (t *Wallet) inputsAndOutputs(
 	}
 
 	if receiveAmount > 0 {
-		receiveOutput, receiveBlind, e := t.newOutput(receiveAmount, ledger.PlainOutput, receiveAsset, OutputUnconfirmed)
+		receiveOutput, receiveBlind, e := t.newOutput(receiveAmount, ledger.PlainOutput, receiveAsset, OutputUnconfirmed, outputBlind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot create receive output")
 			return
@@ -240,6 +246,7 @@ func (t *Wallet) NewResponse(
 	receiveAmount uint64,
 	receiveAsset string,
 	inSlate *Slate,
+	outputBlind []byte,
 ) (
 	outSlateBytes []byte,
 	walletOutputs []SavedOutput,
@@ -253,7 +260,8 @@ func (t *Wallet) NewResponse(
 		change,
 		walletInputs,
 		receiveAmount,
-		receiveAsset)
+		receiveAsset,
+		outputBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create slateInputs and walletOutputs")
 		return
@@ -600,18 +608,25 @@ func (t *Wallet) newOutput(
 	features ledger.OutputFeatures,
 	asset string,
 	status OutputStatus,
+	outputBlind []byte,
 ) (
 	walletOutput *SavedOutput,
 	sumBlinds []byte,
 	err error,
 ) {
-	secret, index, err := t.newSecret()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get newSecret")
-		return
+	var index uint32 = 0
+	var blind []byte
+	if outputBlind == nil {
+		var secret [32]byte
+		secret, index, err = t.newSecret()
+		if err != nil {
+			err = errors.Wrap(err, "cannot get newSecret")
+			return nil, nil, err
+		}
+		blind = secret[:]
+	} else {
+		blind = outputBlind
 	}
-
-	blind := secret[:]
 
 	assetSecret, assetIndex, err := t.newSecret()
 	if err != nil {
@@ -688,6 +703,11 @@ func (t *Wallet) newOutput(
 		Asset:      asset,
 		AssetIndex: assetIndex,
 		Status:     status,
+	}
+
+	if outputBlind != nil {
+		walletOutput.Blind = new([32]byte)
+		copy(walletOutput.Blind[:], blind[:32])
 	}
 
 	return

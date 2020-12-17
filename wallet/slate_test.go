@@ -24,18 +24,18 @@ func TestSlateSendReceive(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
-	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	inputs := []SavedOutput{*input1, *input2}
 
-	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, 0, "")
+	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, 0, "", nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, senderSlateBytes)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, responseSlateBytes)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
@@ -62,16 +62,16 @@ func TestSlateSendReceiveSingle(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(inputValue, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(inputValue, ledger.CoinbaseOutput, asset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	inputs := []SavedOutput{*input1}
 
-	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, 0, "")
+	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, 0, "", nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, senderSlateBytes)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, responseSlateBytes)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
@@ -101,13 +101,13 @@ func TestSlateExchange(t *testing.T) {
 	receiveAmount := uint64(100)
 	receiveAsset := "apple"
 
-	sendInput1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
+	sendInput1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
-	sendInput2, _, err := w.newOutput(sendInputValue-1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
+	sendInput2, _, err := w.newOutput(sendInputValue-1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	sendInputs := []SavedOutput{*sendInput1, *sendInput2}
 
-	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(sendAmount, fee, sendAsset, sendChange, sendInputs, receiveAmount, receiveAsset)
+	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(sendAmount, fee, sendAsset, sendChange, sendInputs, receiveAmount, receiveAsset, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, senderSlateBytes)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
@@ -115,13 +115,13 @@ func TestSlateExchange(t *testing.T) {
 	receiveInputValue := uint64(200)
 	receiveChange := receiveInputValue - receiveAmount - fee
 
-	receiveInput1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
+	receiveInput1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
-	receiveInput2, _, err := w.newOutput(receiveInputValue-1, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
+	receiveInput2, _, err := w.newOutput(receiveInputValue-1, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	receiveInputs := []SavedOutput{*receiveInput1, *receiveInput2}
 
-	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(receiveAmount, fee, receiveAsset, receiveChange, receiveInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(receiveAmount, fee, receiveAsset, receiveChange, receiveInputs, sendAmount, sendAsset, &senderSavedSlate.Slate, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, responseSlateBytes)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
@@ -168,16 +168,16 @@ func TestNewExchange(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
-	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	inputs := []SavedOutput{*input1, *input2}
 
 	exchangeAmount := uint64(100)
 	exchangeAsset := "apple"
 
-	slateBytes, walletOutput, savedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, exchangeAmount, exchangeAsset)
+	slateBytes, walletOutput, savedSlate, err := w.NewSlate(amount, fee, asset, change, inputs, exchangeAmount, exchangeAsset, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, slateBytes)
 	assert.NotNil(t, walletOutput)
@@ -194,7 +194,7 @@ func TestSlateInvoicePay(t *testing.T) {
 	fee := uint64(0)
 	asset := "cash"
 
-	invoiceSlateBytes, walletOutput, invoiceSavedSlate, err := w.NewSlate(0, fee, "", 0, nil, amount, asset)
+	invoiceSlateBytes, walletOutput, invoiceSavedSlate, err := w.NewSlate(0, fee, "", 0, nil, amount, asset, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, invoiceSlateBytes)
 	assert.NotNil(t, walletOutput)
@@ -203,13 +203,13 @@ func TestSlateInvoicePay(t *testing.T) {
 
 	change := inputValue - amount - fee
 
-	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed)
+	input1, _, err := w.newOutput(uint64(1), ledger.CoinbaseOutput, asset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
-	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed)
+	input2, _, err := w.newOutput(inputValue-1, ledger.CoinbaseOutput, asset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	inputs := []SavedOutput{*input1, *input2}
 
-	paySlateBytes, changeOutput, paySavedSlate, err := w.NewResponse(amount, fee, asset, change, inputs, 0, "", &invoiceSavedSlate.Slate)
+	paySlateBytes, changeOutput, paySavedSlate, err := w.NewResponse(amount, fee, asset, change, inputs, 0, "", &invoiceSavedSlate.Slate, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, paySlateBytes)
 	assert.NotNil(t, changeOutput)
@@ -336,9 +336,9 @@ func TestSurjection(t *testing.T) {
 		nInputs int = 10
 	)
 	var (
-		//outputIndex int = 9
-		maxIterations int = 100
-		assetNames         = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
+		outputIndex        int = 9
+		maxIterations      int = 100
+		assetNames             = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
 		fixedInputTags     [nInputs]*secp256k1.FixedAssetTag
 		ephemeralInputTags [nInputs]*secp256k1.Generator
 		inputAssetBlinds   [nInputs][32]byte
@@ -411,23 +411,23 @@ func TestSurjectionOutputs(t *testing.T) {
 	receiveAmount := uint64(3)
 	receiveAsset := "apple"
 
-	sendInput1, _, err := w.newOutput(1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
+	sendInput1, _, err := w.newOutput(1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
-	sendInput2, _, err := w.newOutput(1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed)
+	sendInput2, _, err := w.newOutput(1, ledger.CoinbaseOutput, sendAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	sendWalletInputs := []SavedOutput{*sendInput1, *sendInput2}
 
-	receiveInput1, _, err := w.newOutput(2, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
+	receiveInput1, _, err := w.newOutput(2, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
-	receiveInput2, _, err := w.newOutput(1, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed)
+	receiveInput2, _, err := w.newOutput(1, ledger.CoinbaseOutput, receiveAsset, OutputUnconfirmed, nil)
 	assert.NoError(t, err)
 	receiveWalletInputs := []SavedOutput{*receiveInput1, *receiveInput2}
 
-	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(sendAmount, 0, sendAsset, 0, sendWalletInputs, receiveAmount, receiveAsset)
+	senderSlateBytes, _, senderSavedSlate, err := w.NewSlate(sendAmount, 0, sendAsset, 0, sendWalletInputs, receiveAmount, receiveAsset, nil)
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(receiveAmount, 0, receiveAsset, 0, receiveWalletInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := w.NewResponse(receiveAmount, 0, receiveAsset, 0, receiveWalletInputs, sendAmount, sendAsset, &senderSavedSlate.Slate, nil)
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 

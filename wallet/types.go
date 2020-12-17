@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
 )
@@ -41,6 +42,7 @@ type SlateOutput struct {
 type SavedOutput struct {
 	SlateOutput
 	Index      uint32       `json:"index"`
+	Blind      *[32]byte    `json:"blind,omitempty"`
 	AssetIndex uint32       `json:"asset_index"`
 	Value      uint64       `json:"value"`
 	Asset      string       `json:"asset,omitempty"`
