@@ -2,11 +2,12 @@ package wallet
 
 import (
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
+
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
-	"io/ioutil"
-	"path/filepath"
 
 	"github.com/pkg/errors"
 )
@@ -167,7 +168,7 @@ func (t *Wallet) InitMasterKey(mnemonic string) (createdMnemonic string, err err
 	return
 }
 
-func (t *Wallet) newSecret() (secret [32]byte, index uint32, err error) {
+func (t *Wallet) NewSecret() (secret [32]byte, index uint32, err error) {
 	index, err = t.db.NextIndex()
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get NextIndex from db")

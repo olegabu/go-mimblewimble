@@ -618,7 +618,7 @@ func (t *Wallet) newOutput(
 	var blind []byte
 	if outputBlind == nil {
 		var secret [32]byte
-		secret, index, err = t.newSecret()
+		secret, index, err = t.NewSecret()
 		if err != nil {
 			err = errors.Wrap(err, "cannot get newSecret")
 			return nil, nil, err
@@ -628,7 +628,7 @@ func (t *Wallet) newOutput(
 		blind = outputBlind
 	}
 
-	assetSecret, assetIndex, err := t.newSecret()
+	assetSecret, assetIndex, err := t.NewSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return

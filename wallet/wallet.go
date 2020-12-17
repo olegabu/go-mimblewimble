@@ -339,3 +339,14 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	}
 	return id, nil
 }
+
+func (t *Wallet) GetInput(amount uint64, asset string) (*SavedOutput, error) {
+	inputs, change, err := t.db.GetInputs(amount, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot find suitable input")
+	}
+	if change > 0 {
+		return nil, errors.New("cannot find suitable input")
+	}
+	return &inputs[0], nil
+}

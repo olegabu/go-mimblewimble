@@ -3,14 +3,15 @@ package abci
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"strings"
+
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/common"
 	"github.com/tendermint/tendermint/libs/log"
-	"net/http"
-	"os"
-	"strings"
 )
 
 type MWApplication struct {
