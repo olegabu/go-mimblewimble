@@ -106,7 +106,7 @@ func (t *Wallet) SendWithSpecificInputs(
 	return
 }
 
-func (t *Wallet) Respond(inSlateBytes []byte, blind []byte) (outSlateBytes []byte, err error) {
+func (t *Wallet) Respond(inSlateBytes []byte, blind []byte, assetBlind []byte) (outSlateBytes []byte, err error) {
 	var inSlate = &Slate{}
 	err = json.Unmarshal(inSlateBytes, inSlate)
 	if err != nil {
@@ -129,7 +129,7 @@ func (t *Wallet) Respond(inSlateBytes []byte, blind []byte) (outSlateBytes []byt
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate, blind)
+	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate, blind, assetBlind)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewReceive")
 	}
@@ -188,7 +188,7 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed, nil)
+	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed, nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}

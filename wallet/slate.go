@@ -34,6 +34,7 @@ func (t *Wallet) NewSlate(
 		walletInputs,
 		receiveAmount,
 		receiveAsset,
+		nil,
 		nil)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create slateInputs and walletOutputs")
@@ -142,6 +143,7 @@ func (t *Wallet) inputsAndOutputs(
 	receiveAmount uint64,
 	receiveAsset string,
 	outputBlind []byte,
+	outputAssetBlind []byte,
 ) (
 	slateInputs []SlateInput,
 	walletOutputs []SavedOutput,
@@ -168,13 +170,17 @@ func (t *Wallet) inputsAndOutputs(
 			blind = walletInput.Blind[:]
 		}
 
-		assetSecret, e := t.secret(walletInput.AssetIndex)
-		if e != nil {
-			err = errors.Wrapf(e, "cannot get assetSecret for walletInput with key index %d", walletInput.AssetIndex)
-			return
+		var assetBlind []byte
+		if walletInput.AssetBlind == nil {
+			assetSecret, e := t.secret(walletInput.AssetIndex)
+			if e != nil {
+				err = errors.Wrapf(e, "cannot get assetSecret for walletInput with key index %d", walletInput.AssetIndex)
+				return
+			}
+			assetBlind = assetSecret[:]
+		} else {
+			assetBlind = walletInput.AssetBlind[:]
 		}
-
-		assetBlind := assetSecret[:]
 
 		// r + v*r_a
 		valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(walletInput.Value, assetBlind, blind)
@@ -208,7 +214,7 @@ func (t *Wallet) inputsAndOutputs(
 
 	// create change output and remember its blinding factor
 	if change > 0 {
-		changeOutput, changeBlind, e := t.newOutput(change, ledger.PlainOutput, asset, OutputUnconfirmed, nil)
+		changeOutput, changeBlind, e := t.newOutput(change, ledger.PlainOutput, asset, OutputUnconfirmed, nil, nil)
 		if e != nil {
 			err = errors.Wrap(e, "cannot create change output")
 			return
@@ -218,7 +224,7 @@ func (t *Wallet) inputsAndOutputs(
 	}
 
 	if receiveAmount > 0 {
-		receiveOutput, receiveBlind, e := t.newOutput(receiveAmount, ledger.PlainOutput, receiveAsset, OutputUnconfirmed, outputBlind)
+		receiveOutput, receiveBlind, e := t.newOutput(receiveAmount, ledger.PlainOutput, receiveAsset, OutputUnconfirmed, outputBlind, outputAssetBlind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot create receive output")
 			return
@@ -247,6 +253,7 @@ func (t *Wallet) NewResponse(
 	receiveAsset string,
 	inSlate *Slate,
 	outputBlind []byte,
+	outputAssetBlind []byte,
 ) (
 	outSlateBytes []byte,
 	walletOutputs []SavedOutput,
@@ -261,7 +268,8 @@ func (t *Wallet) NewResponse(
 		walletInputs,
 		receiveAmount,
 		receiveAsset,
-		outputBlind)
+		outputBlind,
+		outputAssetBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create slateInputs and walletOutputs")
 		return
@@ -609,6 +617,7 @@ func (t *Wallet) newOutput(
 	asset string,
 	status OutputStatus,
 	outputBlind []byte,
+	outputAssetBlind []byte,
 ) (
 	walletOutput *SavedOutput,
 	sumBlinds []byte,
@@ -620,7 +629,7 @@ func (t *Wallet) newOutput(
 		var secret [32]byte
 		secret, index, err = t.NewSecret()
 		if err != nil {
-			err = errors.Wrap(err, "cannot get newSecret")
+			err = errors.Wrap(err, "cannot get NewSecret")
 			return nil, nil, err
 		}
 		blind = secret[:]
@@ -628,13 +637,19 @@ func (t *Wallet) newOutput(
 		blind = outputBlind
 	}
 
-	assetSecret, assetIndex, err := t.NewSecret()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get newSecret")
-		return
+	var assetIndex uint32 = 0
+	var assetBlind []byte
+	if outputAssetBlind == nil {
+		var assetSecret [32]byte
+		assetSecret, assetIndex, err = t.NewSecret()
+		if err != nil {
+			err = errors.Wrap(err, "cannot get NewSecret")
+			return nil, nil, err
+		}
+		assetBlind = assetSecret[:]
+	} else {
+		assetBlind = outputAssetBlind
 	}
-
-	assetBlind := assetSecret[:]
 
 	sumBlinds32, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind, blind)
 	if e != nil {
@@ -708,6 +723,11 @@ func (t *Wallet) newOutput(
 	if outputBlind != nil {
 		walletOutput.Blind = new([32]byte)
 		copy(walletOutput.Blind[:], blind[:32])
+	}
+
+	if outputAssetBlind != nil {
+		walletOutput.AssetBlind = new([32]byte)
+		copy(walletOutput.AssetBlind[:], assetBlind[:32])
 	}
 
 	return

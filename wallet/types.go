@@ -44,6 +44,7 @@ type SavedOutput struct {
 	Index      uint32       `json:"index"`
 	Blind      *[32]byte    `json:"blind,omitempty"`
 	AssetIndex uint32       `json:"asset_index"`
+	AssetBlind *[32]byte    `json:"asset_blind"`
 	Value      uint64       `json:"value"`
 	Asset      string       `json:"asset,omitempty"`
 	Status     OutputStatus `json:"status,omitempty"`
