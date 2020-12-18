@@ -2,9 +2,10 @@ package wallet
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const testMnemonic = "dish salon sea unlock asthma rigid grass gather action dignity quiz vacuum"
@@ -133,7 +134,7 @@ func TestSecretFromHDWallet(t *testing.T) {
 	secrets := map[uint32][32]byte{}
 
 	for i := 0; i < 3; i++ {
-		secret, index, err := w.newSecret()
+		secret, index, err := w.NewSecret()
 		assert.NoError(t, err)
 		fmt.Printf("created i %d index %d secret %v\n", i, index, secret)
 		secrets[index] = secret

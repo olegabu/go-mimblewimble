@@ -19,6 +19,7 @@ func (t *Wallet) NewSlate(
 	walletInputs []SavedOutput,
 	receiveAmount uint64,
 	receiveAsset string,
+	kernelOffset *[32]byte,
 	extraData []byte,
 ) (
 	slateBytes []byte,
@@ -49,10 +50,13 @@ func (t *Wallet) NewSlate(
 	}
 
 	// generate random kernel offset
-	kernelOffset, err := t.nonce()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get nonce for kernelOffset")
-		return
+	if kernelOffset == nil {
+		kernelOffset = new([32]byte)
+		*kernelOffset, err = t.nonce()
+		if err != nil {
+			err = errors.Wrap(err, "cannot get nonce for kernelOffset")
+			return
+		}
 	}
 
 	// subtract kernel offset from blinding excess
@@ -665,21 +669,9 @@ func (t *Wallet) newOutput(
 		return
 	}
 
-	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(t.context, assetTag.Slice(), assetBlind)
+	commitment, assetCommitment, err := t.CalculateCommitments(value, assetTag, blind, assetBlind)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create commitment to asset")
-		return
-	}
-
-	// create commitment to value with asset specific generator
-	commitment, err := secp256k1.Commit(
-		t.context,
-		blind,
-		value,
-		assetCommitment,
-		&secp256k1.GeneratorG)
-	if err != nil {
-		err = errors.Wrap(err, "cannot create commitment to value")
+		err = errors.Wrap(err, "cannot CalculateCommitments")
 		return
 	}
 
@@ -730,6 +722,27 @@ func (t *Wallet) newOutput(
 		copy(walletOutput.AssetBlind[:], assetBlind[:32])
 	}
 
+	return
+}
+
+func (t *Wallet) CalculateCommitments(value uint64, assetTag *secp256k1.FixedAssetTag, blind []byte, assetBlind []byte) (commitment *secp256k1.Commitment, assetCommitment *secp256k1.Generator, err error) {
+	assetCommitment, err = secp256k1.GeneratorGenerateBlinded(t.context, assetTag.Slice(), assetBlind)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create commitment to asset")
+		return
+	}
+
+	// create commitment to value with asset specific generator
+	commitment, err = secp256k1.Commit(
+		t.context,
+		blind,
+		value,
+		assetCommitment,
+		&secp256k1.GeneratorG)
+	if err != nil {
+		err = errors.Wrap(err, "cannot create commitment to value")
+		return
+	}
 	return
 }
 

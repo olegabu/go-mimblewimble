@@ -1,12 +1,13 @@
 package abci
 
 import (
+	"log"
+	"time"
+
 	"github.com/pkg/errors"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/types"
-	"log"
-	"time"
 )
 
 type Client struct {
