@@ -189,7 +189,11 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 }
 
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed, nil, nil)
+	return t.IssueWithSpecificBlinds(value, asset, nil, nil)
+}
+
+func (t *Wallet) IssueWithSpecificBlinds(value uint64, asset string, outputBlind []byte, assetBlind []byte) (issueBytes []byte, err error) {
+	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed, outputBlind, assetBlind)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
@@ -343,6 +347,7 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 
 func (t *Wallet) GetInput(amount uint64, asset string) (*SavedOutput, error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
+
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot find suitable input")
 	}
@@ -352,6 +357,16 @@ func (t *Wallet) GetInput(amount uint64, asset string) (*SavedOutput, error) {
 	return &inputs[0], nil
 }
 
-func (t *Wallet) GenerateRandomKernelOffset() ([32]byte, error) {
-	return t.nonce()
+func (t *Wallet) GetInputByCommitment(commit string) (*SavedOutput, error) {
+	inputs, err := t.db.ListOutputs()
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot find suitable input")
+	}
+
+	for _, input := range inputs {
+		if input.Commit == commit {
+			return &input, nil
+		}
+	}
+	return nil, errors.New("input with such commitment does not exist")
 }
