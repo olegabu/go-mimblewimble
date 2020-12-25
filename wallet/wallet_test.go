@@ -170,7 +170,7 @@ func TestWalletExchange(t *testing.T) {
 	receiveAmount := uint64(3)
 	receiveAsset := "apple"
 
-	slateBytes, err := w.Send(sendAmount, sendAsset, receiveAmount, receiveAsset, nil, nil)
+	slateBytes, err := w.Send(sendAmount, sendAsset, receiveAmount, receiveAsset, nil)
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
 
@@ -292,7 +292,7 @@ func TestTotalIssues(t *testing.T) {
 }
 
 func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
-	slateBytes, err := w.Send(amount, asset, 0, "", nil, nil)
+	slateBytes, err := w.Send(amount, asset, 0, "", nil)
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
 
@@ -326,7 +326,7 @@ func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *
 }
 
 func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
-	slateBytes, err := w.Send(0, "", amount, asset, nil, nil)
+	slateBytes, err := w.Send(0, "", amount, asset, nil)
 	//slateBytes, err := w.Invoice(amount, asset)
 	assert.NoError(t, err)
 	fmt.Println("invoice " + string(slateBytes))

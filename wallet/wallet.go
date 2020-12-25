@@ -66,12 +66,12 @@ func (t *Wallet) Close() {
 	secp256k1.ContextDestroy(t.context)
 }
 
-func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string, kernelOffset *[32]byte, extraData []byte) (slateBytes []byte, err error) {
+func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string, extraData []byte) (slateBytes []byte, err error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
-	return t.SendWithSpecificInputs(amount, asset, inputs, change, receiveAmount, receiveAsset, kernelOffset, extraData)
+	return t.SendWithSpecificInputs(amount, asset, inputs, change, receiveAmount, receiveAsset, extraData)
 }
 
 func (t *Wallet) SendWithSpecificInputs(
@@ -81,13 +81,12 @@ func (t *Wallet) SendWithSpecificInputs(
 	change uint64,
 	receiveAmount uint64,
 	receiveAsset string,
-	kernelOffset *[32]byte,
 	extraData []byte,
 ) (
 	slateBytes []byte,
 	err error,
 ) {
-	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset, kernelOffset, extraData)
+	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset, extraData)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewSlate")
 	}
@@ -345,19 +344,7 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	return id, nil
 }
 
-func (t *Wallet) GetInput(amount uint64, asset string) (*SavedOutput, error) {
-	inputs, change, err := t.db.GetInputs(amount, asset)
-
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot find suitable input")
-	}
-	if change > 0 {
-		return nil, errors.New("cannot find suitable input")
-	}
-	return &inputs[0], nil
-}
-
-func (t *Wallet) GetInputByCommitment(commit string) (*SavedOutput, error) {
+func (t *Wallet) GetOutput(commit string) (*SavedOutput, error) {
 	inputs, err := t.db.ListOutputs()
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot find suitable input")
