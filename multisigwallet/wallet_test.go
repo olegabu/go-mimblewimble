@@ -25,51 +25,21 @@ func TestCreateMultipartyUtxo(t *testing.T) {
 		wallets = append(wallets, wallet)
 	}
 
-}
-
-func TestFirstStep(t *testing.T) {
-	wa := newTestWallet(t, "alice")
-	defer wa.Close()
-
-	var amount uint64 = 100
-	asset := "$"
-
-	_, err := wa.Issue(amount, asset)
+	slate, err := wallets[0].InitFundingTransaction(amount, asset)
 	assert.NoError(t, err)
 
-	slateBytes, err := wa.InitFundingTransaction(amount, asset)
+	for i := 1; i < partiesCount; i++ {
+		slate, err = wallets[i].ContributeFundingTransaction(amount, asset, slate)
+		assert.NoError(t, err)
+	}
+
+	for i := 0; i < partiesCount; i++ {
+		slate, err = wallets[i].SignFundingTransaction(slate)
+		assert.NoError(t, err)
+	}
+
+	_, err = wallets[0].AggregateFundingTransaction(slate)
 	assert.NoError(t, err)
-
-	wb := newTestWallet(t, "bob")
-	defer wb.Close()
-
-	_, err = wb.Issue(amount, asset)
-	assert.NoError(t, err)
-
-	slateBytes, err = wb.ContributeFundingTransaction(amount, asset, slateBytes)
-	assert.NoError(t, err)
-
-	wc := newTestWallet(t, "carol")
-	defer wc.Close()
-
-	_, err = wc.Issue(amount, asset)
-	assert.NoError(t, err)
-
-	slateBytes, err = wc.ContributeFundingTransaction(amount, asset, slateBytes)
-	assert.NoError(t, err)
-
-	slateBytes, err = wa.SignFundingTransaction(slateBytes)
-	assert.NoError(t, err)
-
-	slateBytes, err = wb.SignFundingTransaction(slateBytes)
-	assert.NoError(t, err)
-
-	slateBytes, err = wc.SignFundingTransaction(slateBytes)
-	assert.NoError(t, err)
-
-	slateBytes, err = wa.AggregateFundingTransaction(slateBytes)
-	assert.NoError(t, err)
-	println(string(slateBytes))
 }
 
 func testDbDir(userName string) string {
