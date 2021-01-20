@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64) (slateBytes []byte, savedSlate *SavedSlate, err error) {
+func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64, id uuid.UUID) (slateBytes []byte, savedSlate *SavedSlate, err error) {
 	blind, assetBlind, offset, blindExcess, nonce, err := t.generatePartialData(input)
 	if err != nil {
 		err = errors.Wrap(err, "cannot generatePartialData")
@@ -50,7 +50,7 @@ func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64
 		},
 		NumParticipants: 1,
 		Transaction: SlateTransaction{
-			ID:     uuid.New(),
+			ID:     id,
 			Offset: hex.EncodeToString(offset[:]),
 			Body: SlateTransactionBody{
 				Inputs:  []SlateInput{slateInput},
@@ -80,16 +80,13 @@ func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64
 			MessageSig:        nil,
 		}},
 		Asset: input.Asset,
-		//ReceiveAmount: ledger.Uint64(receiveAmount),
-		//ReceiveAsset:  receiveAsset,
 	}
 
 	savedSlate = &SavedSlate{
-		Slate:         *slate,
-		Nonce:         nonce,
-		Blind:         blind,
-		ExcessBlind:   blindExcess,
-		ParticipantID: 0,
+		Slate:       *slate,
+		Nonce:       nonce,
+		Blind:       blind,
+		ExcessBlind: blindExcess,
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -101,85 +98,21 @@ func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64
 	return
 }
 
-func (t *Wallet) ContributeMultipartyFundingTransaction(input *SavedOutput, slate *Slate) (slateBytes []byte, savedSlate *SavedSlate, err error) {
-	blind, assetBlind, offset, blindExcess, nonce, err := t.generatePartialData(input)
+func (t *Wallet) SignMultipartyFundingTransaction(slates []*Slate, savedSlate *SavedSlate) (slateBytes []byte, err error) {
+	slate, err := t.combineInitialSlates(slates)
 	if err != nil {
-		err = errors.Wrap(err, "cannot generatePartialData")
+		err = errors.Wrap(err, "cannot combineSlates")
 		return
 	}
 
-	commits, err := t.commitsFromSecrets(blind[:], blindExcess[:], nonce[:])
-	if err != nil {
-		err = errors.Wrap(err, "cannot get commits from secrets")
-		return
+	var participantID int
+	for i, participantData := range slate.ParticipantData {
+		if participantData.PublicBlind == savedSlate.ParticipantData[0].PublicBlind {
+			participantID = i
+			break
+		}
 	}
 
-	publicBlind := commits[0]
-	publicBlindExcess := commits[1]
-	publicNonce := commits[2]
-
-	inputAssetBlind, err := t.secret(input.AssetIndex)
-	if err != nil {
-		err = errors.Wrap(err, "cannot get input's asset blind")
-	}
-
-	slateInput := SlateInput{
-		Input: ledger.Input{
-			Features:    input.Features,
-			Commit:      input.Commit,
-			AssetCommit: input.AssetCommit,
-		},
-		AssetTag:   input.AssetTag,
-		AssetBlind: hex.EncodeToString(inputAssetBlind[:]),
-	}
-
-	slate.NumParticipants++
-	slate.Amount += ledger.Uint64(input.Value)
-	slate.Transaction.Body.Inputs = append(slate.Transaction.Body.Inputs, slateInput)
-	slate.ParticipantData = append(slate.ParticipantData, ParticipantData{
-		ID:                ledger.Uint64(len(slate.ParticipantData)),
-		Value:             ledger.Uint64(input.Value),
-		PublicBlind:       publicBlind.String(),
-		AssetBlind:        hex.EncodeToString(assetBlind[:]),
-		PublicBlindExcess: publicBlindExcess.String(),
-		PublicNonce:       publicNonce.String(),
-		PartSig:           nil,
-		Message:           nil,
-		MessageSig:        nil,
-	})
-
-	// adding partial offset to accumulated offset
-	accumulatedOffset, err := hex.DecodeString(slate.Transaction.Offset)
-	if err != nil {
-		err = errors.Wrap(err, "cannot Decode transaction offset")
-		return
-	}
-
-	totalOffset, err := secp256k1.BlindSum(t.context, [][]byte{accumulatedOffset, offset[:]}, nil)
-	if err != nil {
-		err = errors.Wrap(err, "cannot BlindSum")
-		return
-	}
-	slate.Transaction.Offset = hex.EncodeToString(totalOffset[:])
-
-	savedSlate = &SavedSlate{
-		Slate:         *slate,
-		Nonce:         nonce,
-		Blind:         blind,
-		ExcessBlind:   blindExcess,
-		ParticipantID: ledger.Uint64(len(slate.ParticipantData)) - 1,
-	}
-
-	slateBytes, err = json.Marshal(slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot marshal slate to json")
-		return
-	}
-
-	return
-}
-
-func (t *Wallet) SignMultipartyFundingTransaction(slate *Slate, savedSlate *SavedSlate) (slateBytes []byte, err error) {
 	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := t.extractParticipantData(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot extractParticipantData")
@@ -204,7 +137,7 @@ func (t *Wallet) SignMultipartyFundingTransaction(slate *Slate, savedSlate *Save
 	msg := ledger.KernelSignatureMessage(savedSlate.Transaction.Body.Kernels[0])
 
 	// Вычисление частичной подписи
-	assetBlind, err := hex.DecodeString(slate.ParticipantData[savedSlate.ParticipantID].AssetBlind)
+	assetBlind, err := hex.DecodeString(slate.ParticipantData[participantID].AssetBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot DecodeString")
 		return
@@ -233,7 +166,7 @@ func (t *Wallet) SignMultipartyFundingTransaction(slate *Slate, savedSlate *Save
 	partialSignatureString := hex.EncodeToString(partialSignatureBytes[:])
 
 	// Дополнение slate-ов частичными подписями
-	slate.ParticipantData[savedSlate.ParticipantID].PartSig = &partialSignatureString
+	slate.ParticipantData[participantID].PartSig = &partialSignatureString
 
 	slateBytes, err = json.Marshal(slate)
 	if err != nil {
@@ -244,7 +177,13 @@ func (t *Wallet) SignMultipartyFundingTransaction(slate *Slate, savedSlate *Save
 	return slateBytes, nil
 }
 
-func (t *Wallet) AggregateMultipartyFundingTransaction(value uint64, asset string, slate *Slate) (ledgerTxBytes []byte, walletTx *SavedTransaction, err error) {
+func (t *Wallet) AggregateMultipartyFundingTransaction(slates []*Slate) (ledgerTxBytes []byte, walletTx *SavedTransaction, err error) {
+	slate, err := t.combinePartiallySignedSlates(slates)
+	if err != nil {
+		err = errors.Wrap(err, "cannot combineSlates")
+		return
+	}
+
 	// Создаем общий выход
 	output, err := t.createMultipartyOutput(slate)
 	if err != nil {

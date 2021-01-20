@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/tyler-smith/go-bip32"
 
 	"github.com/olekukonko/tablewriter"
@@ -211,14 +212,14 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	return id, nil
 }
 
-func (t *Wallet) InitFundingTransaction(amount uint64, asset string) (slateBytes []byte, err error) {
+func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUID) (slateBytes []byte, err error) {
 	// пока для простоты предполагаем, что всегда есть output с нужной суммой
 	inputs, _, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, savedSlate, err := t.InitMultipartyFundingTransaction(&inputs[0], 0)
+	slateBytes, savedSlate, err := t.InitMultipartyFundingTransaction(&inputs[0], 0, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -231,49 +232,26 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string) (slateBytes
 	return
 }
 
-func (t *Wallet) ContributeFundingTransaction(amount uint64, asset string, inSlateBytes []byte) (slateBytes []byte, err error) {
-	// пока для простоты предполагаем, что всегда есть output с нужной суммой
-	inputs, _, err := t.db.GetInputs(amount, asset)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetInputs")
+func (t *Wallet) SignFundingTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
+	var slates = make([]*Slate, 0)
+	for _, slateBytes := range slatesBytes {
+		slate := &Slate{}
+		err = json.Unmarshal(slateBytes, slate)
+		if err != nil {
+			err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+			return nil, err
+		}
+		slates = append(slates, slate)
 	}
 
-	var inSlate = &Slate{}
-	err = json.Unmarshal(inSlateBytes, inSlate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
-		return
-	}
-
-	slateBytes, savedSlate, err := t.ContributeMultipartyFundingTransaction(&inputs[0], inSlate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
-	}
-
-	err = t.db.PutSenderSlate(savedSlate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
-	}
-
-	return
-}
-
-func (t *Wallet) SignFundingTransaction(inSlateBytes []byte) (slateBytes []byte, err error) {
-	var slate = &Slate{}
-	err = json.Unmarshal(inSlateBytes, slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
-		return
-	}
-
-	id, _ := slate.Transaction.ID.MarshalText()
+	id, _ := slates[0].Transaction.ID.MarshalText()
 
 	savedSlate, err := t.db.GetSenderSlate(id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	slateBytes, err = t.SignMultipartyFundingTransaction(slate, savedSlate)
+	slateBytes, err = t.SignMultipartyFundingTransaction(slates, savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -281,15 +259,19 @@ func (t *Wallet) SignFundingTransaction(inSlateBytes []byte) (slateBytes []byte,
 	return
 }
 
-func (t *Wallet) AggregateFundingTransaction(inSlateBytes []byte) (slateBytes []byte, err error) {
-	var slate = &Slate{}
-	err = json.Unmarshal(inSlateBytes, slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
-		return
+func (t *Wallet) AggregateFundingTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
+	var slates = make([]*Slate, 0)
+	for _, slateBytes := range slatesBytes {
+		slate := &Slate{}
+		err = json.Unmarshal(slateBytes, slate)
+		if err != nil {
+			err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+			return nil, err
+		}
+		slates = append(slates, slate)
 	}
 
-	slateBytes, _, err = t.AggregateMultipartyFundingTransaction(0, "", slate)
+	slateBytes, _, err = t.AggregateMultipartyFundingTransaction(slates)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot aggregateFundingTransaction")
 	}

@@ -8,6 +8,90 @@ import (
 	"github.com/pkg/errors"
 )
 
+func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, err error) {
+	// TODO: check slates
+
+	inputs := make([]SlateInput, 0)
+	participantDatas := make([]ParticipantData, 0)
+	var totalAmount ledger.Uint64
+	var totalOffset [32]byte
+	for i, slate := range slates {
+		inputs = append(inputs, slate.Transaction.Body.Inputs[0])
+		totalAmount += slate.Amount
+
+		participantData := slate.ParticipantData[0]
+		participantData.ID = ledger.Uint64(i)
+		participantDatas = append(participantDatas, participantData)
+
+		offset, err := hex.DecodeString(slate.Transaction.Offset)
+		if err != nil {
+			return nil, err
+		}
+
+		totalOffset, err = secp256k1.BlindSum(t.context, [][]byte{totalOffset[:], offset}, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fee := slates[0].Transaction.Body.Kernels[0].Fee
+	asset := slates[0].Asset
+	id := slates[0].Transaction.ID
+
+	aggregatedSlate = &Slate{
+		VersionInfo: VersionCompatInfo{
+			Version:            3,
+			OrigVersion:        3,
+			BlockHeaderVersion: 2,
+		},
+		NumParticipants: uint(len(slates)),
+		Transaction: SlateTransaction{
+			ID:     id,
+			Offset: hex.EncodeToString(totalOffset[:]),
+			Body: SlateTransactionBody{
+				Inputs:  inputs,
+				Outputs: nil,
+				Kernels: []ledger.TxKernel{{
+					Features:   ledger.PlainKernel,
+					Fee:        fee,
+					LockHeight: 0,
+					Excess:     "000000000000000000000000000000000000000000000000000000000000000000",
+					ExcessSig:  "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				}},
+			},
+		},
+		Amount:          totalAmount,
+		Fee:             fee,
+		Height:          0,
+		LockHeight:      0,
+		ParticipantData: participantDatas,
+		Asset:           asset,
+	}
+	return
+}
+
+func (t *Wallet) findPartialSignature(slates []*Slate, publicBlind string) (partialSignature *string, err error) {
+	for _, slate := range slates {
+		for _, participantData := range slate.ParticipantData {
+			if participantData.PublicBlind == publicBlind && participantData.PartSig != nil {
+				return participantData.PartSig, nil
+			}
+		}
+	}
+	return nil, errors.New("cannot find partial signature")
+}
+
+func (t *Wallet) combinePartiallySignedSlates(slates []*Slate) (slate *Slate, err error) {
+	slate = slates[0]
+	for i, participantData := range slate.ParticipantData {
+		slate.ParticipantData[i].PartSig, err = t.findPartialSignature(slates, participantData.PublicBlind)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return
+}
+
 func (t *Wallet) aggregatePartialSignatures(slate *Slate) (signature secp256k1.AggsigSignature, err error) {
 	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := t.extractParticipantData(slate)
 	if err != nil {

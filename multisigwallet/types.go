@@ -134,10 +134,9 @@ type VersionCompatInfo struct {
 
 type SavedSlate struct {
 	Slate
-	ParticipantID ledger.Uint64 `json:"participant_id"`
-	Blind         [32]byte      `json:"blind,omitempty"`
-	ExcessBlind   [32]byte      `json:"excess_blind,omitempty"`
-	Nonce         [32]byte      `json:"nonce,omitempty"`
+	Blind       [32]byte `json:"blind,omitempty"`
+	ExcessBlind [32]byte `json:"excess_blind,omitempty"`
+	Nonce       [32]byte `json:"nonce,omitempty"`
 }
 
 type SlateTransactionBody struct {
