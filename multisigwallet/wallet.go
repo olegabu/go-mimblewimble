@@ -214,12 +214,12 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 
 func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUID) (slateBytes []byte, err error) {
 	// пока для простоты предполагаем, что всегда есть output с нужной суммой
-	inputs, _, err := t.db.GetInputs(amount, asset)
+	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, savedSlate, err := t.InitMultipartyFundingTransaction(&inputs[0], 0, id)
+	slateBytes, savedSlate, err := t.InitMultipartyFundingTransaction(amount, inputs, change, 0, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}

@@ -10,8 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64, id uuid.UUID) (slateBytes []byte, savedSlate *SavedSlate, err error) {
-	blind, assetBlind, offset, blindExcess, nonce, err := t.generatePartialData(input)
+func (t *Wallet) InitMultipartyFundingTransaction(amount uint64, inputs []SavedOutput, change uint64, fee uint64, id uuid.UUID) (slateBytes []byte, savedSlate *SavedSlate, err error) {
+	blind, assetBlind, offset, blindExcess, nonce, changeOutput, err := t.generatePartialData(inputs, change)
 	if err != nil {
 		err = errors.Wrap(err, "cannot generatePartialData")
 		return
@@ -27,19 +27,23 @@ func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64
 	publicBlindExcess := commits[1]
 	publicNonce := commits[2]
 
-	inputAssetBlind, err := t.secret(input.AssetIndex)
-	if err != nil {
-		err = errors.Wrap(err, "cannot get input's asset blind")
-	}
+	slateInputs := make([]SlateInput, 0)
+	for _, input := range inputs {
+		inputAssetBlind, err := t.secret(input.AssetIndex)
+		if err != nil {
+			err = errors.Wrap(err, "cannot get input's asset blind")
+		}
 
-	slateInput := SlateInput{
-		Input: ledger.Input{
-			Features:    input.Features,
-			Commit:      input.Commit,
-			AssetCommit: input.AssetCommit,
-		},
-		AssetTag:   input.AssetTag,
-		AssetBlind: hex.EncodeToString(inputAssetBlind[:]),
+		slateInput := SlateInput{
+			Input: ledger.Input{
+				Features:    input.Features,
+				Commit:      input.Commit,
+				AssetCommit: input.AssetCommit,
+			},
+			AssetTag:   input.AssetTag,
+			AssetBlind: hex.EncodeToString(inputAssetBlind[:]),
+		}
+		slateInputs = append(slateInputs, slateInput)
 	}
 
 	slate := &Slate{
@@ -53,8 +57,8 @@ func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64
 			ID:     id,
 			Offset: hex.EncodeToString(offset[:]),
 			Body: SlateTransactionBody{
-				Inputs:  []SlateInput{slateInput},
-				Outputs: nil,
+				Inputs:  slateInputs,
+				Outputs: []SlateOutput{changeOutput.SlateOutput},
 				Kernels: []ledger.TxKernel{{
 					Features:   ledger.PlainKernel,
 					Fee:        ledger.Uint64(fee),
@@ -64,13 +68,13 @@ func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64
 				}},
 			},
 		},
-		Amount:     ledger.Uint64(input.Value),
+		Amount:     ledger.Uint64(amount),
 		Fee:        ledger.Uint64(fee),
 		Height:     0,
 		LockHeight: 0,
 		ParticipantData: []ParticipantData{{
 			ID:                0,
-			Value:             ledger.Uint64(input.Value),
+			Value:             ledger.Uint64(amount),
 			PublicBlind:       publicBlind.String(),
 			AssetBlind:        hex.EncodeToString(assetBlind[:]),
 			PublicBlindExcess: publicBlindExcess.String(),
@@ -79,7 +83,7 @@ func (t *Wallet) InitMultipartyFundingTransaction(input *SavedOutput, fee uint64
 			Message:           nil,
 			MessageSig:        nil,
 		}},
-		Asset: input.Asset,
+		Asset: inputs[0].Asset,
 	}
 
 	savedSlate = &SavedSlate{
@@ -190,7 +194,7 @@ func (t *Wallet) AggregateMultipartyFundingTransaction(slates []*Slate) (ledgerT
 		err = errors.Wrap(err, "cannot createMultipartyOutput")
 		return
 	}
-	slate.Transaction.Body.Outputs = []SlateOutput{*output}
+	slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, *output)
 
 	// Формируем общую подпись
 	signature, err := t.aggregatePartialSignatures(slate)

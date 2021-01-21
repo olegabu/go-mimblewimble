@@ -12,11 +12,13 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 	// TODO: check slates
 
 	inputs := make([]SlateInput, 0)
+	outputs := make([]SlateOutput, 0)
 	participantDatas := make([]ParticipantData, 0)
 	var totalAmount ledger.Uint64
 	var totalOffset [32]byte
 	for i, slate := range slates {
-		inputs = append(inputs, slate.Transaction.Body.Inputs[0])
+		inputs = append(inputs, slate.Transaction.Body.Inputs...)
+		outputs = append(outputs, slate.Transaction.Body.Outputs...)
 		totalAmount += slate.Amount
 
 		participantData := slate.ParticipantData[0]
@@ -50,7 +52,7 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 			Offset: hex.EncodeToString(totalOffset[:]),
 			Body: SlateTransactionBody{
 				Inputs:  inputs,
-				Outputs: nil,
+				Outputs: outputs,
 				Kernels: []ledger.TxKernel{{
 					Features:   ledger.PlainKernel,
 					Fee:        fee,
@@ -423,12 +425,13 @@ func (t *Wallet) newOutput(
 	return
 }
 
-func (t *Wallet) generatePartialData(input *SavedOutput) (
+func (t *Wallet) generatePartialData(inputs []SavedOutput, change uint64) (
 	blind [32]byte,
 	assetBlind [32]byte,
 	offset [32]byte,
 	blindExcess [32]byte,
 	nonce [32]byte,
+	changeOutput *SavedOutput,
 	err error,
 ) {
 	// generate partial output blind
@@ -455,27 +458,33 @@ func (t *Wallet) generatePartialData(input *SavedOutput) (
 	}
 
 	// compute excess blinding factor
-	inputBlind, err := t.secret(input.Index)
+	inputsBlindValueAssetBlinds := make([][]byte, 0)
+	for _, input := range inputs {
+		blindValueAssetBlind, e := t.getBlindValueAssetBlind(input)
+		if e != nil {
+			err = errors.Wrap(e, "cannot getBlindValueAssetBlind")
+			return
+		}
+		inputsBlindValueAssetBlinds = append(inputsBlindValueAssetBlinds, blindValueAssetBlind[:])
+	}
+
+	// create change output and remember its blinding factor
+	if change > 0 {
+		changeOutput, _, err = t.newOutput(change, ledger.PlainOutput, inputs[0].Asset, OutputUnconfirmed)
+		if err != nil {
+			err = errors.Wrap(err, "cannot create change output")
+			return
+		}
+	}
+
+	changeBlindValueAssetBlinds, err := t.getBlindValueAssetBlind(*changeOutput)
 	if err != nil {
-		err = errors.Wrap(err, "cannot get input blind")
+		err = errors.Wrap(err, "cannot getBlindValueAssetBlind")
 		return
 	}
 
-	// compute excess blinding factor
-	inputAssetBlind, err := t.secret(input.AssetIndex)
-	if err != nil {
-		err = errors.Wrap(err, "cannot get input asset blind")
-		return
-	}
-
-	// x = change - input - offset (now change = 0)
-	blindValueAssetBlind, err := secp256k1.BlindValueGeneratorBlindSum(input.Value, inputAssetBlind[:], inputBlind[:])
-	if err != nil {
-		err = errors.Wrap(err, "cannot BlindSum")
-		return
-	}
-
-	blindExcess, err = secp256k1.BlindSum(t.context, nil, [][]byte{blindValueAssetBlind[:], offset[:]})
+	// x = change - inputs - offset (now change = 0)
+	blindExcess, err = secp256k1.BlindSum(t.context, [][]byte{changeBlindValueAssetBlinds[:]}, append(inputsBlindValueAssetBlinds, offset[:]))
 	if err != nil {
 		err = errors.Wrap(err, "cannot BlindSum")
 		return
@@ -485,6 +494,28 @@ func (t *Wallet) generatePartialData(input *SavedOutput) (
 	nonce, err = t.nonce()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
+		return
+	}
+	return
+}
+
+// blind + v * assetBlind
+func (t *Wallet) getBlindValueAssetBlind(output SavedOutput) (blindValueAssetBlind [32]byte, err error) {
+	outputBlind, err := t.secret(output.Index)
+	if err != nil {
+		err = errors.Wrap(err, "cannot get input blind")
+		return
+	}
+
+	outputAssetBlind, err := t.secret(output.AssetIndex)
+	if err != nil {
+		err = errors.Wrap(err, "cannot get input asset blind")
+		return
+	}
+
+	blindValueAssetBlind, err = secp256k1.BlindValueGeneratorBlindSum(output.Value, outputAssetBlind[:], outputBlind[:])
+	if err != nil {
+		err = errors.Wrap(err, "cannot BlindSum")
 		return
 	}
 	return

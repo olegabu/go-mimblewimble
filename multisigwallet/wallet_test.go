@@ -23,7 +23,7 @@ func TestCreateMultipartyUtxo(t *testing.T) {
 		wallet := newTestWallet(t, strconv.Itoa(i))
 		defer wallet.Close()
 
-		_, err := wallet.Issue(amount, asset)
+		_, err := wallet.Issue(amount+5, asset)
 		assert.NoError(t, err)
 
 		wallets = append(wallets, wallet)
