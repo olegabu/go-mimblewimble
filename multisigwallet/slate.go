@@ -267,8 +267,7 @@ func (t *Wallet) createMultipartyOutput(slate *Slate) (output *SlateOutput, err 
 		return
 	}
 
-	// TODO: bulletproofs mpc
-	proof, err := t.aggregateProof(slate)
+	proof, err := t.aggregateProof(slate, commit, assetCommit)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateProof")
 		return
