@@ -46,6 +46,12 @@ func (t *Wallet) InitMultipartyFundingTransaction(amount uint64, inputs []SavedO
 		slateInputs = append(slateInputs, slateInput)
 	}
 
+	bulletproofsShare, err := t.generatePublicTaus(blind[:])
+	if err != nil {
+		err = errors.Wrap(err, "cannot generatePublicTaus")
+		return
+	}
+
 	slate := &Slate{
 		VersionInfo: VersionCompatInfo{
 			Version:            3,
@@ -82,6 +88,7 @@ func (t *Wallet) InitMultipartyFundingTransaction(amount uint64, inputs []SavedO
 			PartSig:           nil,
 			Message:           nil,
 			MessageSig:        nil,
+			BulletproofsShare: bulletproofsShare,
 		}},
 		Asset: inputs[0].Asset,
 	}
@@ -171,6 +178,13 @@ func (t *Wallet) SignMultipartyFundingTransaction(slates []*Slate, savedSlate *S
 
 	// Дополнение slate-ов частичными подписями
 	slate.ParticipantData[participantID].PartSig = &partialSignatureString
+
+	taux, err := t.computeTaux(savedSlate.Blind[:], assetBlind[:], slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot computeTaux")
+		return
+	}
+	slate.ParticipantData[participantID].BulletproofsShare.Taux = hex.EncodeToString(taux)
 
 	slateBytes, err = json.Marshal(slate)
 	if err != nil {

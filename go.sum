@@ -221,6 +221,8 @@ github.com/olegabu/go-secp256k1-zkp v0.3.1 h1:exrEWHlVHk6BXy7qw7PoL4EhQJBk9Kyjok
 github.com/olegabu/go-secp256k1-zkp v0.3.1/go.mod h1:Kqq/VAyZhN/NItV2Ueag5oeOM5hCZ2TGdQScnXjKEhM=
 github.com/olegabu/go-secp256k1-zkp v0.4.0 h1:aRKxCGb8JTPNR7KoUvDqnx/MhtTPKHbTU6KUK8BnLfU=
 github.com/olegabu/go-secp256k1-zkp v0.4.0/go.mod h1:Kqq/VAyZhN/NItV2Ueag5oeOM5hCZ2TGdQScnXjKEhM=
+github.com/olegabu/go-secp256k1-zkp v0.4.1-0.20210125112355-0ad0597bebe4 h1:eqDbKriOY4s1/+XFspgAB676EpCmRcdCdzS+P9SYBMM=
+github.com/olegabu/go-secp256k1-zkp v0.4.1-0.20210125112355-0ad0597bebe4/go.mod h1:Kqq/VAyZhN/NItV2Ueag5oeOM5hCZ2TGdQScnXjKEhM=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
 github.com/olekukonko/tablewriter v0.0.2 h1:sq53g+DWf0J6/ceFUHpQ0nAEb6WgM++fq16MZ91cS6o=
 github.com/olekukonko/tablewriter v0.0.2/go.mod h1:rSAaSIOAGT9odnlyGlUfAJaoc5w2fSBUmeGDbRWPxyQ=

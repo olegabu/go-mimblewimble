@@ -1,6 +1,7 @@
 package multisigwallet
 
 import (
+	"encoding/json"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -9,8 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/olegabu/go-mimblewimble/abci"
-	"github.com/pkg/errors"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,11 +44,14 @@ func TestCreateMultipartyUtxo(t *testing.T) {
 		partiallySignedSlates = append(partiallySignedSlates, slate)
 	}
 
-	_, err := wallets[0].AggregateFundingTransaction(partiallySignedSlates)
+	transactionBytes, err := wallets[0].AggregateFundingTransaction(partiallySignedSlates)
 	assert.NoError(t, err)
 
-	//err = broadcast(t, transaction)
-	//assert.NoError(t, err)
+	var transaction ledger.Transaction
+	err = json.Unmarshal(transactionBytes, &transaction)
+	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
 }
 
 func testDbDir(userName string) string {
@@ -68,19 +71,5 @@ func newTestWallet(t *testing.T, userName string) (w *Wallet) {
 	_, err = w.InitMasterKey("")
 	assert.NoError(t, err)
 
-	return
-}
-
-func broadcast(t *testing.T, transactionBytes []byte) (err error) {
-	client, err := abci.NewClient("tcp://0.0.0.0:26657")
-	if err != nil {
-		return errors.Wrap(err, "cannot get new client")
-	}
-	defer client.Stop()
-
-	err = client.Broadcast(transactionBytes)
-	if err != nil {
-		return errors.Wrap(err, "cannot client.Broadcast")
-	}
 	return
 }

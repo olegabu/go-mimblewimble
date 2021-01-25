@@ -72,11 +72,11 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 	return
 }
 
-func (t *Wallet) findPartialSignature(slates []*Slate, publicBlind string) (partialSignature *string, err error) {
+func (t *Wallet) findCorrespondingParticipantData(slates []*Slate, publicBlind string) (slate *ParticipantData, err error) {
 	for _, slate := range slates {
 		for _, participantData := range slate.ParticipantData {
 			if participantData.PublicBlind == publicBlind && participantData.PartSig != nil {
-				return participantData.PartSig, nil
+				return &participantData, nil
 			}
 		}
 	}
@@ -86,7 +86,9 @@ func (t *Wallet) findPartialSignature(slates []*Slate, publicBlind string) (part
 func (t *Wallet) combinePartiallySignedSlates(slates []*Slate) (slate *Slate, err error) {
 	slate = slates[0]
 	for i, participantData := range slate.ParticipantData {
-		slate.ParticipantData[i].PartSig, err = t.findPartialSignature(slates, participantData.PublicBlind)
+		correspondingParticipantData, err := t.findCorrespondingParticipantData(slates, participantData.PublicBlind)
+		slate.ParticipantData[i].PartSig = correspondingParticipantData.PartSig
+		slate.ParticipantData[i].BulletproofsShare.Taux = correspondingParticipantData.BulletproofsShare.Taux
 		if err != nil {
 			return nil, err
 		}
@@ -205,21 +207,26 @@ func (t *Wallet) aggregatePartialSignatures(slate *Slate) (signature secp256k1.A
 	return
 }
 
-func (t *Wallet) createMultipartyOutput(slate *Slate) (output *SlateOutput, err error) {
+func (t *Wallet) computeMultipartyCommit(slate *Slate) (
+	commit *secp256k1.Commitment,
+	assetCommit *secp256k1.Generator,
+	assetTag *secp256k1.FixedAssetTag,
+	aggregatedAssetBlind [32]byte,
+	err error,
+) {
 	publicBlinds, _, _, _, err := t.extractParticipantData(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot extractParticipantData")
 		return
 	}
 
-	var aggregatedAssetBlind [32]byte // Не уверен на счет корректности этого
 	for _, party := range slate.ParticipantData {
 		assetBlind, e := hex.DecodeString(party.AssetBlind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot DecodeString")
 			return
 		}
-		aggregatedAssetBlind, e = secp256k1.BlindSum(t.context, [][]byte{aggregatedAssetBlind[:], assetBlind}, nil)
+		aggregatedAssetBlind, e = secp256k1.BlindSum(t.context, [][]byte{aggregatedAssetBlind[:], assetBlind}, nil) // Не уверен на счет корректности этого
 		if e != nil {
 			err = errors.Wrap(e, "cannot BlindSum")
 			return
@@ -227,19 +234,19 @@ func (t *Wallet) createMultipartyOutput(slate *Slate) (output *SlateOutput, err 
 	}
 
 	seed := ledger.AssetSeed(slate.Asset)
-	assetTag, err := secp256k1.FixedAssetTagParse(seed)
+	assetTag, err = secp256k1.FixedAssetTagParse(seed)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get assetTag")
 		return
 	}
 
-	assetCommit, err := secp256k1.GeneratorGenerateBlinded(t.context, assetTag.Slice(), aggregatedAssetBlind[:])
+	assetCommit, err = secp256k1.GeneratorGenerateBlinded(t.context, assetTag.Slice(), aggregatedAssetBlind[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot create commitment to asset")
 		return
 	}
 
-	commit, err := secp256k1.Commit(t.context, new([32]byte)[:], uint64(slate.Amount), assetCommit, &secp256k1.GeneratorG)
+	commit, err = secp256k1.Commit(t.context, new([32]byte)[:], uint64(slate.Amount), assetCommit, &secp256k1.GeneratorG)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create commitment to value")
 		return
@@ -250,25 +257,22 @@ func (t *Wallet) createMultipartyOutput(slate *Slate) (output *SlateOutput, err 
 		err = errors.Wrap(err, "cannot CommitSum")
 		return
 	}
+	return
+}
+
+func (t *Wallet) createMultipartyOutput(slate *Slate) (output *SlateOutput, err error) {
+	commit, assetCommit, assetTag, aggregatedAssetBlind, err := t.computeMultipartyCommit(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot computeMultipartyCommit")
+		return
+	}
 
 	// TODO: bulletproofs mpc
-	proof := new([32]byte)[:]
-	// create range proof to value with blinded H: assetCommitment
-	// proof, err := secp256k1.BulletproofRangeproofProveSingleCustomGen(
-	// 	t.context,
-	// 	nil,
-	// 	nil,
-	// 	value,
-	// 	blind,
-	// 	blind,
-	// 	nil,
-	// 	nil,
-	// 	nil,
-	// 	assetCommitment)
-	// if err != nil {
-	// 	err = errors.Wrap(err, "cannot create bulletproof")
-	// 	return
-	// }
+	proof, err := t.aggregateProof(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot aggregateProof")
+		return
+	}
 
 	output = &SlateOutput{
 		Output: ledger.Output{
