@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/tyler-smith/go-bip32"
@@ -15,9 +16,21 @@ const mnemonicPassword = ""
 const masterKeyFilename = "master.key"
 const entropyBitSize = 128
 
+func hashSha256(data []byte) ([]byte, error) {
+	hasher := sha256.New()
+	_, err := hasher.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	return hasher.Sum(nil), nil
+}
+
 func (t *Wallet) nonce() (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
-	rnd32, err = secp256k1.AggsigGenerateSecureNonce(t.context, seed32[:])
+	//rnd32, err = secp256k1.AggsigGenerateSecureNonce(t.context, seed32[:])
+	hash, err := hashSha256(seed32[:])
+	if err != nil { return }
+	copy(rnd32[:], hash)
 	return
 }
 
@@ -192,10 +205,12 @@ func (t *Wallet) secret(index uint32) (secret [32]byte, err error) {
 		return [32]byte{}, errors.Wrap(err, "cannot Serialize childKey")
 	}
 
-	secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
+	//secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
+	hash, err := hashSha256(childKeyBytes)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot AggsigGenerateSecureNonce from childKeyBytes")
 	}
+	copy(secret[:], hash)
 
 	return
 }

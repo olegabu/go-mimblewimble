@@ -51,7 +51,7 @@ func MultiplyValueAssetGenerator(value uint64, asset string) (com *secp256k1.Com
 		return
 	}
 
-	com, err = secp256k1.Commit(context, zero, value, assetCommitment, &secp256k1.GeneratorG)
+	com, err = secp256k1.Commit(context, zero, value, assetCommitment)
 	if err != nil {
 		err = errors.Wrap(err, "cannot Commit")
 		return
@@ -103,7 +103,7 @@ func ValidateIssue(issue *Issue) error {
 
 	// commit to issue value with zero blind 0*G + V*H
 	valueBlind := [32]byte{} // zero
-	valueCommit, err := secp256k1.Commit(context, valueBlind[:], issue.Value, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	valueCommit, err := secp256k1.Commit(context, valueBlind[:], issue.Value, &secp256k1.GeneratorH)
 	if err != nil {
 		return errors.Wrap(err, "cannot Commit")
 	}
@@ -251,14 +251,11 @@ func validateSignature(context *secp256k1.Context, tx *Transaction) error {
 
 	kernel := tx.Body.Kernels[0]
 
-	excessSigBytes, err := hex.DecodeString(kernel.ExcessSig)
+	excessSig, err := hex.DecodeString(kernel.ExcessSig)
 	if err != nil {
 		return errors.Wrap(err, "cannot decode hex ExcessSig")
 	}
-	excessSig, err := secp256k1.AggsigSignatureParse(context, excessSigBytes)
-	if err != nil {
-		return errors.Wrap(err, "cannot parse compact ExcessSig")
-	}
+	excessSchnorrsig := secp256k1.SchnorrsigParse(excessSig[:])
 
 	excessBytes, err := hex.DecodeString(kernel.Excess)
 	if err != nil {
@@ -272,20 +269,21 @@ func validateSignature(context *secp256k1.Context, tx *Transaction) error {
 	if err != nil {
 		return errors.Wrap(err, "CommitmentToPublicKey failed")
 	}
+	excessCommitmentXOPK, _, err := secp256k1.XonlyPubkeyFromPubkey(context, excessCommitmentAsPublicKey)
+	if err != nil {
+		return errors.Wrap(err, "excessCommitmentAsPublicKey to XonlyPubkey failed")
+	}
 
 	msg := KernelSignatureMessage(kernel)
 
-	err = secp256k1.AggsigVerifySingle(
+	err = secp256k1.SchnorrsigVerify(
 		context,
-		excessSig,
+		excessSchnorrsig,
 		msg,
-		nil,
-		excessCommitmentAsPublicKey,
-		excessCommitmentAsPublicKey,
-		nil,
-		false)
+		excessCommitmentXOPK,
+	)
 	if err != nil {
-		return errors.Wrap(err, "AggsigVerifySingle failed")
+		return errors.Wrap(err, "signature verification failed")
 	}
 
 	return nil
@@ -328,7 +326,7 @@ func CalculateExcess(
 	if fee != 0 {
 		//TODO validator needs to save his fee output
 		feeBlind := [32]byte{} // zero
-		feeCommitment, err := secp256k1.Commit(context, feeBlind[:], fee, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+		feeCommitment, err := secp256k1.Commit(context, feeBlind[:], fee, &secp256k1.GeneratorH)
 		if err != nil {
 			return nil, errors.Wrap(err, "error calculating fee commitment")
 		}
@@ -342,7 +340,7 @@ func CalculateExcess(
 	}
 
 	// add kernel offset to inputs
-	kernelOffset, err := secp256k1.Commit(context, offsetBytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	kernelOffset, err := secp256k1.Commit(context, offsetBytes, 0, &secp256k1.GeneratorH)
 	if err != nil {
 		return nil, errors.Wrap(err, "error calculating offset commitment")
 	}

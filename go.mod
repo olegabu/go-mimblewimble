@@ -2,7 +2,7 @@ module github.com/olegabu/go-mimblewimble
 
 go 1.14
 
-//replace github.com/olegabu/go-secp256k1-zkp => ../go-secp256k1-zkp
+replace github.com/olegabu/go-secp256k1-zkp => ../go-secp256k1-zkp
 
 require (
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect

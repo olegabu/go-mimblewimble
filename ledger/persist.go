@@ -50,7 +50,7 @@ func PersistTransaction(tx *Transaction, db Database, doublespend bool) error {
 	}
 
 	offsetBytes, _ := hex.DecodeString(tx.Offset)
-	kernelOffset, err := secp256k1.Commit(context, offsetBytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	kernelOffset, err := secp256k1.Commit(context, offsetBytes, 0, &secp256k1.GeneratorH)
 	if err != nil {
 		return errors.Wrap(err, "cannot Commit")
 	}
