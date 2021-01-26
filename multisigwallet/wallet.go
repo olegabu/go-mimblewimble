@@ -213,15 +213,21 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 }
 
 func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUID) (slateBytes []byte, err error) {
-	// пока для простоты предполагаем, что всегда есть output с нужной суммой
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, savedSlate, err := t.InitMultipartyFundingTransaction(amount, inputs, change, 0, id)
+	slateBytes, savedSlate, outputs, err := t.InitMultipartyFundingTransaction(amount, inputs, change, 0, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
+	}
+
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
 	}
 
 	err = t.db.PutSenderSlate(savedSlate)
@@ -259,7 +265,7 @@ func (t *Wallet) SignFundingTransaction(slatesBytes [][]byte) (slateBytes []byte
 	return
 }
 
-func (t *Wallet) AggregateFundingTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
+func (t *Wallet) AggregateFundingTransaction(slatesBytes [][]byte) (txBytes []byte, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
 		slate := &Slate{}
@@ -271,10 +277,31 @@ func (t *Wallet) AggregateFundingTransaction(slatesBytes [][]byte) (slateBytes [
 		slates = append(slates, slate)
 	}
 
-	slateBytes, _, err = t.AggregateMultipartyFundingTransaction(slates)
+	id, _ := slates[0].Transaction.ID.MarshalText()
+
+	savedSlate, err := t.db.GetSenderSlate(id)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetSlate")
+	}
+
+	txBytes, walletTx, multipartyOutput, err := t.AggregateMultipartyFundingTransaction(slates, savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot aggregateFundingTransaction")
 	}
 
+	err = t.db.PutTransaction(walletTx)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutTransaction")
+	}
+
+	err = t.db.PutOutput(*multipartyOutput)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutOutput")
+	}
+
 	return
+}
+
+func (t *Wallet) Confirm(transactionID []byte) error {
+	return t.db.Confirm(transactionID)
 }

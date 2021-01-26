@@ -8,6 +8,35 @@ import (
 	"github.com/pkg/errors"
 )
 
+func (t *Wallet) newTransaction(slate *Slate, kernelExcess string, excessSignature string) (tx ledger.Transaction, err error) {
+	tx = ledger.Transaction{
+		Offset: slate.Transaction.Offset,
+		ID:     slate.Transaction.ID,
+		Body: ledger.TransactionBody{
+			Kernels: []ledger.TxKernel{
+				{
+					Excess:    kernelExcess,
+					ExcessSig: excessSignature,
+				},
+			},
+		},
+	}
+
+	for _, o := range slate.Transaction.Body.Inputs {
+		tx.Body.Inputs = append(tx.Body.Inputs, o.Input)
+	}
+
+	for _, o := range slate.Transaction.Body.Outputs {
+		e := t.addSurjectionProof(&o, slate.Transaction.Body.Inputs, slate.Asset)
+		if e != nil {
+			err = errors.Wrap(e, "cannot addSurjectionProof")
+			return
+		}
+		tx.Body.Outputs = append(tx.Body.Outputs, o.Output)
+	}
+	return
+}
+
 func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, err error) {
 	// TODO: check slates
 
@@ -430,7 +459,9 @@ func (t *Wallet) newOutput(
 
 func (t *Wallet) generatePartialData(inputs []SavedOutput, change uint64) (
 	blind [32]byte,
+	blindIndex uint32,
 	assetBlind [32]byte,
+	assetBlindIndex uint32,
 	offset [32]byte,
 	blindExcess [32]byte,
 	nonce [32]byte,
@@ -438,20 +469,18 @@ func (t *Wallet) generatePartialData(inputs []SavedOutput, change uint64) (
 	err error,
 ) {
 	// generate partial output blind
-	secret, _, err := t.newSecret()
+	blind, blindIndex, err = t.newSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
-	blind = secret
 
 	// generate partial output asset blind
-	secret, _, err = t.newSecret()
+	assetBlind, assetBlindIndex, err = t.newSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
-	assetBlind = secret
 
 	// generate random offset
 	offset, err = t.nonce()

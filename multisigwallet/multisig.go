@@ -10,12 +10,25 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) InitMultipartyFundingTransaction(amount uint64, inputs []SavedOutput, change uint64, fee uint64, id uuid.UUID) (slateBytes []byte, savedSlate *SavedSlate, err error) {
-	blind, assetBlind, offset, blindExcess, nonce, changeOutput, err := t.generatePartialData(inputs, change)
+func (t *Wallet) InitMultipartyFundingTransaction(
+	amount uint64,
+	inputs []SavedOutput,
+	change uint64,
+	fee uint64,
+	id uuid.UUID,
+) (
+	slateBytes []byte,
+	savedSlate *SavedSlate,
+	walletOutputs []SavedOutput,
+	err error,
+) {
+	blind, blindIndex, assetBlind, assetBlindIndex, offset, blindExcess, nonce, changeOutput, err := t.generatePartialData(inputs, change)
 	if err != nil {
 		err = errors.Wrap(err, "cannot generatePartialData")
 		return
 	}
+
+	walletOutputs = []SavedOutput{*changeOutput}
 
 	commits, err := t.commitsFromSecrets(blind[:], blindExcess[:], nonce[:])
 	if err != nil {
@@ -94,10 +107,11 @@ func (t *Wallet) InitMultipartyFundingTransaction(amount uint64, inputs []SavedO
 	}
 
 	savedSlate = &SavedSlate{
-		Slate:       *slate,
-		Nonce:       nonce,
-		Blind:       blind,
-		ExcessBlind: blindExcess,
+		Slate:           *slate,
+		Nonce:           nonce,
+		BlindIndex:      blindIndex,
+		AssetBlindIndex: assetBlindIndex,
+		ExcessBlind:     blindExcess,
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -109,7 +123,13 @@ func (t *Wallet) InitMultipartyFundingTransaction(amount uint64, inputs []SavedO
 	return
 }
 
-func (t *Wallet) SignMultipartyFundingTransaction(slates []*Slate, savedSlate *SavedSlate) (slateBytes []byte, err error) {
+func (t *Wallet) SignMultipartyFundingTransaction(
+	slates []*Slate,
+	savedSlate *SavedSlate,
+) (
+	slateBytes []byte,
+	err error,
+) {
 	slate, err := t.combineInitialSlates(slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot combineSlates")
@@ -154,7 +174,13 @@ func (t *Wallet) SignMultipartyFundingTransaction(slates []*Slate, savedSlate *S
 		return
 	}
 
-	blindValueAssetBlind, err := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind[:], savedSlate.Blind[:])
+	blind, err := t.secret(savedSlate.BlindIndex)
+	if err != nil {
+		err = errors.Wrap(err, "cannot get blind")
+		return
+	}
+
+	blindValueAssetBlind, err := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind[:], blind[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot BlindValueGeneratorBlindSum")
 		return
@@ -179,7 +205,13 @@ func (t *Wallet) SignMultipartyFundingTransaction(slates []*Slate, savedSlate *S
 	// Дополнение slate-ов частичными подписями
 	slate.ParticipantData[participantID].PartSig = &partialSignatureString
 
-	taux, err := t.computeTaux(savedSlate.Blind[:], assetBlind[:], slate)
+	commit, assetCommit, _, _, err := t.computeMultipartyCommit(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot computeMultipartyCommit")
+		return
+	}
+
+	taux, err := t.computeTaux(blind[:], assetBlind[:], slate, commit, assetCommit)
 	if err != nil {
 		err = errors.Wrap(err, "cannot computeTaux")
 		return
@@ -192,10 +224,18 @@ func (t *Wallet) SignMultipartyFundingTransaction(slates []*Slate, savedSlate *S
 		return
 	}
 
-	return slateBytes, nil
+	return
 }
 
-func (t *Wallet) AggregateMultipartyFundingTransaction(slates []*Slate) (ledgerTxBytes []byte, walletTx *SavedTransaction, err error) {
+func (t *Wallet) AggregateMultipartyFundingTransaction(
+	slates []*Slate,
+	savedSlate *SavedSlate,
+) (
+	ledgerTxBytes []byte,
+	walletTx SavedTransaction,
+	multipartyOutput *SavedOutput,
+	err error,
+) {
 	slate, err := t.combinePartiallySignedSlates(slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot combineSlates")
@@ -268,36 +308,30 @@ func (t *Wallet) AggregateMultipartyFundingTransaction(slates []*Slate) (ledgerT
 
 	excessSig := secp256k1.AggsigSignatureSerialize(t.context, &signature)
 
-	ledgerTx := ledger.Transaction{
-		Offset: slate.Transaction.Offset,
-		ID:     slate.Transaction.ID,
-		Body: ledger.TransactionBody{
-			Kernels: []ledger.TxKernel{
-				{
-					Excess:    kernelExcess.String(),
-					ExcessSig: hex.EncodeToString(excessSig[:]),
-				},
-			},
-		},
-	}
-
-	for _, o := range slate.Transaction.Body.Inputs {
-		ledgerTx.Body.Inputs = append(ledgerTx.Body.Inputs, o.Input)
-	}
-
-	for _, o := range slate.Transaction.Body.Outputs {
-		e := t.addSurjectionProof(&o, slate.Transaction.Body.Inputs, slate.Asset)
-		if e != nil {
-			err = errors.Wrap(e, "cannot addSurjectionProof")
-			return
-		}
-		ledgerTx.Body.Outputs = append(ledgerTx.Body.Outputs, o.Output)
+	ledgerTx, err := t.newTransaction(slate, kernelExcess.String(), hex.EncodeToString(excessSig[:]))
+	if err != nil {
+		err = errors.Wrap(err, "cannot newTransaction")
+		return
 	}
 
 	ledgerTxBytes, err = json.Marshal(ledgerTx)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal ledgerTx to json")
 		return
+	}
+
+	walletTx = SavedTransaction{
+		Transaction: ledgerTx,
+		Status:      TransactionUnconfirmed,
+	}
+
+	multipartyOutput = &SavedOutput{
+		SlateOutput: *output,
+		Value:       uint64(slate.Amount),
+		Index:       savedSlate.BlindIndex,
+		Asset:       slate.Asset,
+		AssetIndex:  savedSlate.AssetBlindIndex,
+		Status:      OutputUnconfirmed,
 	}
 
 	return

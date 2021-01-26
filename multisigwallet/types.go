@@ -143,9 +143,10 @@ type VersionCompatInfo struct {
 
 type SavedSlate struct {
 	Slate
-	Blind       [32]byte `json:"blind,omitempty"`
-	ExcessBlind [32]byte `json:"excess_blind,omitempty"`
-	Nonce       [32]byte `json:"nonce,omitempty"`
+	BlindIndex      uint32   `json:"blind_index,omitempty"`
+	AssetBlindIndex uint32   `json:"asset_blind_index,omitempty"`
+	ExcessBlind     [32]byte `json:"excess_blind,omitempty"`
+	Nonce           [32]byte `json:"nonce,omitempty"`
 }
 
 type SlateTransactionBody struct {

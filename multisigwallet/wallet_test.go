@@ -44,14 +44,27 @@ func TestCreateMultipartyUtxo(t *testing.T) {
 		partiallySignedSlates = append(partiallySignedSlates, slate)
 	}
 
-	transactionBytes, err := wallets[0].AggregateFundingTransaction(partiallySignedSlates)
-	assert.NoError(t, err)
+	var transactionBytes []byte
+	for i := 0; i < partiesCount; i++ {
+		var err error
+		transactionBytes, err = wallets[i].AggregateFundingTransaction(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
 
 	var transaction ledger.Transaction
-	err = json.Unmarshal(transactionBytes, &transaction)
+	err := json.Unmarshal(transactionBytes, &transaction)
 	assert.NoError(t, err)
 	err = ledger.ValidateTransaction(&transaction)
 	assert.NoError(t, err)
+
+	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < partiesCount; i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+		wallets[i].Print()
+	}
 }
 
 func testDbDir(userName string) string {

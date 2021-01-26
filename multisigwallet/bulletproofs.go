@@ -95,16 +95,10 @@ func (t *Wallet) aggregateParticipantsValues(slate *Slate) (
 	return
 }
 
-func (t *Wallet) computeTaux(blind []byte, assetBlind []byte, slate *Slate) (taux []byte, err error) {
+func (t *Wallet) computeTaux(blind []byte, assetBlind []byte, slate *Slate, commit *secp256k1.Commitment, assetCommit *secp256k1.Generator) (taux []byte, err error) {
 	sumPublicTau1, sumPublicTau2, _, err := t.aggregateParticipantsValues(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateParticipantsValues")
-		return
-	}
-
-	commit, assetCommit, _, _, err := t.computeMultipartyCommit(slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot computeMultipartyCommit")
 		return
 	}
 
