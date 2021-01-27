@@ -22,13 +22,13 @@ func (t *Wallet) initMultipartyTransaction(
 ) {
 	blind, blindIndex, assetBlind, assetBlindIndex, offset, blindExcess, nonce, changeOutput, err := t.preparePartyData(inputs, change)
 	if err != nil {
-		err = errors.Wrap(err, "cannot generatePartialData")
+		err = errors.Wrap(err, "cannot preparePartyData")
 		return
 	}
 
 	commits, err := commitsFromBlinds(t.context, blind[:], blindExcess[:], nonce[:])
 	if err != nil {
-		err = errors.Wrap(err, "cannot get commits from secrets")
+		err = errors.Wrap(err, "cannot get commits from blinds")
 		return
 	}
 
@@ -38,7 +38,7 @@ func (t *Wallet) initMultipartyTransaction(
 
 	slateInputs := make([]SlateInput, 0)
 	for _, input := range inputs {
-		inputAssetBlind, e := t.secret(input.AssetIndex)
+		inputAssetBlind, e := hex.DecodeString(input.SlateOutput.AssetBlind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot get input's asset blind")
 			return
@@ -193,9 +193,14 @@ func (t *Wallet) aggregateMultipartyTransaction(
 		return
 	}
 
-	newMultipartyUtxoIsNeccessary := slate.Amount > 0
+	signature, err := t.aggregatePartialSignatures(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot aggregatePartialSignatures")
+		return
+	}
 
 	var output *SlateOutput
+	newMultipartyUtxoIsNeccessary := slate.Amount > 0
 	if newMultipartyUtxoIsNeccessary {
 		output, err = t.createMultipartyOutput(slate)
 		if err != nil {
@@ -203,12 +208,6 @@ func (t *Wallet) aggregateMultipartyTransaction(
 			return
 		}
 		slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, *output)
-	}
-
-	signature, err := t.aggregatePartialSignatures(slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot aggregatePartialSignatures")
-		return
 	}
 
 	var inputCommitments, outputCommitments []*secp256k1.Commitment
@@ -384,63 +383,6 @@ func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64) (
 	return
 }
 
-func (t *Wallet) getSharedData(
-	slate *Slate,
-) (
-	publicBlinds []*secp256k1.Commitment,
-	publicBlindExcesses []*secp256k1.Commitment,
-	publicNonces []*secp256k1.Commitment,
-	publicValueAssetBlinds []*secp256k1.Commitment,
-	err error,
-) {
-	for _, party := range slate.ParticipantData {
-		publicBlindExcess, e := secp256k1.CommitmentFromString(party.PublicBlindExcess)
-		if e != nil {
-			err = errors.Wrap(e, "cannot CommitmentFromString")
-			return
-		}
-		publicBlindExcesses = append(publicBlindExcesses, publicBlindExcess)
-
-		publicNonce, e := secp256k1.CommitmentFromString(party.PublicNonce)
-		if e != nil {
-			err = errors.Wrap(e, "cannot CommitmentFromString")
-			return
-		}
-		publicNonces = append(publicNonces, publicNonce)
-
-		newMultipartyUtxoIsNeccessary := slate.Amount > 0
-		if newMultipartyUtxoIsNeccessary {
-			publicBlind, e := secp256k1.CommitmentFromString(party.PublicBlind)
-			if e != nil {
-				err = errors.Wrap(e, "cannot CommitmentFromString")
-				return
-			}
-			publicBlinds = append(publicBlinds, publicBlind)
-
-			assetBlind, e := hex.DecodeString(party.AssetBlind)
-			if e != nil {
-				err = errors.Wrap(e, "cannot DecodeString")
-				return
-			}
-
-			valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind, new([32]byte)[:])
-			if e != nil {
-				err = errors.Wrap(e, "cannot BlindValueGeneratorBlindSum")
-				return
-			}
-
-			publicValueAssetBlind, e := secp256k1.Commit(t.context, valueAssetBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
-			if e != nil {
-				err = errors.Wrap(e, "cannot Commit")
-				return
-			}
-			publicValueAssetBlinds = append(publicValueAssetBlinds, publicValueAssetBlind)
-		}
-	}
-	return
-}
-
-// TODO: refactoring
 func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, err error) {
 	// TODO: check slates
 
@@ -475,31 +417,11 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 
 	savedOutput, getOutputErr := t.db.GetOutput(slates[0].Transaction.Body.Inputs[0].Commit)
 	if getOutputErr == nil && savedOutput.IsMultiparty {
-		multipartyInput := slates[0].Transaction.Body.Inputs[0]
+		inputs = append(inputs, slates[0].Transaction.Body.Inputs[0])
 		totalAmount = slates[0].Amount
 		for i := 1; i < len(slates); i++ {
-			multipartyAssetBlind, e := hex.DecodeString(multipartyInput.AssetBlind)
-			if e != nil {
-				err = errors.Wrap(e, "cannot DecodeString")
-				return
-			}
-
-			currentAssetBlind, e := hex.DecodeString(slates[i].Transaction.Body.Inputs[0].AssetBlind)
-			if e != nil {
-				err = errors.Wrap(e, "cannot DecodeString")
-				return
-			}
-
-			sumAssetBlind, e := secp256k1.BlindSum(t.context, [][]byte{multipartyAssetBlind, currentAssetBlind}, nil)
-			if e != nil {
-				err = errors.Wrap(e, "cannot BlindSum")
-				return
-			}
-			multipartyInput.AssetBlind = hex.EncodeToString(sumAssetBlind[:])
-
 			totalAmount -= ledger.Uint64(savedOutput.Value) - slates[i].Amount
 		}
-		inputs = append(inputs, multipartyInput)
 	}
 
 	fee := slates[0].Transaction.Body.Kernels[0].Fee

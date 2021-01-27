@@ -34,15 +34,16 @@ func (t *Wallet) computeTaux(blind []byte, assetBlind []byte, slate *Slate) (tau
 		return
 	}
 
-	sumPublicTau1, sumPublicTau2, _, err := t.aggregateParticipantsValues(slate)
+	sumPublicTau1, sumPublicTau2, _, err := t.aggregatePartiesValues(slate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot aggregateParticipantsValues")
+		err = errors.Wrap(err, "cannot aggregatePartiesValues")
 		return
 	}
 
-	transactionID, err := slate.Transaction.ID.MarshalBinary()
+	// TODO: CHECK IT
+	transactionID, err := slate.Transaction.ID.MarshalText()
 	if err != nil {
-		err = errors.Wrap(err, "cannot MarshalBinary")
+		err = errors.Wrap(err, "cannot MarshalText")
 		return
 	}
 	commonNonce := sha256.New().Sum(transactionID)[:32]
@@ -57,15 +58,16 @@ func (t *Wallet) computeTaux(blind []byte, assetBlind []byte, slate *Slate) (tau
 }
 
 func (t *Wallet) aggregateProof(slate *Slate, commit *secp256k1.Commitment, assetCommit *secp256k1.Generator) (proof []byte, err error) {
-	sumPublicTau1, sumPublicTau2, sumTaux, err := t.aggregateParticipantsValues(slate)
+	sumPublicTau1, sumPublicTau2, sumTaux, err := t.aggregatePartiesValues(slate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot aggregateParticipantsValues")
+		err = errors.Wrap(err, "cannot aggregatePartiesValues")
 		return
 	}
 
-	transactionID, err := slate.Transaction.ID.MarshalBinary()
+	// TODO: CHECK IT
+	transactionID, err := slate.Transaction.ID.MarshalText()
 	if err != nil {
-		err = errors.Wrap(err, "cannot MarshalBinary")
+		err = errors.Wrap(err, "cannot MarshalText")
 		return
 	}
 	commonNonce := sha256.New().Sum(transactionID)[:32]
@@ -81,7 +83,7 @@ func (t *Wallet) aggregateProof(slate *Slate, commit *secp256k1.Commitment, asse
 	return
 }
 
-func (t *Wallet) aggregateParticipantsValues(slate *Slate) (
+func (t *Wallet) aggregatePartiesValues(slate *Slate) (
 	sumPublicTau1 *secp256k1.PublicKey,
 	sumPublicTau2 *secp256k1.PublicKey,
 	sumTaux [32]byte,
