@@ -116,11 +116,11 @@ func (t *Wallet) Info() (string, error) {
 	})
 
 	outputTable := tablewriter.NewWriter(tableString)
-	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key"})
+	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key", "multiparty"})
 	outputTable.SetCaption(true, "Outputs")
 	outputTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:4], strconv.Itoa(int(output.Index))})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:4], strconv.Itoa(int(output.Index)), strconv.FormatBool(output.IsMultiparty)})
 	}
 	outputTable.Render()
 	tableString.WriteByte('\n')
@@ -218,7 +218,7 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUI
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, savedSlate, outputs, err := t.InitMultipartyFundingTransaction(amount, inputs, change, 0, id)
+	slateBytes, savedSlate, outputs, err := t.InitMultipartyTransaction(inputs, change, 0, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -238,7 +238,33 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUI
 	return
 }
 
-func (t *Wallet) SignFundingTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
+func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutValue uint64, id uuid.UUID) (slateBytes []byte, err error) {
+	multipartyOutput, err := t.db.GetOutput(multipartyOutputCommit)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	slateBytes, savedSlate, outputs, err := t.InitMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, id)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
+	}
+
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
+	}
+
+	err = t.db.PutSenderSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	return
+}
+
+func (t *Wallet) SignTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
 		slate := &Slate{}
@@ -257,7 +283,7 @@ func (t *Wallet) SignFundingTransaction(slatesBytes [][]byte) (slateBytes []byte
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	slateBytes, err = t.SignMultipartyFundingTransaction(slates, savedSlate)
+	slateBytes, err = t.SignMultipartyTransaction(slates, savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -265,14 +291,14 @@ func (t *Wallet) SignFundingTransaction(slatesBytes [][]byte) (slateBytes []byte
 	return
 }
 
-func (t *Wallet) AggregateFundingTransaction(slatesBytes [][]byte) (txBytes []byte, err error) {
+func (t *Wallet) AggregateTransaction(slatesBytes [][]byte) (txBytes []byte, multipartyOutputCommit string, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
 		slate := &Slate{}
-		err = json.Unmarshal(slateBytes, slate)
-		if err != nil {
-			err = errors.Wrap(err, "cannot unmarshal json to inSlate")
-			return nil, err
+		e := json.Unmarshal(slateBytes, slate)
+		if e != nil {
+			err = errors.Wrap(e, "cannot unmarshal json to inSlate")
+			return
 		}
 		slates = append(slates, slate)
 	}
@@ -281,22 +307,27 @@ func (t *Wallet) AggregateFundingTransaction(slatesBytes [][]byte) (txBytes []by
 
 	savedSlate, err := t.db.GetSenderSlate(id)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetSlate")
+		err = errors.Wrap(err, "cannot GetSenderSlate")
+		return
 	}
 
-	txBytes, walletTx, multipartyOutput, err := t.AggregateMultipartyFundingTransaction(slates, savedSlate)
+	txBytes, walletTx, multipartyOutput, err := t.AggregateMultipartyTransaction(slates, savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot aggregateFundingTransaction")
+		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
+		return
 	}
 
 	err = t.db.PutTransaction(walletTx)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutTransaction")
+		err = errors.Wrap(err, "cannot PutTransaction")
+		return
 	}
 
+	multipartyOutputCommit = multipartyOutput.Commit
 	err = t.db.PutOutput(*multipartyOutput)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutOutput")
+		err = errors.Wrap(err, "cannot PutOutput")
+		return
 	}
 
 	return

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateMultipartyUtxo(t *testing.T) {
+func TestCreateAndSpendMultipartyUtxo(t *testing.T) {
 	partiesCount := 4
 	amount := uint64(100)
 	asset := "$"
@@ -39,15 +39,16 @@ func TestCreateMultipartyUtxo(t *testing.T) {
 
 	partiallySignedSlates := make([][]byte, 0)
 	for i := 0; i < partiesCount; i++ {
-		slate, err := wallets[i].SignFundingTransaction(slates)
+		slate, err := wallets[i].SignTransaction(slates)
 		assert.NoError(t, err)
 		partiallySignedSlates = append(partiallySignedSlates, slate)
 	}
 
 	var transactionBytes []byte
+	var multipartyOutputCommit string
 	for i := 0; i < partiesCount; i++ {
 		var err error
-		transactionBytes, err = wallets[i].AggregateFundingTransaction(partiallySignedSlates)
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateTransaction(partiallySignedSlates)
 		assert.NoError(t, err)
 	}
 
@@ -58,6 +59,41 @@ func TestCreateMultipartyUtxo(t *testing.T) {
 	assert.NoError(t, err)
 
 	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < partiesCount; i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+	}
+
+	id = uuid.New()
+	slates = make([][]byte, 0)
+	for i := 0; i < partiesCount; i++ {
+		payout := uint64(50)
+		slate, err := wallets[i].InitSpendingTransaction(multipartyOutputCommit, payout, id)
+		assert.NoError(t, err)
+		slates = append(slates, slate)
+	}
+
+	partiallySignedSlates = make([][]byte, 0)
+	for i := 0; i < partiesCount; i++ {
+		slate, err := wallets[i].SignTransaction(slates)
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	for i := 0; i < partiesCount; i++ {
+		var err error
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateTransaction(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
+
+	err = json.Unmarshal(transactionBytes, &transaction)
+	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
+
+	transactionID, err = transaction.ID.MarshalText()
 	assert.NoError(t, err)
 
 	for i := 0; i < partiesCount; i++ {

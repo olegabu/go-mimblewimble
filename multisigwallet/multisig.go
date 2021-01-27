@@ -10,8 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) InitMultipartyFundingTransaction(
-	amount uint64,
+func (t *Wallet) InitMultipartyTransaction(
 	inputs []SavedOutput,
 	change uint64,
 	fee uint64,
@@ -52,10 +51,16 @@ func (t *Wallet) InitMultipartyFundingTransaction(
 				Commit:      input.Commit,
 				AssetCommit: input.AssetCommit,
 			},
-			AssetTag:   input.AssetTag,
-			AssetBlind: hex.EncodeToString(inputAssetBlind[:]),
+			AssetTag:     input.AssetTag,
+			AssetBlind:   hex.EncodeToString(inputAssetBlind[:]),
+			IsMultiparty: input.IsMultiparty,
 		}
 		slateInputs = append(slateInputs, slateInput)
+	}
+
+	slateOutputs := make([]SlateOutput, 0)
+	if changeOutput != nil {
+		slateOutputs = append(slateOutputs, changeOutput.SlateOutput)
 	}
 
 	bulletproofsShare, err := t.generatePublicTaus(blind[:])
@@ -63,6 +68,12 @@ func (t *Wallet) InitMultipartyFundingTransaction(
 		err = errors.Wrap(err, "cannot generatePublicTaus")
 		return
 	}
+
+	var totalAmount uint64
+	for _, input := range inputs {
+		totalAmount += input.Value
+	}
+	totalAmount -= change
 
 	slate := &Slate{
 		VersionInfo: VersionCompatInfo{
@@ -76,7 +87,7 @@ func (t *Wallet) InitMultipartyFundingTransaction(
 			Offset: hex.EncodeToString(offset[:]),
 			Body: SlateTransactionBody{
 				Inputs:  slateInputs,
-				Outputs: []SlateOutput{changeOutput.SlateOutput},
+				Outputs: slateOutputs,
 				Kernels: []ledger.TxKernel{{
 					Features:   ledger.PlainKernel,
 					Fee:        ledger.Uint64(fee),
@@ -86,13 +97,13 @@ func (t *Wallet) InitMultipartyFundingTransaction(
 				}},
 			},
 		},
-		Amount:     ledger.Uint64(amount),
+		Amount:     ledger.Uint64(totalAmount),
 		Fee:        ledger.Uint64(fee),
 		Height:     0,
 		LockHeight: 0,
 		ParticipantData: []ParticipantData{{
 			ID:                0,
-			Value:             ledger.Uint64(amount),
+			Value:             ledger.Uint64(totalAmount),
 			PublicBlind:       publicBlind.String(),
 			AssetBlind:        hex.EncodeToString(assetBlind[:]),
 			PublicBlindExcess: publicBlindExcess.String(),
@@ -119,11 +130,13 @@ func (t *Wallet) InitMultipartyFundingTransaction(
 		return
 	}
 
-	walletOutputs = []SavedOutput{*changeOutput}
+	if changeOutput != nil {
+		walletOutputs = []SavedOutput{*changeOutput}
+	}
 	return
 }
 
-func (t *Wallet) SignMultipartyFundingTransaction(
+func (t *Wallet) SignMultipartyTransaction(
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
@@ -179,7 +192,7 @@ func (t *Wallet) SignMultipartyFundingTransaction(
 	return
 }
 
-func (t *Wallet) AggregateMultipartyFundingTransaction(
+func (t *Wallet) AggregateMultipartyTransaction(
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
@@ -194,7 +207,6 @@ func (t *Wallet) AggregateMultipartyFundingTransaction(
 		return
 	}
 
-	// Создаем общий выход
 	output, err := t.createMultipartyOutput(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot createMultipartyOutput")
@@ -202,16 +214,13 @@ func (t *Wallet) AggregateMultipartyFundingTransaction(
 	}
 	slate.Transaction.Body.Outputs = append(slate.Transaction.Body.Outputs, *output)
 
-	// Формируем общую подпись
 	signature, err := t.aggregatePartialSignatures(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregatePartialSignatures")
 		return
 	}
 
-	// Формируем транзакцию
 	var inputCommitments, outputCommitments []*secp256k1.Commitment
-
 	for _, input := range slate.Transaction.Body.Inputs {
 		com, e := secp256k1.CommitmentFromString(input.Commit)
 		if e != nil {
@@ -248,7 +257,6 @@ func (t *Wallet) AggregateMultipartyFundingTransaction(
 		return
 	}
 
-	// Вычисляем msg
 	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
 	// verify final sig with pk from excess

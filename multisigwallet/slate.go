@@ -47,15 +47,6 @@ func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64) (
 		return
 	}
 
-	// create change output and remember its blinding factor
-	if change > 0 {
-		changeOutput, _, err = t.newOutput(change, ledger.PlainOutput, inputs[0].Asset, OutputUnconfirmed)
-		if err != nil {
-			err = errors.Wrap(err, "cannot create change output")
-			return
-		}
-	}
-
 	// compute excess blinding factor
 	inputsBlindValueAssetBlinds := make([][]byte, 0)
 	for _, input := range inputs {
@@ -67,17 +58,33 @@ func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64) (
 		inputsBlindValueAssetBlinds = append(inputsBlindValueAssetBlinds, blindValueAssetBlind[:])
 	}
 
-	changeBlindValueAssetBlinds, err := t.getBlindValueAssetBlind(*changeOutput)
-	if err != nil {
-		err = errors.Wrap(err, "cannot getBlindValueAssetBlind")
-		return
-	}
-
 	// x = change - inputs - offset (now change = 0)
-	blindExcess, err = secp256k1.BlindSum(t.context, [][]byte{changeBlindValueAssetBlinds[:]}, append(inputsBlindValueAssetBlinds, offset[:]))
+	blindExcess, err = secp256k1.BlindSum(t.context, nil, append(inputsBlindValueAssetBlinds, offset[:]))
 	if err != nil {
 		err = errors.Wrap(err, "cannot BlindSum")
 		return
+	}
+
+	if change > 0 {
+		// create change output and remember its blinding factor
+		var e error
+		changeOutput, _, e = t.newOutput(change, ledger.PlainOutput, inputs[0].Asset, OutputUnconfirmed)
+		if e != nil {
+			err = errors.Wrap(e, "cannot create change output")
+			return
+		}
+
+		changeBlindValueAssetBlinds, e := t.getBlindValueAssetBlind(*changeOutput)
+		if e != nil {
+			err = errors.Wrap(e, "cannot getBlindValueAssetBlind")
+			return
+		}
+
+		blindExcess, e = secp256k1.BlindSum(t.context, [][]byte{blindExcess[:], changeBlindValueAssetBlinds[:]}, nil)
+		if e != nil {
+			err = errors.Wrap(e, "cannot BlindSum")
+			return
+		}
 	}
 	return
 }
@@ -148,6 +155,16 @@ func combinePartiallySignedSlates(slates []*Slate) (slate *Slate, err error) {
 	return
 }
 
+func findInputWithCommit(inputs []SlateInput, commit string) *SlateInput {
+	for _, input := range inputs {
+		if input.Commit == commit {
+			return &input
+		}
+	}
+	return nil
+}
+
+// TODO: refactoring
 func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, err error) {
 	// TODO: check slates
 
@@ -157,9 +174,12 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 	var totalAmount ledger.Uint64
 	var totalOffset [32]byte
 	for i, slate := range slates {
-		inputs = append(inputs, slate.Transaction.Body.Inputs...)
+		for _, input := range slate.Transaction.Body.Inputs {
+			if !input.IsMultiparty {
+				inputs = append(inputs, input)
+			}
+		}
 		outputs = append(outputs, slate.Transaction.Body.Outputs...)
-		totalAmount += slate.Amount
 
 		participantData := slate.ParticipantData[0]
 		participantData.ID = ledger.Uint64(i)
@@ -174,6 +194,36 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 		if err != nil {
 			return nil, err
 		}
+		totalAmount += slate.Amount
+	}
+
+	savedOutput, getOutputErr := t.db.GetOutput(slates[0].Transaction.Body.Inputs[0].Commit)
+	if getOutputErr == nil && savedOutput.IsMultiparty {
+		multipartyInput := slates[0].Transaction.Body.Inputs[0]
+		totalAmount = slates[0].Amount
+		for i := 1; i < len(slates); i++ {
+			multipartyAssetBlind, e := hex.DecodeString(multipartyInput.AssetBlind)
+			if e != nil {
+				err = errors.Wrap(e, "cannot DecodeString")
+				return
+			}
+
+			currentAssetBlind, e := hex.DecodeString(slates[i].Transaction.Body.Inputs[0].AssetBlind)
+			if e != nil {
+				err = errors.Wrap(e, "cannot DecodeString")
+				return
+			}
+
+			sumAssetBlind, e := secp256k1.BlindSum(t.context, [][]byte{multipartyAssetBlind, currentAssetBlind}, nil)
+			if e != nil {
+				err = errors.Wrap(e, "cannot BlindSum")
+				return
+			}
+			multipartyInput.AssetBlind = hex.EncodeToString(sumAssetBlind[:])
+
+			totalAmount -= ledger.Uint64(savedOutput.Value) - slates[i].Amount
+		}
+		inputs = append(inputs, multipartyInput)
 	}
 
 	fee := slates[0].Transaction.Body.Kernels[0].Fee
@@ -288,8 +338,9 @@ func (t *Wallet) createMultipartyOutput(slate *Slate) (output *SlateOutput, err 
 			},
 			Proof: hex.EncodeToString(proof),
 		},
-		AssetTag:   assetTag.Hex(),
-		AssetBlind: hex.EncodeToString(aggregatedAssetBlind[:]),
+		AssetTag:     assetTag.Hex(),
+		AssetBlind:   hex.EncodeToString(aggregatedAssetBlind[:]),
+		IsMultiparty: true,
 	}
 	return
 }

@@ -28,15 +28,17 @@ type Database interface {
 type SlateInput struct {
 	ledger.Input
 	//Asset      string       `json:"asset,omitempty"`
-	AssetTag   string `json:"asset_tag"`
-	AssetBlind string `json:"asset_blind"`
+	AssetTag     string `json:"asset_tag"`
+	AssetBlind   string `json:"asset_blind"`
+	IsMultiparty bool   `json:"multiparty"`
 }
 
 type SlateOutput struct {
 	ledger.Output
 	//Asset      string       `json:"asset,omitempty"`
-	AssetTag   string `json:"asset_tag"`
-	AssetBlind string `json:"asset_blind"`
+	AssetTag     string `json:"asset_tag"`
+	AssetBlind   string `json:"asset_blind"`
+	IsMultiparty bool   `json:"multiparty"`
 }
 
 type SavedOutput struct {
