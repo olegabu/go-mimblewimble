@@ -212,13 +212,13 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	return id, nil
 }
 
-func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUID) (slateBytes []byte, err error) {
+func (t *Wallet) InitFundingTransaction(amount uint64, asset string, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, id)
+	slate, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -243,13 +243,13 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUI
 	return
 }
 
-func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutValue uint64, id uuid.UUID) (slateBytes []byte, err error) {
+func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutValue uint64, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
 	multipartyOutput, err := t.db.GetOutput(multipartyOutputCommit)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, id)
+	slate, savedSlate, outputs, err := t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}

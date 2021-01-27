@@ -21,13 +21,15 @@ func TestCreateAndSpendMultiparty(t *testing.T) {
 	asset := "$"
 
 	wallets := make([]*Wallet, 0)
+	participantIDs := make([]string, 0)
 	for i := 0; i < partiesCount; i++ {
 		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset))
+		participantIDs = append(participantIDs, strconv.Itoa(i))
 	}
 
-	multipartyOutputCommit := createMultipartyUtxo(t, wallets, amount, asset)
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50, 50, 50})
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50, 50, 50})
+	multipartyOutputCommit := createMultipartyUtxo(t, wallets, participantIDs, amount, asset)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50, 50, 50})
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50, 50, 50})
 	closeWallets(wallets)
 }
 
@@ -37,13 +39,15 @@ func TestCreateAndSpendSingle(t *testing.T) {
 	asset := "$"
 
 	wallets := make([]*Wallet, 0)
+	participantIDs := make([]string, 0)
 	for i := 0; i < partiesCount; i++ {
 		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset))
+		participantIDs = append(participantIDs, strconv.Itoa(i))
 	}
 
-	multipartyOutputCommit := createMultipartyUtxo(t, wallets, amount, asset)
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50})
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50})
+	multipartyOutputCommit := createMultipartyUtxo(t, wallets, participantIDs, amount, asset)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50})
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50})
 	closeWallets(wallets)
 }
 
@@ -60,13 +64,13 @@ func closeWallets(wallets []*Wallet) {
 	}
 }
 
-func createMultipartyUtxo(t *testing.T, wallets []*Wallet, partialAmount uint64, asset string) (multipartyOutputCommit string) {
+func createMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, partialAmount uint64, asset string) (multipartyOutputCommit string) {
 	id := uuid.New()
 	count := len(wallets)
 
 	slates := make([][]byte, 0)
 	for i := 0; i < count; i++ {
-		slate, err := wallets[i].InitFundingTransaction(partialAmount, asset, id)
+		slate, err := wallets[i].InitFundingTransaction(partialAmount, asset, id, participantIDs[i])
 		assert.NoError(t, err)
 		slates = append(slates, slate)
 	}
@@ -101,14 +105,14 @@ func createMultipartyUtxo(t *testing.T, wallets []*Wallet, partialAmount uint64,
 	return
 }
 
-func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, mulipartyOutputCommit string, payouts []uint64) (multipartyOutputCommit string) {
+func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, mulipartyOutputCommit string, payouts []uint64) (multipartyOutputCommit string) {
 	id := uuid.New()
 	count := len(wallets)
 
 	slates := make([][]byte, 0)
 	for i := 0; i < count; i++ {
 		payout := uint64(50)
-		slate, err := wallets[i].InitSpendingTransaction(mulipartyOutputCommit, payout, id)
+		slate, err := wallets[i].InitSpendingTransaction(mulipartyOutputCommit, payout, id, participantIDs[i])
 		assert.NoError(t, err)
 		slates = append(slates, slate)
 	}
@@ -143,13 +147,13 @@ func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, mulipartyOutputCommit 
 	return
 }
 
-func testDbDir(userName string) string {
+func testDbDir(walletName string) string {
 	var usr, _ = user.Current()
-	return filepath.Join(usr.HomeDir, ".mw_test_"+userName)
+	return filepath.Join(usr.HomeDir, ".mw_test_"+walletName)
 }
 
-func newTestWallet(t *testing.T, userName string) (w *Wallet) {
-	dir := testDbDir(userName)
+func newTestWallet(t *testing.T, walletName string) (w *Wallet) {
+	dir := testDbDir(walletName)
 
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)

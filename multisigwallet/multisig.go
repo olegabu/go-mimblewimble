@@ -13,7 +13,8 @@ func (t *Wallet) initMultipartyTransaction(
 	inputs []SavedOutput,
 	change uint64,
 	fee uint64,
-	id uuid.UUID,
+	transactionID uuid.UUID,
+	participantID string,
 ) (
 	slate *Slate,
 	savedSlate *SavedSlate,
@@ -83,7 +84,7 @@ func (t *Wallet) initMultipartyTransaction(
 		},
 		NumParticipants: 1,
 		Transaction: SlateTransaction{
-			ID:     id,
+			ID:     transactionID,
 			Offset: hex.EncodeToString(offset[:]),
 			Body: SlateTransactionBody{
 				Inputs:  slateInputs,
@@ -101,8 +102,7 @@ func (t *Wallet) initMultipartyTransaction(
 		Fee:        ledger.Uint64(fee),
 		Height:     0,
 		LockHeight: 0,
-		ParticipantData: []ParticipantData{{
-			ID:                0,
+		ParticipantData: map[string]*ParticipantData{participantID: {
 			Value:             ledger.Uint64(totalAmount),
 			PublicBlind:       publicBlind.String(),
 			AssetBlind:        hex.EncodeToString(assetBlind[:]),
@@ -122,6 +122,7 @@ func (t *Wallet) initMultipartyTransaction(
 		BlindIndex:      blindIndex,
 		AssetBlindIndex: assetBlindIndex,
 		ExcessBlind:     blindExcess,
+		ParticipantID:   participantID,
 	}
 	return
 }
@@ -139,13 +140,7 @@ func (t *Wallet) signMultipartyTransaction(
 		return
 	}
 
-	var participantID int
-	for i, participantData := range slate.ParticipantData {
-		if participantData.PublicBlind == savedSlate.ParticipantData[0].PublicBlind {
-			participantID = i
-			break
-		}
-	}
+	participantID := savedSlate.ParticipantID
 
 	partialSignature, err := t.createPartialSignature(slate, savedSlate)
 	if err != nil {
@@ -388,10 +383,10 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 
 	inputs := make([]SlateInput, 0)
 	outputs := make([]SlateOutput, 0)
-	participantDatas := make([]ParticipantData, 0)
+	participantDatas := make(map[string]*ParticipantData, 0)
 	var totalAmount ledger.Uint64
 	var totalOffset [32]byte
-	for i, slate := range slates {
+	for _, slate := range slates {
 		for _, input := range slate.Transaction.Body.Inputs {
 			if !input.IsMultiparty {
 				inputs = append(inputs, input)
@@ -399,9 +394,9 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 		}
 		outputs = append(outputs, slate.Transaction.Body.Outputs...)
 
-		participantData := slate.ParticipantData[0]
-		participantData.ID = ledger.Uint64(i)
-		participantDatas = append(participantDatas, participantData)
+		for participantID, participantData := range slate.ParticipantData {
+			participantDatas[participantID] = participantData
+		}
 
 		offset, err := hex.DecodeString(slate.Transaction.Offset)
 		if err != nil {
@@ -462,13 +457,14 @@ func (t *Wallet) combineInitialSlates(slates []*Slate) (aggregatedSlate *Slate, 
 
 func combinePartiallySignedSlates(slates []*Slate) (slate *Slate, err error) {
 	slate = slates[0]
-	for i, participantData := range slate.ParticipantData {
-		correspondingParticipantData, err := findCorrespondingParticipantData(slates, participantData.PublicBlind)
-		slate.ParticipantData[i].PartSig = correspondingParticipantData.PartSig
-		slate.ParticipantData[i].BulletproofsShare.Taux = correspondingParticipantData.BulletproofsShare.Taux
-		if err != nil {
-			return nil, err
+	for participantID := range slate.ParticipantData {
+		correspondingParticipantData, e := findCorrespondingParticipantData(slates, participantID)
+		if e != nil {
+			err = errors.Wrap(e, "cannot findCorrespondingParticipantData")
+			return
 		}
+		slate.ParticipantData[participantID].PartSig = correspondingParticipantData.PartSig
+		slate.ParticipantData[participantID].BulletproofsShare.Taux = correspondingParticipantData.BulletproofsShare.Taux
 	}
 	return
 }

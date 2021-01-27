@@ -95,7 +95,7 @@ type Slate struct {
 	// Participant data, each participant in the transaction will
 	// insert their public data here. For now, 0 is sender and 1
 	// is receiver, though this will change for multi-party
-	ParticipantData []ParticipantData `json:"participant_data"`
+	ParticipantData map[string]*ParticipantData `json:"participant_data"`
 
 	Asset         string        `json:"asset,omitempty"`
 	ReceiveAmount ledger.Uint64 `json:"receive_amount,omitempty"`
@@ -104,8 +104,6 @@ type Slate struct {
 
 // ParticipantData is a public data for each participant in the slate
 type ParticipantData struct {
-	// Id of participant in the transaction. (For now, 0=sender, 1=rec)
-	ID ledger.Uint64 `json:"id"`
 	// Value
 	Value ledger.Uint64 `json:"value"`
 	// Public key corresponding to blinding factor
@@ -149,6 +147,7 @@ type SavedSlate struct {
 	AssetBlindIndex uint32   `json:"asset_blind_index,omitempty"`
 	ExcessBlind     [32]byte `json:"excess_blind,omitempty"`
 	Nonce           [32]byte `json:"nonce,omitempty"`
+	ParticipantID   string   `json:"participant_id,omitempty"`
 }
 
 type SlateTransactionBody struct {

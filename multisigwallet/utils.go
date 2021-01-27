@@ -39,12 +39,10 @@ func (t *Wallet) computeBlindValueAssetBlind(output SavedOutput) (blindValueAsse
 	return
 }
 
-func findCorrespondingParticipantData(slates []*Slate, publicBlind string) (slate *ParticipantData, err error) {
+func findCorrespondingParticipantData(slates []*Slate, participantID string) (slate *ParticipantData, err error) {
 	for _, slate := range slates {
-		for _, participantData := range slate.ParticipantData {
-			if participantData.PublicBlind == publicBlind && participantData.PartSig != nil {
-				return &participantData, nil
-			}
+		if slate.ParticipantData[participantID].PartSig != nil {
+			return slate.ParticipantData[participantID], nil
 		}
 	}
 	return nil, errors.New("cannot find partial signature")
