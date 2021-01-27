@@ -218,7 +218,7 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, id uuid.UUI
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, savedSlate, outputs, err := t.InitMultipartyTransaction(inputs, change, 0, id)
+	slateBytes, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -244,7 +244,7 @@ func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutVa
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slateBytes, savedSlate, outputs, err := t.InitMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, id)
+	slateBytes, savedSlate, outputs, err := t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, id)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -264,7 +264,7 @@ func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutVa
 	return
 }
 
-func (t *Wallet) SignTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
+func (t *Wallet) SignMultipartyTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
 		slate := &Slate{}
@@ -283,7 +283,7 @@ func (t *Wallet) SignTransaction(slatesBytes [][]byte) (slateBytes []byte, err e
 		return nil, errors.Wrap(err, "cannot GetSlate")
 	}
 
-	slateBytes, err = t.SignMultipartyTransaction(slates, savedSlate)
+	slateBytes, err = t.signMultipartyTransaction(slates, savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -291,7 +291,7 @@ func (t *Wallet) SignTransaction(slatesBytes [][]byte) (slateBytes []byte, err e
 	return
 }
 
-func (t *Wallet) AggregateTransaction(slatesBytes [][]byte) (txBytes []byte, multipartyOutputCommit string, err error) {
+func (t *Wallet) AggregateMultipartyTransaction(slatesBytes [][]byte) (txBytes []byte, multipartyOutputCommit string, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
 		slate := &Slate{}
@@ -311,7 +311,7 @@ func (t *Wallet) AggregateTransaction(slatesBytes [][]byte) (txBytes []byte, mul
 		return
 	}
 
-	txBytes, walletTx, multipartyOutput, err := t.AggregateMultipartyTransaction(slates, savedSlate)
+	txBytes, walletTx, multipartyOutput, err := t.aggregateMultipartyTransaction(slates, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
 		return
@@ -323,11 +323,13 @@ func (t *Wallet) AggregateTransaction(slatesBytes [][]byte) (txBytes []byte, mul
 		return
 	}
 
-	multipartyOutputCommit = multipartyOutput.Commit
-	err = t.db.PutOutput(*multipartyOutput)
-	if err != nil {
-		err = errors.Wrap(err, "cannot PutOutput")
-		return
+	if multipartyOutput != nil {
+		multipartyOutputCommit = multipartyOutput.Commit
+		err = t.db.PutOutput(*multipartyOutput)
+		if err != nil {
+			err = errors.Wrap(err, "cannot PutOutput")
+			return
+		}
 	}
 
 	return

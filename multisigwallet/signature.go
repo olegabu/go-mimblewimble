@@ -30,12 +30,7 @@ func (t *Wallet) calculateAggregatedPublicKey(
 	return
 }
 
-func (t *Wallet) calculateAggregatedNonce(
-	publicNonces []*secp256k1.Commitment,
-) (
-	publicNonce *secp256k1.PublicKey,
-	err error,
-) {
+func (t *Wallet) calculateAggregatedNonce(publicNonces []*secp256k1.Commitment) (publicNonce *secp256k1.PublicKey, err error) {
 	commit, err := secp256k1.CommitSum(t.context, publicNonces, nil)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CommitSum")
@@ -69,33 +64,43 @@ func (t *Wallet) createPartialSignature(slate *Slate, savedSlate *SavedSlate) (p
 		return
 	}
 
-	e := ledger.KernelSignatureMessage(savedSlate.Transaction.Body.Kernels[0])
+	msg := ledger.KernelSignatureMessage(savedSlate.Transaction.Body.Kernels[0])
 
-	assetBlind, err := t.secret(savedSlate.AssetBlindIndex)
-	if err != nil {
-		err = errors.Wrap(err, "cannot DecodeString")
-		return
+	var privateKey [32]byte
+	if slate.Amount > 0 {
+		assetBlind, e := t.secret(savedSlate.AssetBlindIndex)
+		if e != nil {
+			err = errors.Wrap(e, "cannot DecodeString")
+			return
+		}
+
+		blind, e := t.secret(savedSlate.BlindIndex)
+		if e != nil {
+			err = errors.Wrap(e, "cannot get blind")
+			return
+		}
+
+		blindValueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind[:], blind[:])
+		if e != nil {
+			err = errors.Wrap(e, "cannot BlindValueGeneratorBlindSum")
+			return
+		}
+
+		privateKey, e = secp256k1.BlindSum(t.context, [][]byte{blindValueAssetBlind[:], savedSlate.ExcessBlind[:]}, nil)
+		if e != nil {
+			err = errors.Wrap(e, "cannot compute private key")
+			return
+		}
+	} else {
+		var e error
+		privateKey, e = secp256k1.BlindSum(t.context, [][]byte{savedSlate.ExcessBlind[:]}, nil)
+		if e != nil {
+			err = errors.Wrap(e, "cannot compute private key")
+			return
+		}
 	}
 
-	blind, err := t.secret(savedSlate.BlindIndex)
-	if err != nil {
-		err = errors.Wrap(err, "cannot get blind")
-		return
-	}
-
-	blindValueAssetBlind, err := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind[:], blind[:])
-	if err != nil {
-		err = errors.Wrap(err, "cannot BlindValueGeneratorBlindSum")
-		return
-	}
-
-	privateKey, err := secp256k1.BlindSum(t.context, [][]byte{blindValueAssetBlind[:], savedSlate.ExcessBlind[:]}, nil)
-	if err != nil {
-		err = errors.Wrap(err, "cannot compute private key")
-		return
-	}
-
-	partialSignature, err := secp256k1.AggsigSignPartial(t.context, privateKey[:], savedSlate.Nonce[:], aggregatedPublicNonce, aggregatedPublicKey, e)
+	partialSignature, err := secp256k1.AggsigSignPartial(t.context, privateKey[:], savedSlate.Nonce[:], aggregatedPublicNonce, aggregatedPublicKey, msg)
 	if err != nil {
 		err = errors.Wrap(err, "cannot calculate receiver's partial signature")
 		return
@@ -140,46 +145,55 @@ func (t *Wallet) aggregatePartialSignatures(slate *Slate) (signature secp256k1.A
 			return
 		}
 
-		publicBlind, e := secp256k1.CommitmentFromString(party.PublicBlind)
-		if e != nil {
-			err = errors.Wrap(e, "cannot parse public blind")
-			return
-		}
-
-		assetBlind, e := hex.DecodeString(party.AssetBlind)
-		if e != nil {
-			err = errors.Wrap(e, "cannot parse asset blind")
-			return
-		}
-
-		valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind, new([32]byte)[:])
-		if e != nil {
-			err = errors.Wrap(e, "cannot BlindValueGeneratorBlindSum")
-			return
-		}
-
-		publicValueAssetBlind, e := secp256k1.Commit(t.context, valueAssetBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
-		if e != nil {
-			err = errors.Wrap(e, "cannot Commit")
-			return
-		}
-
-		publicBlindValueAssetBlind, e := secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlind, publicValueAssetBlind}, nil)
-		if e != nil {
-			err = errors.Wrap(e, "cannot CommitSum")
-			return
-		}
-
 		publicBlindExcess, e := secp256k1.CommitmentFromString(party.PublicBlindExcess)
 		if e != nil {
 			err = errors.Wrap(e, "cannot parse public blind excess")
 			return
 		}
 
-		partialPublicKeyCommit, e := secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlindValueAssetBlind, publicBlindExcess}, nil)
-		if e != nil {
-			err = errors.Wrap(e, "cannot CommitSum")
-			return
+		var partialPublicKeyCommit *secp256k1.Commitment
+		if slate.Amount > 0 {
+			publicBlind, e := secp256k1.CommitmentFromString(party.PublicBlind)
+			if e != nil {
+				err = errors.Wrap(e, "cannot parse public blind")
+				return
+			}
+
+			assetBlind, e := hex.DecodeString(party.AssetBlind)
+			if e != nil {
+				err = errors.Wrap(e, "cannot parse asset blind")
+				return
+			}
+
+			valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind, new([32]byte)[:])
+			if e != nil {
+				err = errors.Wrap(e, "cannot BlindValueGeneratorBlindSum")
+				return
+			}
+
+			publicValueAssetBlind, e := secp256k1.Commit(t.context, valueAssetBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+			if e != nil {
+				err = errors.Wrap(e, "cannot Commit")
+				return
+			}
+
+			publicBlindValueAssetBlind, e := secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlind, publicValueAssetBlind}, nil)
+			if e != nil {
+				err = errors.Wrap(e, "cannot CommitSum")
+				return
+			}
+
+			partialPublicKeyCommit, e = secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlindExcess, publicBlindValueAssetBlind}, nil)
+			if e != nil {
+				err = errors.Wrap(e, "cannot CommitSum")
+				return
+			}
+		} else {
+			partialPublicKeyCommit, e = secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlindExcess}, nil)
+			if e != nil {
+				err = errors.Wrap(e, "cannot CommitSum")
+				return
+			}
 		}
 
 		partialPublicKey, e := secp256k1.CommitmentToPublicKey(t.context, partialPublicKeyCommit)
