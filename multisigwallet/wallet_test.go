@@ -16,7 +16,7 @@ import (
 )
 
 func TestCreateAndSpendMultiparty(t *testing.T) {
-	partiesCount := 1 + rand.Intn(3)
+	partiesCount := 3
 	amount := uint64(100)
 	asset := "$"
 
@@ -26,8 +26,8 @@ func TestCreateAndSpendMultiparty(t *testing.T) {
 	}
 
 	multipartyOutputCommit := createMultipartyUtxo(t, wallets, amount, asset)
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50, 50, 50, 50})
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50, 50, 50, 50})
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50, 50, 50})
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, multipartyOutputCommit, []uint64{50, 50, 50})
 	closeWallets(wallets)
 }
 

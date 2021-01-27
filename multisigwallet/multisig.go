@@ -2,7 +2,6 @@ package multisigwallet
 
 import (
 	"encoding/hex"
-	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
@@ -16,7 +15,7 @@ func (t *Wallet) initMultipartyTransaction(
 	fee uint64,
 	id uuid.UUID,
 ) (
-	slateBytes []byte,
+	slate *Slate,
 	savedSlate *SavedSlate,
 	walletOutputs []SavedOutput,
 	err error,
@@ -61,6 +60,7 @@ func (t *Wallet) initMultipartyTransaction(
 	slateOutputs := make([]SlateOutput, 0)
 	if changeOutput != nil {
 		slateOutputs = append(slateOutputs, changeOutput.SlateOutput)
+		walletOutputs = []SavedOutput{*changeOutput}
 	}
 
 	bulletproofsShare, err := t.generatePublicTaus(blind[:])
@@ -75,7 +75,7 @@ func (t *Wallet) initMultipartyTransaction(
 	}
 	totalAmount -= change
 
-	slate := &Slate{
+	slate = &Slate{
 		VersionInfo: VersionCompatInfo{
 			Version:            3,
 			OrigVersion:        3,
@@ -123,16 +123,6 @@ func (t *Wallet) initMultipartyTransaction(
 		AssetBlindIndex: assetBlindIndex,
 		ExcessBlind:     blindExcess,
 	}
-
-	slateBytes, err = json.Marshal(slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot marshal slate to json")
-		return
-	}
-
-	if changeOutput != nil {
-		walletOutputs = []SavedOutput{*changeOutput}
-	}
 	return
 }
 
@@ -140,10 +130,10 @@ func (t *Wallet) signMultipartyTransaction(
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
-	slateBytes []byte,
+	slate *Slate,
 	err error,
 ) {
-	slate, err := t.combineInitialSlates(slates)
+	slate, err = t.combineInitialSlates(slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot combineInitialSlates")
 		return
@@ -164,7 +154,8 @@ func (t *Wallet) signMultipartyTransaction(
 	}
 	slate.ParticipantData[participantID].PartSig = &partialSignature
 
-	if slate.Amount > 0 {
+	newMultipartyUtxoIsNeccessary := slate.Amount > 0
+	if newMultipartyUtxoIsNeccessary {
 		assetBlind, e := t.secret(savedSlate.AssetBlindIndex)
 		if e != nil {
 			err = errors.Wrap(e, "cannot DecodeString")
@@ -184,13 +175,6 @@ func (t *Wallet) signMultipartyTransaction(
 		}
 		slate.ParticipantData[participantID].BulletproofsShare.Taux = hex.EncodeToString(taux)
 	}
-
-	slateBytes, err = json.Marshal(slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot marshal slate to json")
-		return
-	}
-
 	return
 }
 
@@ -198,7 +182,7 @@ func (t *Wallet) aggregateMultipartyTransaction(
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
-	transactionBytes []byte,
+	transaction *ledger.Transaction,
 	savedTransaction SavedTransaction,
 	multipartyOutput *SavedOutput,
 	err error,
@@ -209,8 +193,10 @@ func (t *Wallet) aggregateMultipartyTransaction(
 		return
 	}
 
+	newMultipartyUtxoIsNeccessary := slate.Amount > 0
+
 	var output *SlateOutput
-	if slate.Amount > 0 {
+	if newMultipartyUtxoIsNeccessary {
 		output, err = t.createMultipartyOutput(slate)
 		if err != nil {
 			err = errors.Wrap(err, "cannot createMultipartyOutput")
@@ -272,7 +258,7 @@ func (t *Wallet) aggregateMultipartyTransaction(
 	}
 	excessSig := secp256k1.AggsigSignatureSerialize(t.context, &signature)
 
-	transaction := ledger.Transaction{
+	transaction = &ledger.Transaction{
 		Offset: slate.Transaction.Offset,
 		ID:     slate.Transaction.ID,
 		Body: ledger.TransactionBody{
@@ -298,18 +284,12 @@ func (t *Wallet) aggregateMultipartyTransaction(
 		transaction.Body.Outputs = append(transaction.Body.Outputs, o.Output)
 	}
 
-	transactionBytes, err = json.Marshal(transaction)
-	if err != nil {
-		err = errors.Wrap(err, "cannot marshal ledgerTx to json")
-		return
-	}
-
 	savedTransaction = SavedTransaction{
-		Transaction: transaction,
+		Transaction: *transaction,
 		Status:      TransactionUnconfirmed,
 	}
 
-	if slate.Amount > 0 {
+	if newMultipartyUtxoIsNeccessary {
 		multipartyOutput = &SavedOutput{
 			SlateOutput: *output,
 			Value:       uint64(slate.Amount),
@@ -428,7 +408,8 @@ func (t *Wallet) getSharedData(
 		}
 		publicNonces = append(publicNonces, publicNonce)
 
-		if slate.Amount > 0 {
+		newMultipartyUtxoIsNeccessary := slate.Amount > 0
+		if newMultipartyUtxoIsNeccessary {
 			publicBlind, e := secp256k1.CommitmentFromString(party.PublicBlind)
 			if e != nil {
 				err = errors.Wrap(e, "cannot CommitmentFromString")
