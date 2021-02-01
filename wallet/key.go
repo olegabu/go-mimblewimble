@@ -208,7 +208,7 @@ func (t *Wallet) secret(index uint32) (secret [32]byte, err error) {
 	//secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
 	hash, err := hashSha256(childKeyBytes)
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "cannot AggsigGenerateSecureNonce from childKeyBytes")
+		return [32]byte{}, errors.Wrap(err, "cannot generate secret from childKeyBytes")
 	}
 	copy(secret[:], hash)
 
