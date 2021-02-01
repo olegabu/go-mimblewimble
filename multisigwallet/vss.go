@@ -8,36 +8,22 @@ import (
 	"github.com/pkg/errors"
 )
 
-type VerifiableBlindShares struct {
-	ParticipantID    string            `json:"participant_id,omitempty"`
-	VerifiableShares []VerifiableShare `json:"verifiable_shares,omitempty"`
-}
-
 type VerifiableShare struct {
 	VerifiableShare string `json:"share,omitempty"`
 	Commitment      string `json:"commitment,omitempty"`
 }
 
-func (t *Wallet) generateAndShareBlinds(participantIDs []string, k int, blindsCount int) (blindIndexes []uint32, shares []VerifiableBlindShares, err error) {
-	n := len(participantIDs)
-
-	for _, participantID := range participantIDs {
-		vbs := VerifiableBlindShares{ParticipantID: participantID, VerifiableShares: make([]VerifiableShare, 0)}
-		shares = append(shares, vbs)
+func (t *Wallet) generateAndShareBlinds(n int, k int, blinds [][]byte) (shares [][]VerifiableShare, err error) {
+	for i := 0; i < n; i++ {
+		shares = append(shares, make([]VerifiableShare, 0))
 	}
 
 	h := types.GeneratorH()
-	for i := 0; i < blindsCount; i++ {
-		blind, blindIndex, e := t.newSecret()
-		if e != nil {
-			err = errors.Wrap(e, "cannot generate blind")
-			return
-		}
-
-		blindIndexes = append(blindIndexes, blindIndex)
+	for i := 0; i < len(blinds); i++ {
+		blind := blinds[i]
 
 		secret := types.NewFn()
-		secret.SetBytes(blind[:])
+		secret.SetBytes(blind)
 
 		indices := getIndices(n)
 		vshares, c, e := vss.VShareSecret(indices, h, secret, k)
@@ -48,15 +34,15 @@ func (t *Wallet) generateAndShareBlinds(participantIDs []string, k int, blindsCo
 
 		for i, vshare := range vshares {
 			share := VerifiableShare{VerifiableShare: vshare.Hex(), Commitment: c.Hex()}
-			shares[i].VerifiableShares = append(shares[i].VerifiableShares, share)
+			shares[i] = append(shares[i], share)
 		}
 	}
 	return
 }
 
-func (t *Wallet) verifyShares(shares VerifiableBlindShares) (isValid bool, err error) {
+func (t *Wallet) verifyShares(shares []VerifiableShare) (isValid bool, err error) {
 	h := types.GeneratorH()
-	for _, share := range shares.VerifiableShares {
+	for _, share := range shares {
 		c := &types.Commitment{}
 		e := c.SetHex(share.Commitment)
 		if e != nil {

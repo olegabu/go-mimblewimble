@@ -18,6 +18,7 @@ import (
 func TestVSS(t *testing.T) {
 	n := 10
 	k := randRange(1, n-1)
+	precalculatedBlindsCount := 3
 	wallets := make([]*Wallet, 0)
 
 	participantIDs := make([]string, 0)
@@ -27,7 +28,14 @@ func TestVSS(t *testing.T) {
 	}
 
 	for i := 0; i < n; i++ {
-		blindIndexes, shares, err := wallets[i].generateAndShareBlinds(participantIDs, 2, 5)
+		blinds := make([][]byte, 0)
+		for j := 0; j < precalculatedBlindsCount; j++ {
+			blind, _, err := wallets[i].newSecret()
+			assert.NoError(t, err)
+			blinds = append(blinds, blind[:])
+		}
+
+		shares, err := wallets[i].generateAndShareBlinds(n, k, blinds)
 		assert.NoError(t, err)
 
 		for i, share := range shares {
@@ -36,13 +44,10 @@ func TestVSS(t *testing.T) {
 			assert.True(t, ok)
 		}
 
-		for j, blindIndex := range blindIndexes {
-			blind, err := wallets[i].secret(blindIndex)
-			assert.NoError(t, err)
-
+		for j, blind := range blinds {
 			verifiableShares := make([]string, 0)
 			for i := 0; i < n; i++ {
-				verifiableShares = append(verifiableShares, shares[i].VerifiableShares[j].VerifiableShare)
+				verifiableShares = append(verifiableShares, shares[i][j].VerifiableShare)
 			}
 			shuffle(verifiableShares)
 
