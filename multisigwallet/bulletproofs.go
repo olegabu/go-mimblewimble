@@ -1,7 +1,6 @@
 package multisigwallet
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 
 	"github.com/olegabu/go-secp256k1-zkp"
@@ -34,19 +33,11 @@ func (t *Wallet) computeTaux(blind []byte, assetBlind []byte, slate *Slate) (tau
 		return
 	}
 
-	sumPublicTau1, sumPublicTau2, _, err := t.aggregatePartiesValues(slate)
+	sumPublicTau1, sumPublicTau2, _, commonNonce, err := t.aggregatePartiesValues(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregatePartiesValues")
 		return
 	}
-
-	// TODO: CHECK IT
-	transactionID, err := slate.Transaction.ID.MarshalText()
-	if err != nil {
-		err = errors.Wrap(err, "cannot MarshalText")
-		return
-	}
-	commonNonce := sha256.New().Sum(transactionID)[:32]
 
 	_, taux, _, _, err = secp256k1.BulletproofRangeproofProveMulti(t.context, nil, nil, nil, sumPublicTau1, sumPublicTau2,
 		[]uint64{uint64(slate.Amount)}, [][]byte{blind[:]}, []*secp256k1.Commitment{commit}, assetCommit, 64, commonNonce, blind, nil, nil)
@@ -58,19 +49,11 @@ func (t *Wallet) computeTaux(blind []byte, assetBlind []byte, slate *Slate) (tau
 }
 
 func (t *Wallet) aggregateProof(slate *Slate, commit *secp256k1.Commitment, assetCommit *secp256k1.Generator) (proof []byte, err error) {
-	sumPublicTau1, sumPublicTau2, sumTaux, err := t.aggregatePartiesValues(slate)
+	sumPublicTau1, sumPublicTau2, sumTaux, commonNonce, err := t.aggregatePartiesValues(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregatePartiesValues")
 		return
 	}
-
-	// TODO: CHECK IT
-	transactionID, err := slate.Transaction.ID.MarshalText()
-	if err != nil {
-		err = errors.Wrap(err, "cannot MarshalText")
-		return
-	}
-	commonNonce := sha256.New().Sum(transactionID)[:32]
 
 	fakeBlind := [32]byte{1}
 
@@ -87,12 +70,25 @@ func (t *Wallet) aggregatePartiesValues(slate *Slate) (
 	sumPublicTau1 *secp256k1.PublicKey,
 	sumPublicTau2 *secp256k1.PublicKey,
 	sumTaux [32]byte,
+	commonNonce []byte,
 	err error,
 ) {
 	publicTau1s := make([]*secp256k1.PublicKey, 0)
 	publicTau2s := make([]*secp256k1.PublicKey, 0)
 	tauxs := make([][]byte, 0)
+	commonNonce = make([]byte, 32)
 	for _, participantData := range slate.ParticipantData {
+		// TODO: Check it
+		publicNonceBytes, e := hex.DecodeString(participantData.PublicNonce)
+		if e != nil {
+			err = errors.Wrap(e, "cannot DecodeString")
+			return
+		}
+
+		for i := 0; i < 32; i++ {
+			commonNonce[i] = commonNonce[i] ^ publicNonceBytes[i+1]
+		}
+
 		publicTau1Bytes, e := hex.DecodeString(participantData.BulletproofsShare.PublicTau1)
 		if e != nil {
 			err = errors.Wrap(e, "cannot decode PublicTau1")
