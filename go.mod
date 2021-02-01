@@ -4,7 +4,10 @@ go 1.14
 
 //replace github.com/olegabu/go-secp256k1-zkp => ../go-secp256k1-zkp
 
+replace github.com/AllFi/go-pedersen-vss => ../../AllFi/go-pedersen-vss
+
 require (
+	github.com/AllFi/go-pedersen-vss v0.1.0
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
@@ -27,7 +30,7 @@ require (
 	github.com/stretchr/testify v1.5.1
 	github.com/stumble/gorocksdb v0.0.3 // indirect
 	github.com/sykesm/zap-logfmt v0.0.3 // indirect
-	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
+	github.com/syndtr/goleveldb v1.0.1-0.20190923125748-758128399b1d
 	github.com/tendermint/tendermint v0.32.7
 	github.com/tyler-smith/go-bip32 v0.0.0-20170922074101-2c9cfd177564
 	github.com/tyler-smith/go-bip39 v1.0.2
