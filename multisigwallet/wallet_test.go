@@ -190,6 +190,69 @@ func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []strin
 	return
 }
 
+func TestCreateAndSpendMofNMultiparty(t *testing.T) {
+	n := 3
+	k := 2
+	amount := uint64(100)
+	asset := "$"
+
+	wallets := make([]*Wallet, 0)
+	participantIDs := make([]string, 0)
+	for i := 0; i < n; i++ {
+		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset))
+		participantIDs = append(participantIDs, strconv.Itoa(i))
+	}
+
+	createMultipartyMofNUtxo(t, wallets, participantIDs, amount, asset, n, k, 3)
+	closeWallets(wallets)
+}
+
+func createMultipartyMofNUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, partialAmount uint64, asset string, n int, k int, bc int) (multipartyOutputCommit string) {
+	id := uuid.New()
+	count := len(wallets)
+
+	allSlates := make([][][]byte, 0)
+	for i := 0; i < count; i++ {
+		slates, err := wallets[i].InitMofNFundingTransaction(partialAmount, asset, id, participantIDs[i], n, k, bc)
+		assert.NoError(t, err)
+		allSlates = append(allSlates, slates)
+	}
+
+	partiallySignedSlates := make([][]byte, 0)
+	for i := 0; i < count; i++ {
+		slates := make([][]byte, 0)
+		for j := 0; j < len(allSlates); j++ {
+			slates = append(slates, allSlates[j][i])
+		}
+
+		slate, err := wallets[i].SignMofNMultipartyTransaction(slates)
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	var transactionBytes []byte
+	for i := 0; i < count; i++ {
+		var err error
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateMofNMultipartyTransaction(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
+
+	var transaction ledger.Transaction
+	err := json.Unmarshal(transactionBytes, &transaction)
+	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
+
+	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < count; i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+	}
+	return
+}
+
 func testDbDir(walletName string) string {
 	var usr, _ = user.Current()
 	return filepath.Join(usr.HomeDir, ".mw_test_"+walletName)

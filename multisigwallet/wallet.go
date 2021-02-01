@@ -212,6 +212,59 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	return id, nil
 }
 
+func (t *Wallet) InitMofNFundingTransaction(
+	amount uint64,
+	asset string,
+	transactionID uuid.UUID,
+	participantID string,
+	participantsCount int,
+	minParticipantsCount int,
+	precalculatedBlindsCount int,
+) (
+	slatesBytes [][]byte,
+	err error,
+) {
+	inputs, change, err := t.db.GetInputs(amount, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	slates, savedSlate, outputs, err := t.initMofNMultipartyTransaction(
+		inputs,
+		change,
+		0,
+		transactionID,
+		participantID,
+		participantsCount,
+		minParticipantsCount,
+		precalculatedBlindsCount)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot initMofNMultipartyTransaction")
+	}
+
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
+	}
+
+	err = t.db.PutSenderSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	for _, slate := range slates {
+		slateBytes, e := json.Marshal(slate)
+		if e != nil {
+			err = errors.Wrap(e, "cannot marshal slate to json")
+			return
+		}
+		slatesBytes = append(slatesBytes, slateBytes)
+	}
+	return
+}
+
 func (t *Wallet) InitFundingTransaction(amount uint64, asset string, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
@@ -220,7 +273,7 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, transaction
 
 	slate, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
+		return nil, errors.Wrap(err, "cannot initMultipartyTransaction")
 	}
 
 	for _, o := range outputs {
@@ -275,6 +328,45 @@ func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutVa
 	return
 }
 
+func (t *Wallet) SignMofNMultipartyTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
+	var slates = make([]*Slate, 0)
+	for _, slateBytes := range slatesBytes {
+		slate := &Slate{}
+		err = json.Unmarshal(slateBytes, slate)
+		if err != nil {
+			err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+			return nil, err
+		}
+		slates = append(slates, slate)
+	}
+
+	id, _ := slates[0].Transaction.ID.MarshalText()
+
+	savedSlate, err := t.db.GetSenderSlate(id)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetSenderSlate")
+	}
+
+	slate, savedSlate, err := t.signMofNMultipartyTransaction(slates, savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot signMultipartyTransaction")
+	}
+	asd, _ := json.Marshal(savedSlate)
+	println(string(asd))
+
+	err = t.db.PutSenderSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	slateBytes, err = json.Marshal(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
+	}
+	return
+}
+
 func (t *Wallet) SignMultipartyTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
@@ -291,17 +383,66 @@ func (t *Wallet) SignMultipartyTransaction(slatesBytes [][]byte) (slateBytes []b
 
 	savedSlate, err := t.db.GetSenderSlate(id)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetSlate")
+		return nil, errors.Wrap(err, "cannot GetSenderSlate")
 	}
 
 	slate, err := t.signMultipartyTransaction(slates, savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
+		return nil, errors.Wrap(err, "cannot signMultipartyTransaction")
 	}
 
 	slateBytes, err = json.Marshal(slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
+	}
+	return
+}
+
+func (t *Wallet) AggregateMofNMultipartyTransaction(slatesBytes [][]byte) (transactionBytes []byte, multipartyOutputCommit string, err error) {
+	var slates = make([]*Slate, 0)
+	for _, slateBytes := range slatesBytes {
+		slate := &Slate{}
+		e := json.Unmarshal(slateBytes, slate)
+		if e != nil {
+			err = errors.Wrap(e, "cannot unmarshal json to inSlate")
+			return
+		}
+		slates = append(slates, slate)
+	}
+
+	id, _ := slates[0].Transaction.ID.MarshalText()
+
+	savedSlate, err := t.db.GetSenderSlate(id)
+	if err != nil {
+		err = errors.Wrap(err, "cannot GetSenderSlate")
+		return
+	}
+
+	transaction, walletTx, multipartyOutput, err := t.aggregateMofNMultipartyTransaction(slates, savedSlate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
+		return
+	}
+
+	err = t.db.PutTransaction(walletTx)
+	if err != nil {
+		err = errors.Wrap(err, "cannot PutTransaction")
+		return
+	}
+
+	if multipartyOutput != nil {
+		multipartyOutputCommit = multipartyOutput.Commit
+		err = t.db.PutOutput(*multipartyOutput)
+		if err != nil {
+			err = errors.Wrap(err, "cannot PutOutput")
+			return
+		}
+	}
+
+	transactionBytes, err = json.Marshal(transaction)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal ledgerTx to json")
 		return
 	}
 	return

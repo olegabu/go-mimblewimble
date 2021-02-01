@@ -48,6 +48,9 @@ type SavedOutput struct {
 	Value      uint64       `json:"value"`
 	Asset      string       `json:"asset,omitempty"`
 	Status     OutputStatus `json:"status,omitempty"`
+
+	VerifiableBlindsShares map[string][]VerifiableShare `json:"verifiable_blinds_shares,omitempty"`
+	ReservedBlindIndexes   []uint32                     `json:"reserved_blinds_indexes,omitempty"`
 }
 
 type OutputStatus int
@@ -93,13 +96,15 @@ type Slate struct {
 	// Lock height
 	LockHeight ledger.Uint64 `json:"lock_height"`
 	// Participant data, each participant in the transaction will
-	// insert their public data here. For now, 0 is sender and 1
-	// is receiver, though this will change for multi-party
+	// insert their public data here.
 	ParticipantData map[string]*ParticipantData `json:"participant_data"`
 
 	Asset         string        `json:"asset,omitempty"`
 	ReceiveAmount ledger.Uint64 `json:"receive_amount,omitempty"`
 	ReceiveAsset  string        `json:"receive_asset,omitempty"`
+
+	// Verifiable blind's shares for m-of-n multiparty outputs
+	VerifiableBlindsShares map[string][]VerifiableShare `json:"verifiable_blinds_shares,omitempty"`
 }
 
 // ParticipantData is a public data for each participant in the slate
@@ -143,11 +148,12 @@ type VersionCompatInfo struct {
 
 type SavedSlate struct {
 	Slate
-	BlindIndex      uint32   `json:"blind_index,omitempty"`
-	AssetBlindIndex uint32   `json:"asset_blind_index,omitempty"`
-	ExcessBlind     [32]byte `json:"excess_blind,omitempty"`
-	Nonce           [32]byte `json:"nonce,omitempty"`
-	ParticipantID   string   `json:"participant_id,omitempty"`
+	BlindIndex           uint32   `json:"blind_index,omitempty"`
+	AssetBlindIndex      uint32   `json:"asset_blind_index,omitempty"`
+	ExcessBlind          [32]byte `json:"excess_blind,omitempty"`
+	Nonce                [32]byte `json:"nonce,omitempty"`
+	ParticipantID        string   `json:"participant_id,omitempty"`
+	ReservedBlindIndexes []uint32 `json:"reserved_blinds_indexes,omitempty"` // only for m-of-n
 }
 
 type SlateTransactionBody struct {
