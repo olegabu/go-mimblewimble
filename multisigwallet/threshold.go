@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) initMofNMultipartyTransaction(
+func (t *Wallet) initMofNFundingMultipartyTransaction(
 	inputs []SavedOutput,
 	change uint64,
 	fee uint64,
@@ -21,29 +21,34 @@ func (t *Wallet) initMofNMultipartyTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID, nil, nil)
 	if err != nil {
-		err = errors.Wrap(err, "cannot NewMultipartySlate")
+		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
 	}
 
-	blind, err := t.secret(savedSlate.BlindIndex)
-	if err != nil {
-		err = errors.Wrap(err, "cannot secret")
-		return
-	}
+	blinds := [][]byte{savedSlate.Blind[:]}
+	reservedBlindIndexes := []uint32{}
+	reservedAssetBlindIndexes := []uint32{}
 
-	blinds := [][]byte{blind[:]}
-	reservedBlindsIndexes := []uint32{savedSlate.BlindIndex}
-
-	for i := 1; i < precalculatedBlindsCount; i++ {
+	slate.PartialAssetBlinds = make(map[string][][32]byte)
+	slate.PartialAssetBlinds[participantID] = append(slate.PartialAssetBlinds[participantID], savedSlate.AssetBlind)
+	for i := 0; i < precalculatedBlindsCount; i++ {
 		precalculatedBlind, precalculatedBlindIndex, e := t.newSecret()
 		if e != nil {
 			err = errors.Wrap(e, "cannot newSecret")
 			return
 		}
 		blinds = append(blinds, precalculatedBlind[:])
-		reservedBlindsIndexes = append(reservedBlindsIndexes, precalculatedBlindIndex)
+		reservedBlindIndexes = append(reservedBlindIndexes, precalculatedBlindIndex)
+
+		precalculatedAssetBlind, precalculatedAssetBlindIndex, e := t.newSecret()
+		if e != nil {
+			err = errors.Wrap(e, "cannot newSecret")
+			return
+		}
+		reservedAssetBlindIndexes = append(reservedAssetBlindIndexes, precalculatedAssetBlindIndex)
+		slate.PartialAssetBlinds[participantID] = append(slate.PartialAssetBlinds[participantID], precalculatedAssetBlind)
 	}
 
 	shares, e := t.generateAndShareBlinds(participantsCount, minParticipantsCount, blinds)
@@ -61,9 +66,59 @@ func (t *Wallet) initMofNMultipartyTransaction(
 		slates = append(slates, curSlate)
 	}
 
-	//savedSlate.VerifiableBlindsShares = slates[0].VerifiableBlindsShares
-	savedSlate.ReservedBlindIndexes = reservedBlindsIndexes
+	savedSlate.ReservedBlindIndexes = reservedBlindIndexes
+	savedSlate.ReservedAssetBlindIndexes = reservedAssetBlindIndexes
 
+	return
+}
+
+func (t *Wallet) initMofNSpendingMultipartyTransaction(
+	inputs []SavedOutput,
+	change uint64,
+	fee uint64,
+	transactionID uuid.UUID,
+	participantID string,
+	missingParticipantsIDs []string,
+) (
+	slate *Slate,
+	savedSlate *SavedSlate,
+	walletOutputs []SavedOutput,
+	err error,
+) {
+	multipartyOutput := inputs[0]
+	if len(multipartyOutput.ReservedBlindIndexes) == 0 {
+		err = errors.Wrap(err, "cannot get reserved blind index")
+		return
+	}
+
+	reservedBlindIndex := multipartyOutput.ReservedBlindIndexes[0]
+	reservedBlind, err := t.secret(reservedBlindIndex)
+	if err != nil {
+		err = errors.Wrap(err, "cannot get secret")
+		return
+	}
+
+	reservedAssetBlindIndex := multipartyOutput.ReservedAssetBlindIndexes[0]
+	reservedAssetBlind, err := t.secret(reservedAssetBlindIndex)
+	if err != nil {
+		err = errors.Wrap(err, "cannot get secret")
+		return
+	}
+
+	slate, savedSlate, walletOutputs, err = t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID, &reservedBlind, &reservedAssetBlind)
+	if err != nil {
+		err = errors.Wrap(err, "cannot initMultipartyTransaction")
+		return
+	}
+
+	slate.VerifiableBlindsShares = make(map[string][]VerifiableShare)
+	slate.PartialAssetBlinds = make(map[string][][32]byte)
+	for _, missingParticipantID := range missingParticipantsIDs {
+		slate.VerifiableBlindsShares[missingParticipantID] = multipartyOutput.VerifiableBlindsShares[missingParticipantID][:2]
+		slate.PartialAssetBlinds[missingParticipantID] = multipartyOutput.PartialAssetBlinds[missingParticipantID][:2]
+	}
+	savedSlate.ReservedBlindIndexes = multipartyOutput.ReservedBlindIndexes[1:]
+	savedSlate.ReservedAssetBlindIndexes = multipartyOutput.ReservedAssetBlindIndexes[1:]
 	return
 }
 
@@ -78,6 +133,7 @@ func (t *Wallet) signMofNMultipartyTransaction(
 	outSavedSlate = new(SavedSlate)
 	*outSavedSlate = *inSavedSlate
 	outSavedSlate.VerifiableBlindsShares = make(map[string][]VerifiableShare)
+	outSavedSlate.PartialAssetBlinds = make(map[string][][32]byte)
 	for _, slate := range slates {
 		for participantID, verifiableBlindsShares := range slate.VerifiableBlindsShares {
 			ok, e := t.verifyShares(verifiableBlindsShares)
@@ -87,12 +143,19 @@ func (t *Wallet) signMofNMultipartyTransaction(
 			}
 			outSavedSlate.VerifiableBlindsShares[participantID] = verifiableBlindsShares
 		}
+
+		for participantID, partialAssetBlinds := range slate.PartialAssetBlinds {
+			outSavedSlate.PartialAssetBlinds[participantID] = partialAssetBlinds
+		}
 	}
 
 	outSlate, err = t.signMultipartyTransaction(slates, inSavedSlate)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "cannot signMultipartyTransaction")
 	}
+
+	outSlate.VerifiableBlindsShares = outSavedSlate.VerifiableBlindsShares
+	outSlate.PartialAssetBlinds = outSavedSlate.PartialAssetBlinds
 	return
 }
 
@@ -112,6 +175,48 @@ func (t *Wallet) aggregateMofNMultipartyTransaction(
 	}
 
 	multipartyOutput.ReservedBlindIndexes = savedSlate.ReservedBlindIndexes
+	multipartyOutput.ReservedAssetBlindIndexes = savedSlate.ReservedAssetBlindIndexes
 	multipartyOutput.VerifiableBlindsShares = savedSlate.VerifiableBlindsShares
+	multipartyOutput.PartialAssetBlinds = savedSlate.PartialAssetBlinds
+
+	return
+}
+
+func (t *Wallet) constructMissingPartySlate(
+	slates []*Slate,
+	multipartyOutput SavedOutput,
+	fee uint64,
+	transactionID uuid.UUID,
+	missingParticipantID string,
+) (
+	slate *Slate,
+	savedSlate *SavedSlate,
+	err error,
+) {
+	// Восстанавливаем текущий и будущий blind отсутствующей стороны
+	blinds := make([][32]byte, 2)
+	for i := 0; i < 2; i++ {
+		shares := make([]string, 0)
+		for _, slate := range slates {
+			shares = append(shares, slate.VerifiableBlindsShares[missingParticipantID][i].VerifiableShare)
+		}
+
+		blind, e := t.openBlind(shares)
+		if e != nil {
+			err = errors.Wrap(e, "cannot openBlind")
+			return
+		}
+		copy(blinds[i][:], blind)
+	}
+
+	multipartyOutput.PartialAssetBlind = multipartyOutput.PartialAssetBlinds[missingParticipantID][0]
+	multipartyOutput.Blind = blinds[0]
+	assetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID][1]
+	slate, savedSlate, _, err = t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID, &blinds[1], &assetBlind)
+	if err != nil {
+		err = errors.Wrap(err, "cannot initMultipartyTransaction")
+		return
+	}
+
 	return
 }

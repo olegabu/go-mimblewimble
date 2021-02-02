@@ -32,17 +32,8 @@ func (t *Wallet) createPartialSignature(slate *Slate, savedSlate *SavedSlate) (p
 	var privateKey [32]byte
 	newMultipartyUtxoIsNeccessary := slate.Amount > 0
 	if newMultipartyUtxoIsNeccessary {
-		assetBlind, e := t.secret(savedSlate.AssetBlindIndex)
-		if e != nil {
-			err = errors.Wrap(e, "cannot DecodeString")
-			return
-		}
-
-		blind, e := t.secret(savedSlate.BlindIndex)
-		if e != nil {
-			err = errors.Wrap(e, "cannot get blind")
-			return
-		}
+		assetBlind := savedSlate.AssetBlind
+		blind := savedSlate.Blind
 
 		blindValueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind[:], blind[:])
 		if e != nil {

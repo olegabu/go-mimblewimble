@@ -15,13 +15,15 @@ func (t *Wallet) initMultipartyTransaction(
 	fee uint64,
 	transactionID uuid.UUID,
 	participantID string,
+	reservedBlind *[32]byte, // in case of m-of-n spending
+	reservedAssetBlind *[32]byte, // in case of m-of-n spending
 ) (
 	slate *Slate,
 	savedSlate *SavedSlate,
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	blind, blindIndex, assetBlind, assetBlindIndex, offset, blindExcess, nonce, changeOutput, err := t.preparePartyData(inputs, change)
+	blind, _, assetBlind, _, offset, blindExcess, nonce, changeOutput, err := t.preparePartyData(inputs, change, reservedBlind, reservedAssetBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot preparePartyData")
 		return
@@ -117,12 +119,12 @@ func (t *Wallet) initMultipartyTransaction(
 	}
 
 	savedSlate = &SavedSlate{
-		Slate:           *slate,
-		Nonce:           nonce,
-		BlindIndex:      blindIndex,
-		AssetBlindIndex: assetBlindIndex,
-		ExcessBlind:     blindExcess,
-		ParticipantID:   participantID,
+		Slate:         *slate,
+		Nonce:         nonce,
+		Blind:         blind,
+		AssetBlind:    assetBlind,
+		ExcessBlind:   blindExcess,
+		ParticipantID: participantID,
 	}
 	return
 }
@@ -151,17 +153,8 @@ func (t *Wallet) signMultipartyTransaction(
 
 	newMultipartyUtxoIsNeccessary := slate.Amount > 0
 	if newMultipartyUtxoIsNeccessary {
-		assetBlind, e := t.secret(savedSlate.AssetBlindIndex)
-		if e != nil {
-			err = errors.Wrap(e, "cannot DecodeString")
-			return
-		}
-
-		blind, e := t.secret(savedSlate.BlindIndex)
-		if e != nil {
-			err = errors.Wrap(e, "cannot get blind")
-			return
-		}
+		assetBlind := savedSlate.AssetBlind
+		blind := savedSlate.Blind
 
 		taux, e := t.computeTaux(blind[:], assetBlind[:], slate)
 		if e != nil {
@@ -285,19 +278,19 @@ func (t *Wallet) aggregateMultipartyTransaction(
 
 	if newMultipartyUtxoIsNeccessary {
 		multipartyOutput = &SavedOutput{
-			SlateOutput: *output,
-			Value:       uint64(slate.Amount),
-			Index:       savedSlate.BlindIndex,
-			Asset:       slate.Asset,
-			AssetIndex:  savedSlate.AssetBlindIndex,
-			Status:      OutputUnconfirmed,
+			SlateOutput:       *output,
+			Value:             uint64(slate.Amount),
+			Blind:             savedSlate.Blind,
+			PartialAssetBlind: savedSlate.AssetBlind,
+			Asset:             slate.Asset,
+			Status:            OutputUnconfirmed,
 		}
 	}
 
 	return
 }
 
-func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64) (
+func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64, reservedBlind *[32]byte, reservedAssetBlind *[32]byte) (
 	blind [32]byte,
 	blindIndex uint32,
 	assetBlind [32]byte,
@@ -308,18 +301,26 @@ func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64) (
 	changeOutput *SavedOutput,
 	err error,
 ) {
-	// generate partial output blind
-	blind, blindIndex, err = t.newSecret()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get newSecret")
-		return
+	if reservedBlind == nil {
+		// generate partial output blind
+		blind, blindIndex, err = t.newSecret()
+		if err != nil {
+			err = errors.Wrap(err, "cannot get newSecret")
+			return
+		}
+	} else {
+		blind = *reservedBlind
 	}
 
-	// generate partial output asset blind
-	assetBlind, assetBlindIndex, err = t.newSecret()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get newSecret")
-		return
+	if reservedAssetBlind == nil {
+		// generate partial output asset blind
+		assetBlind, assetBlindIndex, err = t.newSecret()
+		if err != nil {
+			err = errors.Wrap(err, "cannot get newSecret")
+			return
+		}
+	} else {
+		assetBlind = *reservedAssetBlind
 	}
 
 	// generate random offset

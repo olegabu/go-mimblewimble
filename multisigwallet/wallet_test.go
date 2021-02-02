@@ -154,7 +154,7 @@ func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []strin
 
 	slates := make([][]byte, 0)
 	for i := 0; i < count; i++ {
-		payout := uint64(50)
+		payout := payouts[i]
 		slate, err := wallets[i].InitSpendingTransaction(mulipartyOutputCommit, payout, id, participantIDs[i])
 		assert.NoError(t, err)
 		slates = append(slates, slate)
@@ -203,7 +203,11 @@ func TestCreateAndSpendMofNMultiparty(t *testing.T) {
 		participantIDs = append(participantIDs, strconv.Itoa(i))
 	}
 
-	createMultipartyMofNUtxo(t, wallets, participantIDs, amount, asset, n, k, 3)
+	multipartyOutputCommit := createMultipartyMofNUtxo(t, wallets, participantIDs, amount, asset, n, k, 3)
+	activeParticipantsIDs := participantIDs[:k]
+	missingParticipantIDs := participantIDs[k:]
+	multipartyOutputCommit = spendMofNMultipartyUtxo(t, wallets, activeParticipantsIDs, missingParticipantIDs, multipartyOutputCommit, []uint64{50, 50})
+
 	closeWallets(wallets)
 }
 
@@ -225,7 +229,7 @@ func createMultipartyMofNUtxo(t *testing.T, wallets []*Wallet, participantIDs []
 			slates = append(slates, allSlates[j][i])
 		}
 
-		slate, err := wallets[i].SignMofNMultipartyTransaction(slates)
+		slate, err := wallets[i].SignMofNMultipartyTransaction(slates, nil)
 		assert.NoError(t, err)
 		partiallySignedSlates = append(partiallySignedSlates, slate)
 	}
@@ -247,6 +251,59 @@ func createMultipartyMofNUtxo(t *testing.T, wallets []*Wallet, participantIDs []
 	assert.NoError(t, err)
 
 	for i := 0; i < count; i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+	}
+	return
+}
+
+func spendMofNMultipartyUtxo(t *testing.T, wallets []*Wallet, activeParticipantsIDs []string, missingParticipantsIDs []string, mulipartyOutputCommit string, payouts []uint64) (multipartyOutputCommit string) {
+	id := uuid.New()
+
+	slates := make([][]byte, 0)
+	for i := 0; i < len(activeParticipantsIDs); i++ {
+		payout := payouts[i]
+		slate, err := wallets[i].InitMofNSpendingTransaction(mulipartyOutputCommit, payout, id, activeParticipantsIDs[i], missingParticipantsIDs)
+		assert.NoError(t, err)
+		slates = append(slates, slate)
+	}
+
+	for i := 0; i < len(missingParticipantsIDs); i++ {
+		slate, err := wallets[0].InitMissingPartyMofNMultipartyTransaction(slates, missingParticipantsIDs[i])
+		assert.NoError(t, err)
+		slates = append(slates, slate)
+	}
+
+	partiallySignedSlates := make([][]byte, 0)
+	for i := 0; i < len(activeParticipantsIDs); i++ {
+		slate, err := wallets[i].SignMofNMultipartyTransaction(slates, nil)
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	for i := 0; i < len(missingParticipantsIDs); i++ {
+		slate, err := wallets[0].SignMofNMultipartyTransaction(slates, &missingParticipantsIDs[i])
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	var transactionBytes []byte
+	for i := 0; i < len(activeParticipantsIDs); i++ {
+		var err error
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateMofNMultipartyTransaction(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
+
+	var transaction ledger.Transaction
+	err := json.Unmarshal(transactionBytes, &transaction)
+	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
+
+	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < len(activeParticipantsIDs); i++ {
 		err = wallets[i].Confirm(transactionID)
 		assert.NoError(t, err)
 	}

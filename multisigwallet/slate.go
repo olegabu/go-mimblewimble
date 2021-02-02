@@ -18,21 +18,21 @@ func (t *Wallet) newOutput(
 	sumBlinds []byte,
 	err error,
 ) {
-	secret, index, err := t.newSecret()
+	secret, _, err := t.newSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
-	blind := secret[:]
+	blind := secret
 
-	assetSecret, assetIndex, err := t.newSecret()
+	assetSecret, _, err := t.newSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
-	assetBlind := assetSecret[:]
+	assetBlind := assetSecret
 
-	sumBlinds32, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind, blind)
+	sumBlinds32, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind[:], blind[:])
 	if e != nil {
 		err = errors.Wrap(e, "cannot calculate sumBlinds32")
 	}
@@ -45,7 +45,7 @@ func (t *Wallet) newOutput(
 		return
 	}
 
-	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(t.context, assetTag.Slice(), assetBlind)
+	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(t.context, assetTag.Slice(), assetBlind[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot create commitment to asset")
 		return
@@ -54,7 +54,7 @@ func (t *Wallet) newOutput(
 	// create commitment to value with asset specific generator
 	commitment, err := secp256k1.Commit(
 		t.context,
-		blind,
+		blind[:],
 		value,
 		assetCommitment,
 		&secp256k1.GeneratorG)
@@ -69,8 +69,8 @@ func (t *Wallet) newOutput(
 		nil,
 		nil,
 		value,
-		blind,
-		blind,
+		blind[:],
+		blind[:],
 		nil,
 		nil,
 		nil,
@@ -91,13 +91,13 @@ func (t *Wallet) newOutput(
 				Proof: hex.EncodeToString(proof),
 			},
 			AssetTag:   assetTag.Hex(),
-			AssetBlind: hex.EncodeToString(assetBlind),
+			AssetBlind: hex.EncodeToString(assetBlind[:]),
 		},
-		Value:      value,
-		Index:      index,
-		Asset:      asset,
-		AssetIndex: assetIndex,
-		Status:     status,
+		Value:             value,
+		Blind:             blind,
+		PartialAssetBlind: assetBlind,
+		Asset:             asset,
+		Status:            status,
 	}
 
 	return

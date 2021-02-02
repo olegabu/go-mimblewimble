@@ -2,7 +2,6 @@ package multisigwallet
 
 import (
 	"encoding/json"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -110,17 +109,17 @@ func (t *Wallet) Info() (string, error) {
 		return tableString.String(), errors.Wrap(err, "cannot ListOutputs")
 	}
 
-	// sort outputs decreasing by child key index
-	sort.Slice(outputs, func(i, j int) bool {
-		return outputs[i].Index > outputs[j].Index
-	})
+	// // sort outputs decreasing by child key index
+	// sort.Slice(outputs, func(i, j int) bool {
+	// 	return outputs[i].Index > outputs[j].Index
+	// })
 
 	outputTable := tablewriter.NewWriter(tableString)
-	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "key", "multiparty"})
+	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "multiparty"})
 	outputTable.SetCaption(true, "Outputs")
 	outputTable.SetAlignment(tablewriter.ALIGN_CENTER)
 	for _, output := range outputs {
-		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:4], strconv.Itoa(int(output.Index)), strconv.FormatBool(output.IsMultiparty)})
+		outputTable.Append([]string{strconv.Itoa(int(output.Value)), output.Asset, output.Status.String(), output.Features.String(), output.Commit[0:4], strconv.FormatBool(output.IsMultiparty)})
 	}
 	outputTable.Render()
 	tableString.WriteByte('\n')
@@ -229,7 +228,7 @@ func (t *Wallet) InitMofNFundingTransaction(
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slates, savedSlate, outputs, err := t.initMofNMultipartyTransaction(
+	slates, savedSlate, outputs, err := t.initMofNFundingMultipartyTransaction(
 		inputs,
 		change,
 		0,
@@ -271,7 +270,7 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, transaction
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID)
+	slate, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID, nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot initMultipartyTransaction")
 	}
@@ -302,7 +301,7 @@ func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutVa
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, transactionID, participantID)
+	slate, savedSlate, outputs, err := t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, transactionID, participantID, nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -328,7 +327,54 @@ func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutVa
 	return
 }
 
-func (t *Wallet) SignMofNMultipartyTransaction(slatesBytes [][]byte) (slateBytes []byte, err error) {
+func (t *Wallet) InitMofNSpendingTransaction(
+	multipartyOutputCommit string,
+	payoutValue uint64,
+	transactionID uuid.UUID,
+	participantID string,
+	missingParticipantsIDs []string,
+) (
+	slateBytes []byte,
+	err error,
+) {
+	multipartyOutput, err := t.db.GetOutput(multipartyOutputCommit)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	slate, savedSlate, outputs, err := t.initMofNSpendingMultipartyTransaction(
+		[]SavedOutput{multipartyOutput},
+		payoutValue,
+		0,
+		transactionID,
+		participantID,
+		missingParticipantsIDs)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
+	}
+
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
+	}
+
+	err = t.db.PutSenderSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	slateBytes, err = json.Marshal(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
+	}
+
+	return
+}
+
+func (t *Wallet) InitMissingPartyMofNMultipartyTransaction(slatesBytes [][]byte, missingParticipantID string) (slateBytes []byte, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
 		slate := &Slate{}
@@ -347,12 +393,61 @@ func (t *Wallet) SignMofNMultipartyTransaction(slatesBytes [][]byte) (slateBytes
 		return nil, errors.Wrap(err, "cannot GetSenderSlate")
 	}
 
+	multipartyOutput, err := t.db.GetOutput(savedSlate.Transaction.Body.Inputs[0].Commit)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	slate, savedSlate, err := t.constructMissingPartySlate(slates, multipartyOutput, 0, savedSlate.Transaction.ID, missingParticipantID)
+	if err != nil {
+		err = errors.Wrap(err, "cannot constructMissingPartySlate")
+		return nil, err
+	}
+
+	err = t.db.PutMissingPartySlate(savedSlate, missingParticipantID)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutMissingPartySlate")
+	}
+
+	slateBytes, err = json.Marshal(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
+	}
+	return
+}
+
+func (t *Wallet) SignMofNMultipartyTransaction(slatesBytes [][]byte, missingPartyID *string) (slateBytes []byte, err error) {
+	var slates = make([]*Slate, 0)
+	for _, slateBytes := range slatesBytes {
+		slate := &Slate{}
+		err = json.Unmarshal(slateBytes, slate)
+		if err != nil {
+			err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+			return nil, err
+		}
+		slates = append(slates, slate)
+	}
+
+	id, _ := slates[0].Transaction.ID.MarshalText()
+
+	var savedSlate *SavedSlate
+	if missingPartyID == nil {
+		savedSlate, err = t.db.GetSenderSlate(id)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot GetSenderSlate")
+		}
+	} else {
+		savedSlate, err = t.db.GetMissingPartySlate(string(id), *missingPartyID)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot GetSenderSlate")
+		}
+	}
+
 	slate, savedSlate, err := t.signMofNMultipartyTransaction(slates, savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot signMultipartyTransaction")
 	}
-	asd, _ := json.Marshal(savedSlate)
-	println(string(asd))
 
 	err = t.db.PutSenderSlate(savedSlate)
 	if err != nil {

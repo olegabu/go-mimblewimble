@@ -10,9 +10,11 @@ import (
 type Database interface {
 	PutSenderSlate(slate *SavedSlate) error
 	PutReceiverSlate(slate *SavedSlate) error
+	PutMissingPartySlate(slate *SavedSlate, missingPartyID string) error
 	PutTransaction(tx SavedTransaction) error
 	PutOutput(output SavedOutput) error
 	GetSenderSlate(id []byte) (slate *SavedSlate, err error)
+	GetMissingPartySlate(transactionID string, missingPartyID string) (slate *SavedSlate, err error)
 	GetTransaction(id []byte) (transaction SavedTransaction, err error)
 	GetOutput(commit string) (output SavedOutput, err error)
 	ListSlates() (slates []SavedSlate, err error)
@@ -43,14 +45,16 @@ type SlateOutput struct {
 
 type SavedOutput struct {
 	SlateOutput
-	Index      uint32       `json:"index"`
-	AssetIndex uint32       `json:"asset_index"`
-	Value      uint64       `json:"value"`
-	Asset      string       `json:"asset,omitempty"`
-	Status     OutputStatus `json:"status,omitempty"`
+	Blind             [32]byte     `json:"blind,omitempty"`
+	PartialAssetBlind [32]byte     `json:"partial_asset_blind,omitempty"`
+	Value             uint64       `json:"value"`
+	Asset             string       `json:"asset,omitempty"`
+	Status            OutputStatus `json:"status,omitempty"`
 
-	VerifiableBlindsShares map[string][]VerifiableShare `json:"verifiable_blinds_shares,omitempty"`
-	ReservedBlindIndexes   []uint32                     `json:"reserved_blinds_indexes,omitempty"`
+	VerifiableBlindsShares    map[string][]VerifiableShare `json:"verifiable_blinds_shares,omitempty"`
+	PartialAssetBlinds        map[string][][32]byte        `json:"partial_asset_blinds,omitempty"`
+	ReservedBlindIndexes      []uint32                     `json:"reserved_blind_indexes,omitempty"`
+	ReservedAssetBlindIndexes []uint32                     `json:"reserved_asset_blind_indexes,omitempty"`
 }
 
 type OutputStatus int
@@ -105,6 +109,7 @@ type Slate struct {
 
 	// Verifiable blind's shares for m-of-n multiparty outputs
 	VerifiableBlindsShares map[string][]VerifiableShare `json:"verifiable_blinds_shares,omitempty"`
+	PartialAssetBlinds     map[string][][32]byte        `json:"partial_asset_blinds,omitempty"`
 }
 
 // ParticipantData is a public data for each participant in the slate
@@ -148,12 +153,14 @@ type VersionCompatInfo struct {
 
 type SavedSlate struct {
 	Slate
-	BlindIndex           uint32   `json:"blind_index,omitempty"`
-	AssetBlindIndex      uint32   `json:"asset_blind_index,omitempty"`
-	ExcessBlind          [32]byte `json:"excess_blind,omitempty"`
-	Nonce                [32]byte `json:"nonce,omitempty"`
-	ParticipantID        string   `json:"participant_id,omitempty"`
-	ReservedBlindIndexes []uint32 `json:"reserved_blinds_indexes,omitempty"` // only for m-of-n
+	Blind         [32]byte `json:"blind_index,omitempty"`
+	AssetBlind    [32]byte `json:"asset_blind_index,omitempty"`
+	ExcessBlind   [32]byte `json:"excess_blind,omitempty"`
+	Nonce         [32]byte `json:"nonce,omitempty"`
+	ParticipantID string   `json:"participant_id,omitempty"`
+
+	ReservedBlindIndexes      []uint32 `json:"reserved_blind_indexes,omitempty"`       // only for m-of-n
+	ReservedAssetBlindIndexes []uint32 `json:"reserved_asset_blind_indexes,omitempty"` // only for m-of-n
 }
 
 type SlateTransactionBody struct {

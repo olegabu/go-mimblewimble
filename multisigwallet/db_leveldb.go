@@ -73,6 +73,42 @@ func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
 	return nil
 }
 
+func missingPartySlateKey(id string) []byte {
+	return []byte("slate." + id + ".mp")
+}
+
+func (t *leveldbDatabase) PutMissingPartySlate(slate *SavedSlate, missingPartyID string) error {
+	slateBytes, err := json.Marshal(slate)
+	if err != nil {
+		return errors.Wrap(err, "cannot marshal SenderSlate into json")
+	}
+
+	err = t.db.Put(missingPartySlateKey(slate.Transaction.ID.String()+missingPartyID), slateBytes, nil)
+	if err != nil {
+		return errors.Wrap(err, "cannot Put slate")
+	}
+
+	return nil
+}
+
+func (t *leveldbDatabase) GetMissingPartySlate(transactionID string, missingPartyID string) (slate *SavedSlate, err error) {
+	slateBytes, err := t.db.Get(missingPartySlateKey(transactionID+missingPartyID), nil)
+	if err != nil {
+		err = errors.Wrap(err, "cannot Get slate")
+		return
+	}
+
+	slate = &SavedSlate{}
+
+	err = json.Unmarshal(slateBytes, slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal slateBytes")
+		return
+	}
+
+	return slate, nil
+}
+
 func (t *leveldbDatabase) PutTransaction(transaction SavedTransaction) error {
 	transactionBytes, err := json.Marshal(transaction)
 	if err != nil {
@@ -281,7 +317,6 @@ func (t *leveldbDatabase) GetOutput(commit string) (output SavedOutput, err erro
 	}
 
 	output = SavedOutput{}
-
 	err = json.Unmarshal(outputBytes, &output)
 	if err != nil {
 		return SavedOutput{}, errors.Wrap(err, "cannot unmarshal outputBytes")
