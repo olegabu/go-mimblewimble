@@ -218,7 +218,6 @@ func (t *Wallet) InitMofNFundingTransaction(
 	participantID string,
 	participantsCount int,
 	minParticipantsCount int,
-	precalculatedBlindsCount int,
 ) (
 	slatesBytes [][]byte,
 	err error,
@@ -235,8 +234,7 @@ func (t *Wallet) InitMofNFundingTransaction(
 		transactionID,
 		participantID,
 		participantsCount,
-		minParticipantsCount,
-		precalculatedBlindsCount)
+		minParticipantsCount)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot initMofNMultipartyTransaction")
 	}
@@ -270,7 +268,7 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, transaction
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID, nil, nil)
+	slate, savedSlate, outputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot initMultipartyTransaction")
 	}
@@ -301,7 +299,7 @@ func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutVa
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, transactionID, participantID, nil, nil)
+	slate, savedSlate, outputs, err := t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, payoutValue, 0, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -521,8 +519,6 @@ func (t *Wallet) AggregateMofNMultipartyTransaction(slatesBytes [][]byte) (trans
 		return
 	}
 
-	dd, _ := json.Marshal(savedSlate)
-	println(string(dd))
 	transaction, walletTx, multipartyOutput, err := t.aggregateMultipartyTransaction(slates, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
@@ -530,27 +526,8 @@ func (t *Wallet) AggregateMofNMultipartyTransaction(slatesBytes [][]byte) (trans
 	}
 
 	if multipartyOutput != nil {
-		if savedSlate.Transaction.Body.Inputs[0].IsMultiparty {
-			oldMultipartyOutput, e := t.db.GetOutput(savedSlate.Transaction.Body.Inputs[0].Commit)
-			if e != nil {
-				err = errors.Wrap(e, "cannot GetOutput")
-				return
-			}
-			multipartyOutput.ReservedBlindIndexes = oldMultipartyOutput.ReservedBlindIndexes[1:]
-			multipartyOutput.ReservedAssetBlindIndexes = oldMultipartyOutput.ReservedAssetBlindIndexes[1:]
-			multipartyOutput.VerifiableBlindsShares = make(map[string][]VerifiableShare)
-			multipartyOutput.PartialAssetBlinds = make(map[string][][32]byte)
-
-			for participantID := range oldMultipartyOutput.VerifiableBlindsShares {
-				multipartyOutput.VerifiableBlindsShares[participantID] = oldMultipartyOutput.VerifiableBlindsShares[participantID][1:]
-				multipartyOutput.PartialAssetBlinds[participantID] = oldMultipartyOutput.PartialAssetBlinds[participantID][1:]
-			}
-		} else {
-			multipartyOutput.ReservedBlindIndexes = savedSlate.ReservedBlindIndexes
-			multipartyOutput.ReservedAssetBlindIndexes = savedSlate.ReservedAssetBlindIndexes
-			multipartyOutput.VerifiableBlindsShares = savedSlate.VerifiableBlindsShares
-			multipartyOutput.PartialAssetBlinds = savedSlate.PartialAssetBlinds
-		}
+		multipartyOutput.VerifiableBlindsShares = savedSlate.VerifiableBlindsShares
+		multipartyOutput.PartialAssetBlinds = savedSlate.PartialAssetBlinds
 
 		multipartyOutputCommit = multipartyOutput.Commit
 		err = t.db.PutOutput(*multipartyOutput)

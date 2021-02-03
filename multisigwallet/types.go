@@ -5,6 +5,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/bulletproof"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/vss"
 )
 
 type Database interface {
@@ -51,10 +53,8 @@ type SavedOutput struct {
 	Asset             string       `json:"asset,omitempty"`
 	Status            OutputStatus `json:"status,omitempty"`
 
-	VerifiableBlindsShares    map[string][]VerifiableShare `json:"verifiable_blinds_shares,omitempty"`
-	PartialAssetBlinds        map[string][][32]byte        `json:"partial_asset_blinds,omitempty"`
-	ReservedBlindIndexes      []uint32                     `json:"reserved_blind_indexes,omitempty"`
-	ReservedAssetBlindIndexes []uint32                     `json:"reserved_asset_blind_indexes,omitempty"`
+	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
+	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
 }
 
 type OutputStatus int
@@ -108,8 +108,8 @@ type Slate struct {
 	ReceiveAsset  string        `json:"receive_asset,omitempty"`
 
 	// Verifiable blind's shares for m-of-n multiparty outputs
-	VerifiableBlindsShares map[string][]VerifiableShare `json:"verifiable_blinds_shares,omitempty"`
-	PartialAssetBlinds     map[string][][32]byte        `json:"partial_asset_blinds,omitempty"`
+	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
+	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
 }
 
 // ParticipantData is a public data for each participant in the slate
@@ -130,15 +130,8 @@ type ParticipantData struct {
 	Message *string `json:"message"`
 	// Signature, created with private key corresponding to 'public_blind_excess'
 	MessageSig *string `json:"message_sig"`
-	// Shared data for Bulletproofs MPC
-	BulletproofsShare *BulletproofsShare `json:"bulletproofs_share"`
-}
-
-// BulletproofsShare is a shared data for Bulletproofs MPC
-type BulletproofsShare struct {
-	PublicTau1 string `json:"public_tau1"`
-	PublicTau2 string `json:"public_tau2"`
-	Taux       string `json:"taux"`
+	// Shared data for Bulletproof MPC
+	BulletproofsShare *bulletproof.Share `json:"bulletproofs_share"`
 }
 
 // VersionCompatInfo is the versioning and compatibility info about this slate
@@ -158,9 +151,6 @@ type SavedSlate struct {
 	ExcessBlind   [32]byte `json:"excess_blind,omitempty"`
 	Nonce         [32]byte `json:"nonce,omitempty"`
 	ParticipantID string   `json:"participant_id,omitempty"`
-
-	ReservedBlindIndexes      []uint32 `json:"reserved_blind_indexes,omitempty"`       // only for m-of-n
-	ReservedAssetBlindIndexes []uint32 `json:"reserved_asset_blind_indexes,omitempty"` // only for m-of-n
 }
 
 type SlateTransactionBody struct {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/bulletproof"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 )
@@ -15,15 +16,13 @@ func (t *Wallet) initMultipartyTransaction(
 	fee uint64,
 	transactionID uuid.UUID,
 	participantID string,
-	reservedBlind *[32]byte, // in case of m-of-n spending
-	reservedAssetBlind *[32]byte, // in case of m-of-n spending
 ) (
 	slate *Slate,
 	savedSlate *SavedSlate,
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	blind, assetBlind, offset, blindExcess, nonce, changeOutput, err := t.preparePartyData(inputs, change, reservedBlind, reservedAssetBlind)
+	blind, assetBlind, offset, blindExcess, nonce, changeOutput, err := t.preparePartyData(inputs, change)
 	if err != nil {
 		err = errors.Wrap(err, "cannot preparePartyData")
 		return
@@ -66,7 +65,7 @@ func (t *Wallet) initMultipartyTransaction(
 		walletOutputs = []SavedOutput{*changeOutput}
 	}
 
-	bulletproofsShare, err := t.generatePublicTaus(blind[:])
+	bulletproofsShare, err := bulletproof.GeneratePublicTaus(t.context, blind[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot generatePublicTaus")
 		return
@@ -156,7 +155,19 @@ func (t *Wallet) signMultipartyTransaction(
 		assetBlind := savedSlate.AssetBlind
 		blind := savedSlate.Blind
 
-		taux, e := t.computeTaux(blind[:], assetBlind[:], slate)
+		sumPublicTau1, sumPublicTau2, _, commonNonce, e := t.aggregateBulletproofMPCValues(slate)
+		if e != nil {
+			err = errors.Wrap(e, "cannot aggregateBulletproofMPCValues")
+			return
+		}
+
+		commit, assetCommit, _, _, e := t.computeMultipartyCommit(slate)
+		if e != nil {
+			err = errors.Wrap(e, "cannot computeMultipartyCommit")
+			return
+		}
+
+		taux, e := bulletproof.ComputeTaux(t.context, uint64(slate.Amount), blind[:], assetBlind[:], commit, assetCommit, sumPublicTau1, sumPublicTau2, commonNonce)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeTaux")
 			return
@@ -290,7 +301,7 @@ func (t *Wallet) aggregateMultipartyTransaction(
 	return
 }
 
-func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64, reservedBlind *[32]byte, reservedAssetBlind *[32]byte) (
+func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64) (
 	blind [32]byte,
 	assetBlind [32]byte,
 	offset [32]byte,
@@ -299,26 +310,18 @@ func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64, reservedB
 	changeOutput *SavedOutput,
 	err error,
 ) {
-	if reservedBlind == nil {
-		// generate partial output blind
-		blind, _, err = t.newSecret()
-		if err != nil {
-			err = errors.Wrap(err, "cannot get newSecret")
-			return
-		}
-	} else {
-		blind = *reservedBlind
+	// generate partial output blind
+	blind, _, err = t.newSecret()
+	if err != nil {
+		err = errors.Wrap(err, "cannot get newSecret")
+		return
 	}
 
-	if reservedAssetBlind == nil {
-		// generate partial output asset blind
-		assetBlind, _, err = t.newSecret()
-		if err != nil {
-			err = errors.Wrap(err, "cannot get newSecret")
-			return
-		}
-	} else {
-		assetBlind = *reservedAssetBlind
+	// generate partial output asset blind
+	assetBlind, _, err = t.newSecret()
+	if err != nil {
+		err = errors.Wrap(err, "cannot get newSecret")
+		return
 	}
 
 	// generate random offset
@@ -529,7 +532,13 @@ func (t *Wallet) createMultipartyOutput(slate *Slate) (output *SlateOutput, err 
 		return
 	}
 
-	proof, err := t.aggregateProof(slate, commit, assetCommit)
+	sumPublicTau1, sumPublicTau2, sumTaux, commonNonce, err := t.aggregateBulletproofMPCValues(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot aggregateBulletproofMPCValues")
+		return
+	}
+
+	proof, err := bulletproof.AggregateProof(t.context, uint64(slate.Amount), commit, assetCommit, sumPublicTau1, sumPublicTau2, sumTaux, commonNonce)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateProof")
 		return
