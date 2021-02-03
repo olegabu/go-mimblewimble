@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/bulletproof"
+	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 )

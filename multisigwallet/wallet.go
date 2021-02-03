@@ -12,12 +12,14 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/db"
+	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 
 type Wallet struct {
 	persistDir string
-	db         Database
+	db         db.Database
 	masterKey  *bip32.Key
 	context    *secp256k1.Context
 }
@@ -44,7 +46,7 @@ func NewWallet(persistDir string) (w *Wallet, err error) {
 }
 
 func NewWalletWithoutMasterKey(persistDir string) (w *Wallet, err error) {
-	db, err := NewLeveldbDatabase(persistDir)
+	db, err := db.NewLeveldbDatabase(persistDir)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create NewLeveldbDatabase")
 		return

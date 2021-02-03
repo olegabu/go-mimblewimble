@@ -2,6 +2,7 @@ package multisigwallet
 
 import (
 	"github.com/google/uuid"
+	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/vss"
 	"github.com/pkg/errors"
 )

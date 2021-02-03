@@ -1,4 +1,4 @@
-package multisigwallet
+package db
 
 import (
 	"encoding/binary"
@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -24,8 +25,6 @@ func NewLeveldbDatabase(dbDir string) (d Database, err error) {
 		err = errors.Wrapf(err, "cannot open leveldb at %v", dbFilename)
 		return
 	}
-	//log.Printf("opened wallet db at %v\n", dbFilename)
-
 	d = &leveldbDatabase{db: ldb}
 	return
 }
