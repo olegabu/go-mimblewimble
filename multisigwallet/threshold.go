@@ -2,7 +2,6 @@ package multisigwallet
 
 import (
 	"github.com/google/uuid"
-	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/pkg/errors"
 )
 
@@ -117,8 +116,6 @@ func (t *Wallet) initMofNSpendingMultipartyTransaction(
 		slate.VerifiableBlindsShares[missingParticipantID] = multipartyOutput.VerifiableBlindsShares[missingParticipantID][:2]
 		slate.PartialAssetBlinds[missingParticipantID] = multipartyOutput.PartialAssetBlinds[missingParticipantID][:2]
 	}
-	savedSlate.ReservedBlindIndexes = multipartyOutput.ReservedBlindIndexes[1:]
-	savedSlate.ReservedAssetBlindIndexes = multipartyOutput.ReservedAssetBlindIndexes[1:]
 	return
 }
 
@@ -159,29 +156,6 @@ func (t *Wallet) signMofNMultipartyTransaction(
 	return
 }
 
-func (t *Wallet) aggregateMofNMultipartyTransaction(
-	slates []*Slate,
-	savedSlate *SavedSlate,
-) (
-	transaction *ledger.Transaction,
-	savedTransaction SavedTransaction,
-	multipartyOutput *SavedOutput,
-	err error,
-) {
-	transaction, savedTransaction, multipartyOutput, err = t.aggregateMultipartyTransaction(slates, savedSlate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
-		return
-	}
-
-	multipartyOutput.ReservedBlindIndexes = savedSlate.ReservedBlindIndexes
-	multipartyOutput.ReservedAssetBlindIndexes = savedSlate.ReservedAssetBlindIndexes
-	multipartyOutput.VerifiableBlindsShares = savedSlate.VerifiableBlindsShares
-	multipartyOutput.PartialAssetBlinds = savedSlate.PartialAssetBlinds
-
-	return
-}
-
 func (t *Wallet) constructMissingPartySlate(
 	slates []*Slate,
 	multipartyOutput SavedOutput,
@@ -217,6 +191,5 @@ func (t *Wallet) constructMissingPartySlate(
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
 	}
-
 	return
 }

@@ -207,7 +207,8 @@ func TestCreateAndSpendMofNMultiparty(t *testing.T) {
 	activeParticipantsIDs := participantIDs[:k]
 	missingParticipantIDs := participantIDs[k:]
 	multipartyOutputCommit = spendMofNMultipartyUtxo(t, wallets, activeParticipantsIDs, missingParticipantIDs, multipartyOutputCommit, []uint64{50, 50})
-
+	multipartyOutputCommit = spendMofNMultipartyUtxo(t, wallets, activeParticipantsIDs, missingParticipantIDs, multipartyOutputCommit, []uint64{50, 50})
+	multipartyOutputCommit = spendMofNMultipartyUtxo(t, wallets, activeParticipantsIDs, missingParticipantIDs, multipartyOutputCommit, []uint64{50, 50})
 	closeWallets(wallets)
 }
 

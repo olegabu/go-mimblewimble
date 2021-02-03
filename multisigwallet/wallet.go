@@ -449,9 +449,16 @@ func (t *Wallet) SignMofNMultipartyTransaction(slatesBytes [][]byte, missingPart
 		return nil, errors.Wrap(err, "cannot signMultipartyTransaction")
 	}
 
-	err = t.db.PutSenderSlate(savedSlate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
+	if missingPartyID == nil {
+		err = t.db.PutSenderSlate(savedSlate)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutSlate")
+		}
+	} else {
+		err = t.db.PutMissingPartySlate(savedSlate, *missingPartyID)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutMissingPartySlate")
+		}
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -514,25 +521,49 @@ func (t *Wallet) AggregateMofNMultipartyTransaction(slatesBytes [][]byte) (trans
 		return
 	}
 
-	transaction, walletTx, multipartyOutput, err := t.aggregateMofNMultipartyTransaction(slates, savedSlate)
+	dd, _ := json.Marshal(savedSlate)
+	println(string(dd))
+	transaction, walletTx, multipartyOutput, err := t.aggregateMultipartyTransaction(slates, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
 		return
 	}
 
-	err = t.db.PutTransaction(walletTx)
-	if err != nil {
-		err = errors.Wrap(err, "cannot PutTransaction")
-		return
-	}
-
 	if multipartyOutput != nil {
+		if savedSlate.Transaction.Body.Inputs[0].IsMultiparty {
+			oldMultipartyOutput, e := t.db.GetOutput(savedSlate.Transaction.Body.Inputs[0].Commit)
+			if e != nil {
+				err = errors.Wrap(e, "cannot GetOutput")
+				return
+			}
+			multipartyOutput.ReservedBlindIndexes = oldMultipartyOutput.ReservedBlindIndexes[1:]
+			multipartyOutput.ReservedAssetBlindIndexes = oldMultipartyOutput.ReservedAssetBlindIndexes[1:]
+			multipartyOutput.VerifiableBlindsShares = make(map[string][]VerifiableShare)
+			multipartyOutput.PartialAssetBlinds = make(map[string][][32]byte)
+
+			for participantID := range oldMultipartyOutput.VerifiableBlindsShares {
+				multipartyOutput.VerifiableBlindsShares[participantID] = oldMultipartyOutput.VerifiableBlindsShares[participantID][1:]
+				multipartyOutput.PartialAssetBlinds[participantID] = oldMultipartyOutput.PartialAssetBlinds[participantID][1:]
+			}
+		} else {
+			multipartyOutput.ReservedBlindIndexes = savedSlate.ReservedBlindIndexes
+			multipartyOutput.ReservedAssetBlindIndexes = savedSlate.ReservedAssetBlindIndexes
+			multipartyOutput.VerifiableBlindsShares = savedSlate.VerifiableBlindsShares
+			multipartyOutput.PartialAssetBlinds = savedSlate.PartialAssetBlinds
+		}
+
 		multipartyOutputCommit = multipartyOutput.Commit
 		err = t.db.PutOutput(*multipartyOutput)
 		if err != nil {
 			err = errors.Wrap(err, "cannot PutOutput")
 			return
 		}
+	}
+
+	err = t.db.PutTransaction(walletTx)
+	if err != nil {
+		err = errors.Wrap(err, "cannot PutTransaction")
+		return
 	}
 
 	transactionBytes, err = json.Marshal(transaction)

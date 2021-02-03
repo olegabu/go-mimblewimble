@@ -23,7 +23,7 @@ func (t *Wallet) initMultipartyTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	blind, _, assetBlind, _, offset, blindExcess, nonce, changeOutput, err := t.preparePartyData(inputs, change, reservedBlind, reservedAssetBlind)
+	blind, assetBlind, offset, blindExcess, nonce, changeOutput, err := t.preparePartyData(inputs, change, reservedBlind, reservedAssetBlind)
 	if err != nil {
 		err = errors.Wrap(err, "cannot preparePartyData")
 		return
@@ -292,9 +292,7 @@ func (t *Wallet) aggregateMultipartyTransaction(
 
 func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64, reservedBlind *[32]byte, reservedAssetBlind *[32]byte) (
 	blind [32]byte,
-	blindIndex uint32,
 	assetBlind [32]byte,
-	assetBlindIndex uint32,
 	offset [32]byte,
 	blindExcess [32]byte,
 	nonce [32]byte,
@@ -303,7 +301,7 @@ func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64, reservedB
 ) {
 	if reservedBlind == nil {
 		// generate partial output blind
-		blind, blindIndex, err = t.newSecret()
+		blind, _, err = t.newSecret()
 		if err != nil {
 			err = errors.Wrap(err, "cannot get newSecret")
 			return
@@ -314,7 +312,7 @@ func (t *Wallet) preparePartyData(inputs []SavedOutput, change uint64, reservedB
 
 	if reservedAssetBlind == nil {
 		// generate partial output asset blind
-		assetBlind, assetBlindIndex, err = t.newSecret()
+		assetBlind, _, err = t.newSecret()
 		if err != nil {
 			err = errors.Wrap(err, "cannot get newSecret")
 			return
