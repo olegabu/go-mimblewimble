@@ -27,12 +27,14 @@ type SlateOutput struct {
 
 type SavedOutput struct {
 	SlateOutput
-	Blind             [32]byte     `json:"blind,omitempty"`
-	PartialAssetBlind [32]byte     `json:"partial_asset_blind,omitempty"`
-	Value             uint64       `json:"value"`
-	Asset             string       `json:"asset,omitempty"`
-	Status            OutputStatus `json:"status,omitempty"`
+	Index      uint32       `json:"index"`
+	AssetIndex uint32       `json:"asset_index"`
+	Value      uint64       `json:"value"`
+	Asset      string       `json:"asset,omitempty"`
+	Status     OutputStatus `json:"status,omitempty"`
 
+	PartialBlind           *[32]byte            `json:"partial_blind,omitempty"`
+	PartialAssetBlind      *[32]byte            `json:"partial_asset_blind,omitempty"`
 	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
 	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
 }
@@ -126,11 +128,11 @@ type VersionCompatInfo struct {
 
 type SavedSlate struct {
 	Slate
-	Blind         [32]byte `json:"blind_index,omitempty"`
-	AssetBlind    [32]byte `json:"asset_blind_index,omitempty"`
-	ExcessBlind   [32]byte `json:"excess_blind,omitempty"`
-	Nonce         [32]byte `json:"nonce,omitempty"`
-	ParticipantID string   `json:"participant_id,omitempty"`
+	PartialBlind      [32]byte `json:"partial_blind,omitempty"`
+	PartialAssetBlind [32]byte `json:"partial_asset_blind,omitempty"`
+	ExcessBlind       [32]byte `json:"excess_blind,omitempty"`
+	Nonce             [32]byte `json:"nonce,omitempty"`
+	ParticipantID     string   `json:"participant_id,omitempty"`
 }
 
 type SlateTransactionBody struct {

@@ -119,12 +119,12 @@ func (t *Wallet) initMultipartyTransaction(
 	}
 
 	savedSlate = &SavedSlate{
-		Slate:         *slate,
-		Nonce:         nonce,
-		Blind:         blind,
-		AssetBlind:    assetBlind,
-		ExcessBlind:   blindExcess,
-		ParticipantID: participantID,
+		Slate:             *slate,
+		Nonce:             nonce,
+		PartialBlind:      blind,
+		PartialAssetBlind: assetBlind,
+		ExcessBlind:       blindExcess,
+		ParticipantID:     participantID,
 	}
 	return
 }
@@ -153,8 +153,8 @@ func (t *Wallet) signMultipartyTransaction(
 
 	newMultipartyUtxoIsNeccessary := slate.Amount > 0
 	if newMultipartyUtxoIsNeccessary {
-		assetBlind := savedSlate.AssetBlind
-		blind := savedSlate.Blind
+		assetBlind := savedSlate.PartialAssetBlind
+		blind := savedSlate.PartialBlind
 
 		sumPublicTau1, sumPublicTau2, _, commonNonce, e := t.aggregateBulletproofMPCValues(slate)
 		if e != nil {
@@ -292,8 +292,8 @@ func (t *Wallet) aggregateMultipartyTransaction(
 		multipartyOutput = &SavedOutput{
 			SlateOutput:       *output,
 			Value:             uint64(slate.Amount),
-			Blind:             savedSlate.Blind,
-			PartialAssetBlind: savedSlate.AssetBlind,
+			PartialBlind:      &savedSlate.PartialBlind,
+			PartialAssetBlind: &savedSlate.PartialAssetBlind,
 			Asset:             slate.Asset,
 			Status:            OutputUnconfirmed,
 		}

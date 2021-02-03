@@ -22,7 +22,29 @@ func commitsFromBlinds(context *secp256k1.Context, blinds ...[]byte) (commits []
 
 // blind + v * assetBlind
 func (t *Wallet) computeBlindValueAssetBlind(output SavedOutput) (blindValueAssetBlind [32]byte, err error) {
-	blindValueAssetBlind, err = secp256k1.BlindValueGeneratorBlindSum(output.Value, output.PartialAssetBlind[:], output.Blind[:])
+	var blind [32]byte
+	if output.PartialBlind != nil {
+		blind = *output.PartialBlind
+	} else {
+		blind, err = t.secret(output.Index)
+		if err != nil {
+			err = errors.Wrap(err, "cannot get blind by index")
+			return
+		}
+	}
+
+	var assetBlind [32]byte
+	if output.PartialBlind != nil {
+		assetBlind = *output.PartialAssetBlind
+	} else {
+		assetBlind, err = t.secret(output.AssetIndex)
+		if err != nil {
+			err = errors.Wrap(err, "cannot get blind by index")
+			return
+		}
+	}
+
+	blindValueAssetBlind, err = secp256k1.BlindValueGeneratorBlindSum(output.Value, assetBlind[:], blind[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot BlindSum")
 		return

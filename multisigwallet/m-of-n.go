@@ -28,9 +28,9 @@ func (t *Wallet) initMofNFundingMultipartyTransaction(
 	}
 
 	slate.PartialAssetBlinds = make(map[string][32]byte)
-	slate.PartialAssetBlinds[participantID] = savedSlate.AssetBlind
+	slate.PartialAssetBlinds[participantID] = savedSlate.PartialAssetBlind
 
-	shares, e := vss.ShareBlind(participantsCount, minParticipantsCount, savedSlate.Blind[:])
+	shares, e := vss.ShareBlind(participantsCount, minParticipantsCount, savedSlate.PartialBlind[:])
 	if e != nil {
 		err = errors.Wrap(e, "cannot generateAndShareBlinds")
 		return
@@ -126,14 +126,18 @@ func (t *Wallet) constructMissingPartySlate(
 		shares = append(shares, slate.VerifiableBlindsShares[missingParticipantID].VerifiableShare)
 	}
 
-	blind, e := vss.OpenBlind(shares)
+	secret, e := vss.OpenBlind(shares)
 	if e != nil {
 		err = errors.Wrap(e, "cannot openBlind")
 		return
 	}
+	var blind [32]byte
+	copy(blind[:], secret)
+	multipartyOutput.PartialBlind = &blind
 
-	multipartyOutput.PartialAssetBlind = multipartyOutput.PartialAssetBlinds[missingParticipantID]
-	copy(multipartyOutput.Blind[:], blind)
+	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
+	multipartyOutput.PartialAssetBlind = &partialAssetBlind
+
 	slate, savedSlate, _, err = t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")

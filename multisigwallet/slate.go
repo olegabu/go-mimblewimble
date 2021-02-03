@@ -19,14 +19,14 @@ func (t *Wallet) newOutput(
 	sumBlinds []byte,
 	err error,
 ) {
-	secret, _, err := t.newSecret()
+	secret, blindIndex, err := t.newSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
 	blind := secret
 
-	assetSecret, _, err := t.newSecret()
+	assetSecret, assetIndex, err := t.newSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
@@ -94,11 +94,11 @@ func (t *Wallet) newOutput(
 			AssetTag:   assetTag.Hex(),
 			AssetBlind: hex.EncodeToString(assetBlind[:]),
 		},
-		Value:             value,
-		Blind:             blind,
-		PartialAssetBlind: assetBlind,
-		Asset:             asset,
-		Status:            status,
+		Value:      value,
+		Index:      blindIndex,
+		AssetIndex: assetIndex,
+		Asset:      asset,
+		Status:     status,
 	}
 
 	return
