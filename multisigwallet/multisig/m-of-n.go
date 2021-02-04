@@ -1,13 +1,14 @@
-package multisigwallet
+package multisig
 
 import (
 	"github.com/google/uuid"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig/vss"
 	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
-	"github.com/olegabu/go-mimblewimble/multisigwallet/vss"
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) initMofNFundingMultipartyTransaction(
+func InitMOfNFundingMultipartyTransaction(
+	wallet Wallet,
 	inputs []SavedOutput,
 	change uint64,
 	fee uint64,
@@ -21,7 +22,7 @@ func (t *Wallet) initMofNFundingMultipartyTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err := t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err := InitMultipartyTransaction(wallet, inputs, change, 0, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -47,9 +48,10 @@ func (t *Wallet) initMofNFundingMultipartyTransaction(
 	return
 }
 
-func (t *Wallet) initMofNSpendingMultipartyTransaction(
-	inputs []SavedOutput,
-	change uint64,
+func InitMOfNSpendingMultipartyTransaction(
+	wallet Wallet,
+	multipartyOutput SavedOutput,
+	payout uint64,
 	fee uint64,
 	transactionID uuid.UUID,
 	participantID string,
@@ -60,23 +62,22 @@ func (t *Wallet) initMofNSpendingMultipartyTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err = t.initMultipartyTransaction(inputs, change, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err = InitMultipartyTransaction(wallet, []SavedOutput{multipartyOutput}, payout, 0, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
 	}
 
-	multipartyOutput := inputs[0]
 	slate.VerifiableBlindsShares = make(map[string]vss.Share)
 	slate.PartialAssetBlinds = make(map[string][32]byte)
 	for _, missingParticipantID := range missingParticipantsIDs {
 		slate.VerifiableBlindsShares[missingParticipantID] = multipartyOutput.VerifiableBlindsShares[missingParticipantID]
-		slate.PartialAssetBlinds[missingParticipantID] = multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	}
 	return
 }
 
-func (t *Wallet) signMofNMultipartyTransaction(
+func SignMOfNMultipartyTransaction(
+	wallet Wallet,
 	slates []*Slate,
 	inSavedSlate *SavedSlate,
 ) (
@@ -84,8 +85,13 @@ func (t *Wallet) signMofNMultipartyTransaction(
 	outSavedSlate *SavedSlate,
 	err error,
 ) {
-	outSavedSlate = new(SavedSlate)
-	*outSavedSlate = *inSavedSlate
+	outSlate, err = SignMultipartyTransaction(wallet, slates, inSavedSlate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot signMultipartyTransaction")
+		return
+	}
+
+	outSavedSlate = inSavedSlate
 	outSavedSlate.VerifiableBlindsShares = make(map[string]vss.Share)
 	outSavedSlate.PartialAssetBlinds = make(map[string][32]byte)
 	for _, slate := range slates {
@@ -102,15 +108,11 @@ func (t *Wallet) signMofNMultipartyTransaction(
 			outSavedSlate.PartialAssetBlinds[participantID] = partialAssetBlinds
 		}
 	}
-
-	outSlate, err = t.signMultipartyTransaction(slates, inSavedSlate)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "cannot signMultipartyTransaction")
-	}
 	return
 }
 
-func (t *Wallet) constructMissingPartySlate(
+func ConstructMissingPartySlate(
+	wallet Wallet,
 	slates []*Slate,
 	multipartyOutput SavedOutput,
 	fee uint64,
@@ -138,7 +140,7 @@ func (t *Wallet) constructMissingPartySlate(
 	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	multipartyOutput.PartialAssetBlind = &partialAssetBlind
 
-	slate, savedSlate, _, err = t.initMultipartyTransaction([]SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
+	slate, savedSlate, _, err = InitMultipartyTransaction(wallet, []SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return

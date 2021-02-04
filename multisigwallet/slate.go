@@ -19,14 +19,14 @@ func (t *Wallet) newOutput(
 	sumBlinds []byte,
 	err error,
 ) {
-	secret, blindIndex, err := t.newSecret()
+	secret, blindIndex, err := t.NewSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
 	blind := secret
 
-	assetSecret, assetIndex, err := t.newSecret()
+	assetSecret, assetIndex, err := t.NewSecret()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return

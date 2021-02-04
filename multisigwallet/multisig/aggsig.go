@@ -1,4 +1,4 @@
-package multisigwallet
+package multisig
 
 import (
 	"encoding/hex"
@@ -9,20 +9,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (t *Wallet) createPartialSignature(slate *Slate, savedSlate *SavedSlate) (partialSignatureString string, err error) {
-	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := t.getSharedData(slate)
+func createPartialSignature(wallet Wallet, slate *Slate, savedSlate *SavedSlate) (partialSignatureString string, err error) {
+	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := getSharedData(wallet.GetContext(), slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot extractParticipantData")
 		return
 	}
 
-	aggregatedPublicKey, err := t.calculateAggregatedPublicKey(publicBlinds, publicValueAssetBlinds, publicBlindExcesses)
+	aggregatedPublicKey, err := calculateAggregatedPublicKey(wallet, publicBlinds, publicValueAssetBlinds, publicBlindExcesses)
 	if err != nil {
 		err = errors.Wrap(err, "cannot computeAggregatedPublicKey")
 		return
 	}
 
-	aggregatedPublicNonce, err := t.calculateAggregatedNonce(publicNonces)
+	aggregatedPublicNonce, err := calculateAggregatedNonce(wallet, publicNonces)
 	if err != nil {
 		err = errors.Wrap(err, "cannot computeAggregatedNonce")
 		return
@@ -42,20 +42,20 @@ func (t *Wallet) createPartialSignature(slate *Slate, savedSlate *SavedSlate) (p
 			return
 		}
 
-		privateKey, e = secp256k1.BlindSum(t.context, [][]byte{blindValueAssetBlind[:], savedSlate.ExcessBlind[:]}, nil)
+		privateKey, e = secp256k1.BlindSum(wallet.GetContext(), [][]byte{blindValueAssetBlind[:], savedSlate.ExcessBlind[:]}, nil)
 		if e != nil {
 			err = errors.Wrap(e, "cannot compute private key")
 			return
 		}
 	} else {
-		privateKey, err = secp256k1.BlindSum(t.context, [][]byte{savedSlate.ExcessBlind[:]}, nil)
+		privateKey, err = secp256k1.BlindSum(wallet.GetContext(), [][]byte{savedSlate.ExcessBlind[:]}, nil)
 		if err != nil {
 			err = errors.Wrap(err, "cannot compute private key")
 			return
 		}
 	}
 
-	partialSignature, err := secp256k1.AggsigSignPartial(t.context, privateKey[:], savedSlate.Nonce[:], aggregatedPublicNonce, aggregatedPublicKey, msg)
+	partialSignature, err := secp256k1.AggsigSignPartial(wallet.GetContext(), privateKey[:], savedSlate.Nonce[:], aggregatedPublicNonce, aggregatedPublicKey, msg)
 	if err != nil {
 		err = errors.Wrap(err, "cannot calculate receiver's partial signature")
 		return
@@ -65,7 +65,8 @@ func (t *Wallet) createPartialSignature(slate *Slate, savedSlate *SavedSlate) (p
 	return
 }
 
-func (t *Wallet) getSharedData(
+func getSharedData(
+	context *secp256k1.Context,
 	slate *Slate,
 ) (
 	publicBlinds []*secp256k1.Commitment,
@@ -110,7 +111,7 @@ func (t *Wallet) getSharedData(
 				return
 			}
 
-			publicValueAssetBlind, e := secp256k1.Commit(t.context, valueAssetBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+			publicValueAssetBlind, e := secp256k1.Commit(context, valueAssetBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 			if e != nil {
 				err = errors.Wrap(e, "cannot Commit")
 				return
@@ -121,7 +122,8 @@ func (t *Wallet) getSharedData(
 	return
 }
 
-func (t *Wallet) calculateAggregatedPublicKey(
+func calculateAggregatedPublicKey(
+	wallet Wallet,
 	publicBlinds []*secp256k1.Commitment,
 	publicValueAssetBlinds []*secp256k1.Commitment,
 	publicBlindExcesses []*secp256k1.Commitment,
@@ -129,13 +131,13 @@ func (t *Wallet) calculateAggregatedPublicKey(
 	publicKey *secp256k1.PublicKey,
 	err error,
 ) {
-	commit, err := secp256k1.CommitSum(t.context, append(append(publicBlinds, publicValueAssetBlinds...), publicBlindExcesses...), nil)
+	commit, err := secp256k1.CommitSum(wallet.GetContext(), append(append(publicBlinds, publicValueAssetBlinds...), publicBlindExcesses...), nil)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CommitSum")
 		return
 	}
 
-	publicKey, err = secp256k1.CommitmentToPublicKey(t.context, commit)
+	publicKey, err = secp256k1.CommitmentToPublicKey(wallet.GetContext(), commit)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CommitmentToPublicKey")
 		return
@@ -143,14 +145,14 @@ func (t *Wallet) calculateAggregatedPublicKey(
 	return
 }
 
-func (t *Wallet) calculateAggregatedNonce(publicNonces []*secp256k1.Commitment) (publicNonce *secp256k1.PublicKey, err error) {
-	commit, err := secp256k1.CommitSum(t.context, publicNonces, nil)
+func calculateAggregatedNonce(wallet Wallet, publicNonces []*secp256k1.Commitment) (publicNonce *secp256k1.PublicKey, err error) {
+	commit, err := secp256k1.CommitSum(wallet.GetContext(), publicNonces, nil)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CommitSum")
 		return
 	}
 
-	publicNonce, err = secp256k1.CommitmentToPublicKey(t.context, commit)
+	publicNonce, err = secp256k1.CommitmentToPublicKey(wallet.GetContext(), commit)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CommitmentToPublicKey")
 		return
@@ -158,8 +160,8 @@ func (t *Wallet) calculateAggregatedNonce(publicNonces []*secp256k1.Commitment) 
 	return
 }
 
-func (t *Wallet) aggregatePartialSignatures(slate *Slate) (signature secp256k1.AggsigSignature, err error) {
-	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := t.getSharedData(slate)
+func aggregatePartialSignatures(wallet Wallet, slate *Slate) (signature secp256k1.AggsigSignature, err error) {
+	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := getSharedData(wallet.GetContext(), slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot extractParticipantData")
 		return
@@ -167,13 +169,13 @@ func (t *Wallet) aggregatePartialSignatures(slate *Slate) (signature secp256k1.A
 
 	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
-	aggregatedPublicKey, err := t.calculateAggregatedPublicKey(publicBlinds, publicValueAssetBlinds, publicBlindExcesses)
+	aggregatedPublicKey, err := calculateAggregatedPublicKey(wallet, publicBlinds, publicValueAssetBlinds, publicBlindExcesses)
 	if err != nil {
 		err = errors.Wrap(err, "cannot computeAggregatedPublicKey")
 		return
 	}
 
-	aggregatedPublicNonce, err := t.calculateAggregatedNonce(publicNonces)
+	aggregatedPublicNonce, err := calculateAggregatedNonce(wallet, publicNonces)
 	if err != nil {
 		err = errors.Wrap(err, "cannot computeAggregatedNonce")
 		return
@@ -220,38 +222,38 @@ func (t *Wallet) aggregatePartialSignatures(slate *Slate) (signature secp256k1.A
 				return
 			}
 
-			publicValueAssetBlind, e := secp256k1.Commit(t.context, valueAssetBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+			publicValueAssetBlind, e := secp256k1.Commit(wallet.GetContext(), valueAssetBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 			if e != nil {
 				err = errors.Wrap(e, "cannot Commit")
 				return
 			}
 
-			publicBlindValueAssetBlind, e := secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlind, publicValueAssetBlind}, nil)
+			publicBlindValueAssetBlind, e := secp256k1.CommitSum(wallet.GetContext(), []*secp256k1.Commitment{publicBlind, publicValueAssetBlind}, nil)
 			if e != nil {
 				err = errors.Wrap(e, "cannot CommitSum")
 				return
 			}
 
-			partialPublicKeyCommit, e = secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlindExcess, publicBlindValueAssetBlind}, nil)
+			partialPublicKeyCommit, e = secp256k1.CommitSum(wallet.GetContext(), []*secp256k1.Commitment{publicBlindExcess, publicBlindValueAssetBlind}, nil)
 			if e != nil {
 				err = errors.Wrap(e, "cannot CommitSum")
 				return
 			}
 		} else {
-			partialPublicKeyCommit, e = secp256k1.CommitSum(t.context, []*secp256k1.Commitment{publicBlindExcess}, nil)
+			partialPublicKeyCommit, e = secp256k1.CommitSum(wallet.GetContext(), []*secp256k1.Commitment{publicBlindExcess}, nil)
 			if e != nil {
 				err = errors.Wrap(e, "cannot CommitSum")
 				return
 			}
 		}
 
-		partialPublicKey, e := secp256k1.CommitmentToPublicKey(t.context, partialPublicKeyCommit)
+		partialPublicKey, e := secp256k1.CommitmentToPublicKey(wallet.GetContext(), partialPublicKeyCommit)
 		if e != nil {
 			err = errors.Wrap(e, "cannot CommitmentToPublicKey")
 			return
 		}
 
-		e = secp256k1.AggsigVerifyPartial(t.context, &partialSignature, aggregatedPublicNonce, partialPublicKey, aggregatedPublicKey, msg)
+		e = secp256k1.AggsigVerifyPartial(wallet.GetContext(), &partialSignature, aggregatedPublicNonce, partialPublicKey, aggregatedPublicKey, msg)
 		if e != nil {
 			err = errors.Wrap(e, "cannot AggsigVerifyPartial")
 			return
@@ -260,13 +262,13 @@ func (t *Wallet) aggregatePartialSignatures(slate *Slate) (signature secp256k1.A
 		partialSignatures = append(partialSignatures, &partialSignature)
 	}
 
-	signature, err = secp256k1.AggsigAddSignaturesSingle(t.context, partialSignatures, aggregatedPublicNonce)
+	signature, err = secp256k1.AggsigAddSignaturesSingle(wallet.GetContext(), partialSignatures, aggregatedPublicNonce)
 	if err != nil {
 		err = errors.Wrap(err, "cannot add sender and receiver partial signatures")
 		return
 	}
 
-	err = secp256k1.AggsigVerifySingle(t.context, &signature, msg, nil, aggregatedPublicKey, aggregatedPublicKey, nil, false)
+	err = secp256k1.AggsigVerifySingle(wallet.GetContext(), &signature, msg, nil, aggregatedPublicKey, aggregatedPublicKey, nil, false)
 	if err != nil {
 		err = errors.Wrap(err, "cannot verify excess signature")
 		return

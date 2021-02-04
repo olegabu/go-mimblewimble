@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
-	"github.com/olegabu/go-mimblewimble/multisigwallet/bulletproof"
-	"github.com/olegabu/go-mimblewimble/multisigwallet/vss"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig/bulletproof"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig/vss"
 )
 
 type SlateInput struct {
@@ -33,8 +33,8 @@ type SavedOutput struct {
 	Asset      string       `json:"asset,omitempty"`
 	Status     OutputStatus `json:"status,omitempty"`
 
-	PartialBlind           *[32]byte            `json:"partial_blind,omitempty"`
-	PartialAssetBlind      *[32]byte            `json:"partial_asset_blind,omitempty"`
+	PartialBlind           *[32]byte            `json:"partial_blind,omitempty"`       // TODO: Кажется лишним
+	PartialAssetBlind      *[32]byte            `json:"partial_asset_blind,omitempty"` // TODO: Кажется лишним
 	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
 	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
 }
