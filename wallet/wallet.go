@@ -2,10 +2,11 @@ package wallet
 
 import (
 	"encoding/json"
-	"github.com/tyler-smith/go-bip32"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/tyler-smith/go-bip32"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"

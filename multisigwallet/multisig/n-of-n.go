@@ -11,12 +11,49 @@ import (
 	"github.com/pkg/errors"
 )
 
-func InitMultisigTransaction(
+func Fund(
 	wallet Wallet,
-	amount uint64,
-	inputs []SavedOutput,
+	fundingAmount uint64,
 	change uint64,
 	fee uint64,
+	asset string,
+	inputs []SavedOutput,
+	transactionID uuid.UUID,
+	participantID string,
+) (
+	slate *Slate,
+	savedSlate *SavedSlate,
+	walletOutputs []SavedOutput,
+	err error,
+) {
+	return initTransaction(wallet, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
+}
+
+func Spend(
+	wallet Wallet,
+	spendingAmount uint64,
+	change uint64,
+	fee uint64,
+	asset string,
+	inputs []SavedOutput,
+	transactionID uuid.UUID,
+	participantID string,
+) (
+	slate *Slate,
+	savedSlate *SavedSlate,
+	walletOutputs []SavedOutput,
+	err error,
+) {
+	return initTransaction(wallet, spendingAmount, change, fee, asset, inputs, transactionID, participantID)
+}
+
+func initTransaction(
+	wallet Wallet,
+	amount uint64,
+	change uint64,
+	fee uint64,
+	asset string,
+	inputs []SavedOutput,
 	transactionID uuid.UUID,
 	participantID string,
 ) (
@@ -198,8 +235,8 @@ func InitMultisigTransaction(
 	return
 }
 
-func SignMultisigTransaction(wallet Wallet, slates []*Slate, savedSlate *SavedSlate) (slate *Slate, err error) {
-	slate, err = CombineInitialSlates(wallet, slates)
+func Sign(wallet Wallet, slates []*Slate, savedSlate *SavedSlate) (slate *Slate, err error) {
+	slate, err = Combine(wallet, slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CombineInitialSlates")
 		return
@@ -239,7 +276,7 @@ func SignMultisigTransaction(wallet Wallet, slates []*Slate, savedSlate *SavedSl
 	return
 }
 
-func AggregateMultisigTransaction(
+func Aggregate(
 	wallet Wallet,
 	slates []*Slate,
 	savedSlate *SavedSlate,
@@ -363,7 +400,7 @@ func AggregateMultisigTransaction(
 	return
 }
 
-func CombineInitialSlates(wallet Wallet, slates []*Slate) (aggregatedSlate *Slate, err error) {
+func Combine(wallet Wallet, slates []*Slate) (aggregatedSlate *Slate, err error) {
 	err = validateInitialSlates(slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot validateInitialSlates")

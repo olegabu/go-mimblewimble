@@ -2,17 +2,19 @@ package multisig
 
 import (
 	"github.com/google/uuid"
+	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig/vss"
 	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
 	"github.com/pkg/errors"
 )
 
-func InitMOfNFundingMultisigTransaction(
+func FundMOfN(
 	wallet Wallet,
 	fundingAmount uint64,
-	inputs []SavedOutput,
 	change uint64,
 	fee uint64,
+	asset string,
+	inputs []SavedOutput,
 	transactionID uuid.UUID,
 	participantID string,
 	participantsCount int,
@@ -23,7 +25,7 @@ func InitMOfNFundingMultisigTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err := InitMultisigTransaction(wallet, fundingAmount, inputs, change, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err := Fund(wallet, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot InitMultisigTransaction")
 		return
@@ -48,11 +50,12 @@ func InitMOfNFundingMultisigTransaction(
 	return
 }
 
-func InitMOfNSpendingMultisigTransaction(
+func SpendMOfN(
 	wallet Wallet,
-	multipartyOutput SavedOutput,
-	transferAmount uint64,
+	spendingAmount uint64,
 	fee uint64,
+	asset string,
+	multipartyOutput SavedOutput,
 	transactionID uuid.UUID,
 	participantID string,
 	missingParticipantsIDs []string,
@@ -62,7 +65,7 @@ func InitMOfNSpendingMultisigTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err = InitMultisigTransaction(wallet, transferAmount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err = Spend(wallet, spendingAmount, 0, fee, asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot InitMultisigTransaction")
 		return
@@ -76,14 +79,15 @@ func InitMOfNSpendingMultisigTransaction(
 	return
 }
 
-func InitMissingPartyMultisigTransaction(
+func SpendMissingParty(
 	wallet Wallet,
-	slates []*Slate,
-	multipartyOutput SavedOutput,
-	transferAmount uint64,
+	spendingAmount uint64,
 	fee uint64,
+	asset string,
+	multipartyOutput SavedOutput,
 	transactionID uuid.UUID,
 	missingParticipantID string,
+	slates []*Slate,
 ) (
 	slate *Slate,
 	savedSlate *SavedSlate,
@@ -106,7 +110,7 @@ func InitMissingPartyMultisigTransaction(
 	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	multipartyOutput.PartialAssetBlind = &partialAssetBlind
 
-	slate, savedSlate, _, err = InitMultisigTransaction(wallet, transferAmount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
+	slate, savedSlate, _, err = Spend(wallet, spendingAmount, 0, fee, asset, []SavedOutput{multipartyOutput}, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -114,7 +118,7 @@ func InitMissingPartyMultisigTransaction(
 	return
 }
 
-func SignMOfNMultipartyTransaction(
+func SignMOfN(
 	wallet Wallet,
 	slates []*Slate,
 	inSavedSlate *SavedSlate,
@@ -123,7 +127,7 @@ func SignMOfNMultipartyTransaction(
 	outSavedSlate *SavedSlate,
 	err error,
 ) {
-	outSlate, err = SignMultisigTransaction(wallet, slates, inSavedSlate)
+	outSlate, err = Sign(wallet, slates, inSavedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot signMultipartyTransaction")
 		return
@@ -145,6 +149,29 @@ func SignMOfNMultipartyTransaction(
 		for participantID, partialAssetBlinds := range slate.PartialAssetBlinds {
 			outSavedSlate.PartialAssetBlinds[participantID] = partialAssetBlinds
 		}
+	}
+	return
+}
+
+func AggregateMOfN(
+	wallet Wallet,
+	slates []*Slate,
+	savedSlate *SavedSlate,
+) (
+	transaction *ledger.Transaction,
+	savedTransaction SavedTransaction,
+	multipartyOutput *SavedOutput,
+	err error,
+) {
+	transaction, savedTransaction, multipartyOutput, err = Aggregate(wallet, slates, savedSlate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
+		return
+	}
+
+	if multipartyOutput != nil {
+		multipartyOutput.VerifiableBlindsShares = savedSlate.VerifiableBlindsShares
+		multipartyOutput.PartialAssetBlinds = savedSlate.PartialAssetBlinds
 	}
 	return
 }
