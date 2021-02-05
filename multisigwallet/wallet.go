@@ -275,13 +275,13 @@ func (t *Wallet) InitMofNFundingTransaction(
 	return
 }
 
-func (t *Wallet) InitFundingTransaction(amount uint64, asset string, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
-	inputs, change, err := t.db.GetInputs(amount, asset)
+func (t *Wallet) InitFundingTransaction(fundingAmount uint64, asset string, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
+	inputs, change, err := t.db.GetInputs(fundingAmount, asset)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := multisig.InitMultipartyTransaction(t, inputs, change, 0, transactionID, participantID)
+	slate, savedSlate, outputs, err := multisig.InitMultipartyTransaction(t, fundingAmount, inputs, change, 0, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot initMultipartyTransaction")
 	}
@@ -306,13 +306,13 @@ func (t *Wallet) InitFundingTransaction(amount uint64, asset string, transaction
 	return
 }
 
-func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutValue uint64, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
+func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, transferAmount uint64, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
 	multipartyOutput, err := t.db.GetOutput(multipartyOutputCommit)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := multisig.InitMultipartyTransaction(t, []SavedOutput{multipartyOutput}, payoutValue, 0, transactionID, participantID)
+	slate, savedSlate, outputs, err := multisig.InitMultipartyTransaction(t, transferAmount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
 	}
@@ -335,6 +335,58 @@ func (t *Wallet) InitSpendingTransaction(multipartyOutputCommit string, payoutVa
 		return
 	}
 
+	return
+}
+
+func (t *Wallet) Receive(inSlateBytes []byte, receiveAmount uint64, asset string, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
+	slate := &Slate{}
+	err = json.Unmarshal(inSlateBytes, slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+		return nil, err
+	}
+
+	slate, output, err := multisig.Receive(t, receiveAmount, asset, slate, participantID)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
+	}
+
+	err = t.db.PutOutput(*output)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutOutput")
+	}
+
+	slateBytes, err = json.Marshal(slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
+	}
+
+	return
+}
+
+func (t *Wallet) CombineInitialSlates(slatesBytes [][]byte) (slateBytes []byte, err error) {
+	var slates = make([]*Slate, 0)
+	for _, slateBytes := range slatesBytes {
+		slate := &Slate{}
+		err = json.Unmarshal(slateBytes, slate)
+		if err != nil {
+			err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+			return nil, err
+		}
+		slates = append(slates, slate)
+	}
+
+	combinedSlate, err := multisig.CombineInitialSlates(t, slates)
+	if err != nil {
+		return
+	}
+
+	slateBytes, err = json.Marshal(combinedSlate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot marshal slate to json")
+		return
+	}
 	return
 }
 
@@ -386,7 +438,7 @@ func (t *Wallet) InitMofNSpendingTransaction(
 	return
 }
 
-func (t *Wallet) InitMissingPartyMofNMultipartyTransaction(slatesBytes [][]byte, missingParticipantID string) (slateBytes []byte, err error) {
+func (t *Wallet) InitMissingPartyMofNMultipartyTransaction(slatesBytes [][]byte, transferAmount uint64, missingParticipantID string) (slateBytes []byte, err error) {
 	var slates = make([]*Slate, 0)
 	for _, slateBytes := range slatesBytes {
 		slate := &Slate{}
@@ -410,7 +462,7 @@ func (t *Wallet) InitMissingPartyMofNMultipartyTransaction(slatesBytes [][]byte,
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, err := multisig.ConstructMissingPartySlate(t, slates, multipartyOutput, 0, savedSlate.Transaction.ID, missingParticipantID)
+	slate, savedSlate, err := multisig.ConstructMissingPartySlate(t, slates, multipartyOutput, transferAmount, 0, savedSlate.Transaction.ID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot constructMissingPartySlate")
 		return nil, err

@@ -13,6 +13,7 @@ import (
 
 func InitMultipartyTransaction(
 	wallet Wallet,
+	amount uint64,
 	inputs []SavedOutput,
 	change uint64,
 	fee uint64,
@@ -73,12 +74,6 @@ func InitMultipartyTransaction(
 		return
 	}
 
-	var totalAmount uint64
-	for _, input := range inputs {
-		totalAmount += input.Value
-	}
-	totalAmount -= change
-
 	slate = &Slate{
 		VersionInfo: VersionCompatInfo{
 			Version:            3,
@@ -101,23 +96,29 @@ func InitMultipartyTransaction(
 				}},
 			},
 		},
-		Amount:     ledger.Uint64(totalAmount),
+		Amount:     ledger.Uint64(amount),
 		Fee:        ledger.Uint64(fee),
 		Height:     0,
 		LockHeight: 0,
 		ParticipantData: map[string]*ParticipantData{participantID: {
-			Value:             ledger.Uint64(totalAmount),
-			PublicBlind:       publicBlind.String(),
-			AssetBlind:        hex.EncodeToString(assetBlind[:]),
-			PublicBlindExcess: publicBlindExcess.String(),
-			PublicNonce:       publicNonce.String(),
-			PartSig:           nil,
-			Message:           nil,
-			MessageSig:        nil,
-			BulletproofsShare: bulletproofsShare,
+			PublicBlind:         publicBlind.String(),
+			AssetBlind:          hex.EncodeToString(assetBlind[:]),
+			PublicBlindExcess:   publicBlindExcess.String(),
+			PublicNonce:         publicNonce.String(),
+			PartSig:             nil,
+			Message:             nil,
+			MessageSig:          nil,
+			BulletproofsShare:   bulletproofsShare,
+			IsMultisigFundOwner: true,
 		}},
 		Asset: inputs[0].Asset,
 	}
+
+	if len(inputs) == 1 && inputs[0].IsMultiparty {
+		slate.MultisigFundBalance = &inputs[0].Value
+	}
+
+	slate.NewMultipartyUtxoIsNeccessary = slate.MultisigFundBalance == nil || *slate.MultisigFundBalance > uint64(slate.Amount)
 
 	savedSlate = &SavedSlate{
 		Slate:             *slate,
@@ -127,11 +128,12 @@ func InitMultipartyTransaction(
 		ExcessBlind:       blindExcess,
 		ParticipantID:     participantID,
 	}
+
 	return
 }
 
 func SignMultipartyTransaction(wallet Wallet, slates []*Slate, savedSlate *SavedSlate) (slate *Slate, err error) {
-	slate, err = combineInitialSlates(wallet, slates)
+	slate, err = CombineInitialSlates(wallet, slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot combineInitialSlates")
 		return
@@ -146,7 +148,7 @@ func SignMultipartyTransaction(wallet Wallet, slates []*Slate, savedSlate *Saved
 	}
 	slate.ParticipantData[participantID].PartSig = &partialSignature
 
-	newMultipartyUtxoIsNeccessary := slate.Amount > 0
+	newMultipartyUtxoIsNeccessary := savedSlate.MultisigFundBalance == nil || *savedSlate.MultisigFundBalance > uint64(slate.Amount)
 	if newMultipartyUtxoIsNeccessary {
 		assetBlind := savedSlate.PartialAssetBlind
 		blind := savedSlate.PartialBlind
@@ -157,13 +159,14 @@ func SignMultipartyTransaction(wallet Wallet, slates []*Slate, savedSlate *Saved
 			return
 		}
 
-		commit, assetCommit, _, _, e := computeMultipartyCommit(wallet.GetContext(), slate)
+		commit, assetCommit, _, _, e := computeMultipartyCommit(wallet.GetContext(), slate, savedSlate)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeMultipartyCommit")
 			return
 		}
 
-		taux, e := bulletproof.ComputeTaux(wallet.GetContext(), uint64(slate.Amount), blind[:], assetBlind[:], commit, assetCommit, sumPublicTau1, sumPublicTau2, commonNonce)
+		value := getMultipartyOutputValue(slate)
+		taux, e := bulletproof.ComputeTaux(wallet.GetContext(), value, blind[:], assetBlind[:], commit, assetCommit, sumPublicTau1, sumPublicTau2, commonNonce)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeTaux")
 			return
@@ -189,16 +192,16 @@ func AggregateMultipartyTransaction(
 		return
 	}
 
-	signature, err := aggregatePartialSignatures(wallet, slate)
+	newMultipartyUtxoIsNeccessary := slate.NewMultipartyUtxoIsNeccessary
+	signature, err := aggregatePartialSignatures(wallet, slate, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregatePartialSignatures")
 		return
 	}
 
 	var output *SlateOutput
-	newMultipartyUtxoIsNeccessary := slate.Amount > 0
 	if newMultipartyUtxoIsNeccessary {
-		output, err = createMultipartyOutput(wallet.GetContext(), slate)
+		output, err = createMultipartyOutput(wallet.GetContext(), slate, savedSlate)
 		if err != nil {
 			err = errors.Wrap(err, "cannot createMultipartyOutput")
 			return
@@ -242,6 +245,7 @@ func AggregateMultipartyTransaction(
 		err = errors.Wrap(err, "excessPublicKey: CommitmentToPublicKey failed")
 		return
 	}
+	println(excessPublicKey.Hex(wallet.GetContext()))
 
 	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
@@ -285,9 +289,10 @@ func AggregateMultipartyTransaction(
 	}
 
 	if newMultipartyUtxoIsNeccessary {
+		value := getMultipartyOutputValue(slate)
 		multipartyOutput = &SavedOutput{
 			SlateOutput:       *output,
-			Value:             uint64(slate.Amount),
+			Value:             value,
 			PartialBlind:      &savedSlate.PartialBlind,
 			PartialAssetBlind: &savedSlate.PartialAssetBlind,
 			Asset:             slate.Asset,
@@ -377,14 +382,15 @@ func preparePartyData(wallet Wallet, inputs []SavedOutput, change uint64) (
 	return
 }
 
-func combineInitialSlates(wallet Wallet, slates []*Slate) (aggregatedSlate *Slate, err error) {
+func CombineInitialSlates(wallet Wallet, slates []*Slate) (aggregatedSlate *Slate, err error) {
 	// TODO: check slates
 
 	inputs := make([]SlateInput, 0)
 	outputs := make([]SlateOutput, 0)
 	participantDatas := make(map[string]*ParticipantData, 0)
-	var totalAmount ledger.Uint64
 	var totalOffset [32]byte
+	var amount ledger.Uint64
+
 	for _, slate := range slates {
 		for _, input := range slate.Transaction.Body.Inputs {
 			if !input.IsMultiparty {
@@ -406,16 +412,13 @@ func combineInitialSlates(wallet Wallet, slates []*Slate) (aggregatedSlate *Slat
 		if err != nil {
 			return nil, err
 		}
-		totalAmount += slate.Amount
+
+		amount += slate.Amount
 	}
 
-	savedOutput, getOutputErr := wallet.GetOutput(slates[0].Transaction.Body.Inputs[0].Commit)
-	if getOutputErr == nil && savedOutput.IsMultiparty {
+	if slates[0].Transaction.Body.Inputs[0].IsMultiparty {
 		inputs = append(inputs, slates[0].Transaction.Body.Inputs[0])
-		totalAmount = slates[0].Amount
-		for i := 1; i < len(slates); i++ {
-			totalAmount -= ledger.Uint64(savedOutput.Value) - slates[i].Amount
-		}
+		amount = slates[0].Amount
 	}
 
 	fee := slates[0].Transaction.Body.Kernels[0].Fee
@@ -444,12 +447,14 @@ func combineInitialSlates(wallet Wallet, slates []*Slate) (aggregatedSlate *Slat
 				}},
 			},
 		},
-		Amount:          totalAmount,
-		Fee:             fee,
-		Height:          0,
-		LockHeight:      0,
-		ParticipantData: participantDatas,
-		Asset:           asset,
+		Amount:                        amount,
+		Fee:                           fee,
+		Height:                        0,
+		LockHeight:                    0,
+		ParticipantData:               participantDatas,
+		Asset:                         asset,
+		NewMultipartyUtxoIsNeccessary: slates[0].NewMultipartyUtxoIsNeccessary,
+		MultisigFundBalance:           slates[0].MultisigFundBalance,
 	}
 	return
 }
@@ -463,25 +468,32 @@ func combinePartiallySignedSlates(slates []*Slate) (slate *Slate, err error) {
 			return
 		}
 		slate.ParticipantData[participantID].PartSig = correspondingParticipantData.PartSig
-		slate.ParticipantData[participantID].BulletproofsShare.Taux = correspondingParticipantData.BulletproofsShare.Taux
+
+		if slate.ParticipantData[participantID].IsMultisigFundOwner {
+			slate.ParticipantData[participantID].BulletproofsShare.Taux = correspondingParticipantData.BulletproofsShare.Taux
+		}
 	}
 	return
 }
 
-func computeMultipartyCommit(context *secp256k1.Context, slate *Slate) (
+func computeMultipartyCommit(context *secp256k1.Context, slate *Slate, savedSlate *SavedSlate) (
 	commit *secp256k1.Commitment,
 	assetCommit *secp256k1.Generator,
 	assetTag *secp256k1.FixedAssetTag,
 	aggregatedAssetBlind [32]byte,
 	err error,
 ) {
-	publicBlinds, _, _, _, err := getSharedData(context, slate)
+	publicBlinds, _, _, _, err := getSharedData(context, slate, true, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot extractParticipantData")
 		return
 	}
 
 	for _, party := range slate.ParticipantData {
+		if !party.IsMultisigFundOwner {
+			continue
+		}
+
 		assetBlind, e := hex.DecodeString(party.AssetBlind)
 		if e != nil {
 			err = errors.Wrap(e, "cannot DecodeString")
@@ -508,7 +520,8 @@ func computeMultipartyCommit(context *secp256k1.Context, slate *Slate) (
 		return
 	}
 
-	commit, err = secp256k1.Commit(context, new([32]byte)[:], uint64(slate.Amount), assetCommit, &secp256k1.GeneratorG)
+	value := getMultipartyOutputValue(slate)
+	commit, err = secp256k1.Commit(context, new([32]byte)[:], value, assetCommit, &secp256k1.GeneratorG)
 	if err != nil {
 		err = errors.Wrap(err, "cannot create commitment to value")
 		return
@@ -522,8 +535,8 @@ func computeMultipartyCommit(context *secp256k1.Context, slate *Slate) (
 	return
 }
 
-func createMultipartyOutput(context *secp256k1.Context, slate *Slate) (output *SlateOutput, err error) {
-	commit, assetCommit, assetTag, aggregatedAssetBlind, err := computeMultipartyCommit(context, slate)
+func createMultipartyOutput(context *secp256k1.Context, slate *Slate, savedSlate *SavedSlate) (output *SlateOutput, err error) {
+	commit, assetCommit, assetTag, aggregatedAssetBlind, err := computeMultipartyCommit(context, slate, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot computeMultipartyCommit")
 		return
@@ -535,7 +548,8 @@ func createMultipartyOutput(context *secp256k1.Context, slate *Slate) (output *S
 		return
 	}
 
-	proof, err := bulletproof.AggregateProof(context, uint64(slate.Amount), commit, assetCommit, sumPublicTau1, sumPublicTau2, sumTaux, commonNonce)
+	value := getMultipartyOutputValue(slate)
+	proof, err := bulletproof.AggregateProof(context, value, commit, assetCommit, sumPublicTau1, sumPublicTau2, sumTaux, commonNonce)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateProof")
 		return
@@ -555,4 +569,14 @@ func createMultipartyOutput(context *secp256k1.Context, slate *Slate) (output *S
 		IsMultiparty: true,
 	}
 	return
+}
+
+func getMultipartyOutputValue(slate *Slate) uint64 {
+	var value uint64
+	if slate.MultisigFundBalance == nil {
+		value = uint64(slate.Amount)
+	} else {
+		value = *slate.MultisigFundBalance - uint64(slate.Amount)
+	}
+	return value
 }

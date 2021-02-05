@@ -28,26 +28,11 @@ func TestCreateAndSpendMultiparty(t *testing.T) {
 	}
 
 	multipartyOutputCommit := createMultipartyUtxo(t, wallets, participantIDs, amount, asset)
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50, 50, 50})
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50, 50, 50})
-	closeWallets(wallets)
-}
 
-func TestCreateAndSpendSingle(t *testing.T) {
-	partiesCount := 1
-	amount := uint64(100)
-	asset := "$"
-
-	wallets := make([]*Wallet, 0)
-	participantIDs := make([]string, 0)
-	for i := 0; i < partiesCount; i++ {
-		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset))
-		participantIDs = append(participantIDs, strconv.Itoa(i))
-	}
-
-	multipartyOutputCommit := createMultipartyUtxo(t, wallets, participantIDs, amount, asset)
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50})
-	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, []uint64{50})
+	receiver := createWalletWithBalance(t, 0, asset)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, 100, asset, receiver)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, 100, asset, receiver)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, 100, asset, receiver)
 	closeWallets(wallets)
 }
 
@@ -105,19 +90,24 @@ func createMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []stri
 	return
 }
 
-func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, mulipartyOutputCommit string, payouts []uint64) (multipartyOutputCommit string) {
+func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, mulipartyOutputCommit string, transferAmount uint64, asset string, receiver *Wallet) (multipartyOutputCommit string) {
 	id := uuid.New()
 	count := len(wallets)
 
 	slates := make([][]byte, 0)
 	for i := 0; i < count; i++ {
-		payout := payouts[i]
-		slate, err := wallets[i].InitSpendingTransaction(mulipartyOutputCommit, payout, id, participantIDs[i])
+		slate, err := wallets[i].InitSpendingTransaction(mulipartyOutputCommit, transferAmount, id, participantIDs[i])
 		assert.NoError(t, err)
 		slates = append(slates, slate)
 	}
 
-	partiallySignedSlates := make([][]byte, 0)
+	combinedSlate, err := receiver.CombineInitialSlates(slates)
+	assert.NoError(t, err)
+
+	receiverSlate, err := receiver.Receive(combinedSlate, transferAmount, asset, id, "receiver")
+	slates = append(slates, receiverSlate)
+
+	partiallySignedSlates := [][]byte{receiverSlate}
 	for i := 0; i < count; i++ {
 		slate, err := wallets[i].SignMultipartyTransaction(slates)
 		assert.NoError(t, err)
@@ -132,7 +122,7 @@ func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []strin
 	}
 
 	var transaction ledger.Transaction
-	err := json.Unmarshal(transactionBytes, &transaction)
+	err = json.Unmarshal(transactionBytes, &transaction)
 	assert.NoError(t, err)
 	err = ledger.ValidateTransaction(&transaction)
 	assert.NoError(t, err)
@@ -227,7 +217,7 @@ func spendMofNMultipartyUtxo(t *testing.T, wallets []*Wallet, activeParticipants
 
 	missingSlates := make([][]byte, len(missingParticipantsIDs))
 	for i := 0; i < len(missingParticipantsIDs); i++ {
-		slate, err := wallets[0].InitMissingPartyMofNMultipartyTransaction(slates, missingParticipantsIDs[i])
+		slate, err := wallets[0].InitMissingPartyMofNMultipartyTransaction(slates, 0, missingParticipantsIDs[i])
 		assert.NoError(t, err)
 		missingSlates[i] = slate
 	}

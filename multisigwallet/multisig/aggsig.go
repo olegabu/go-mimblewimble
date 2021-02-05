@@ -10,7 +10,8 @@ import (
 )
 
 func createPartialSignature(wallet Wallet, slate *Slate, savedSlate *SavedSlate) (partialSignatureString string, err error) {
-	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := getSharedData(wallet.GetContext(), slate)
+	newMultipartyUtxoIsNeccessary := slate.NewMultipartyUtxoIsNeccessary
+	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := getSharedData(wallet.GetContext(), slate, newMultipartyUtxoIsNeccessary, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot extractParticipantData")
 		return
@@ -31,12 +32,12 @@ func createPartialSignature(wallet Wallet, slate *Slate, savedSlate *SavedSlate)
 	msg := ledger.KernelSignatureMessage(savedSlate.Transaction.Body.Kernels[0])
 
 	var privateKey [32]byte
-	newMultipartyUtxoIsNeccessary := slate.Amount > 0
 	if newMultipartyUtxoIsNeccessary {
 		assetBlind := savedSlate.PartialAssetBlind
 		blind := savedSlate.PartialBlind
 
-		blindValueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind[:], blind[:])
+		value := getMultipartyOutputValue(slate)
+		blindValueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind[:], blind[:])
 		if e != nil {
 			err = errors.Wrap(e, "cannot BlindValueGeneratorBlindSum")
 			return
@@ -68,6 +69,8 @@ func createPartialSignature(wallet Wallet, slate *Slate, savedSlate *SavedSlate)
 func getSharedData(
 	context *secp256k1.Context,
 	slate *Slate,
+	newMultipartyUtxoIsNeccessary bool,
+	savedSlate *SavedSlate,
 ) (
 	publicBlinds []*secp256k1.Commitment,
 	publicBlindExcesses []*secp256k1.Commitment,
@@ -90,8 +93,7 @@ func getSharedData(
 		}
 		publicNonces = append(publicNonces, publicNonce)
 
-		newMultipartyUtxoIsNeccessary := slate.Amount > 0
-		if newMultipartyUtxoIsNeccessary {
+		if newMultipartyUtxoIsNeccessary && party.IsMultisigFundOwner {
 			publicBlind, e := secp256k1.CommitmentFromString(party.PublicBlind)
 			if e != nil {
 				err = errors.Wrap(e, "cannot CommitmentFromString")
@@ -105,7 +107,8 @@ func getSharedData(
 				return
 			}
 
-			valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind, new([32]byte)[:])
+			value := getMultipartyOutputValue(slate)
+			valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind, new([32]byte)[:])
 			if e != nil {
 				err = errors.Wrap(e, "cannot BlindValueGeneratorBlindSum")
 				return
@@ -160,8 +163,10 @@ func calculateAggregatedNonce(wallet Wallet, publicNonces []*secp256k1.Commitmen
 	return
 }
 
-func aggregatePartialSignatures(wallet Wallet, slate *Slate) (signature secp256k1.AggsigSignature, err error) {
-	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := getSharedData(wallet.GetContext(), slate)
+func aggregatePartialSignatures(wallet Wallet, slate *Slate, savedSlate *SavedSlate) (signature secp256k1.AggsigSignature, err error) {
+	newMultipartyUtxoIsNeccessary := slate.NewMultipartyUtxoIsNeccessary
+
+	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := getSharedData(wallet.GetContext(), slate, newMultipartyUtxoIsNeccessary, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot extractParticipantData")
 		return
@@ -202,8 +207,7 @@ func aggregatePartialSignatures(wallet Wallet, slate *Slate) (signature secp256k
 		}
 
 		var partialPublicKeyCommit *secp256k1.Commitment
-		newMultipartyUtxoIsNeccessary := slate.Amount > 0
-		if newMultipartyUtxoIsNeccessary {
+		if newMultipartyUtxoIsNeccessary && party.IsMultisigFundOwner {
 			publicBlind, e := secp256k1.CommitmentFromString(party.PublicBlind)
 			if e != nil {
 				err = errors.Wrap(e, "cannot parse public blind")
@@ -216,7 +220,8 @@ func aggregatePartialSignatures(wallet Wallet, slate *Slate) (signature secp256k
 				return
 			}
 
-			valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(uint64(slate.Amount), assetBlind, new([32]byte)[:])
+			value := getMultipartyOutputValue(slate)
+			valueAssetBlind, e := secp256k1.BlindValueGeneratorBlindSum(value, assetBlind, new([32]byte)[:])
 			if e != nil {
 				err = errors.Wrap(e, "cannot BlindValueGeneratorBlindSum")
 				return

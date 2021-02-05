@@ -74,6 +74,10 @@ func aggregateBulletproofMPCValues(context *secp256k1.Context, slate *Slate) (
 	tauxs := make([][]byte, 0)
 	commonNonce = make([]byte, 32)
 	for _, participantData := range slate.ParticipantData {
+		if !participantData.IsMultisigFundOwner {
+			continue
+		}
+
 		// TODO: Check it
 		publicNonceBytes, e := hex.DecodeString(participantData.PublicNonce)
 		if e != nil {

@@ -22,7 +22,13 @@ func InitMOfNFundingMultipartyTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err := InitMultipartyTransaction(wallet, inputs, change, 0, transactionID, participantID)
+	var amount uint64
+	for _, input := range inputs {
+		amount += input.Value
+	}
+	amount -= change
+
+	slate, savedSlate, walletOutputs, err := InitMultipartyTransaction(wallet, amount, inputs, change, 0, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -51,7 +57,7 @@ func InitMOfNFundingMultipartyTransaction(
 func InitMOfNSpendingMultipartyTransaction(
 	wallet Wallet,
 	multipartyOutput SavedOutput,
-	payout uint64,
+	amount uint64,
 	fee uint64,
 	transactionID uuid.UUID,
 	participantID string,
@@ -62,7 +68,7 @@ func InitMOfNSpendingMultipartyTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err = InitMultipartyTransaction(wallet, []SavedOutput{multipartyOutput}, payout, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err = InitMultipartyTransaction(wallet, amount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -115,6 +121,7 @@ func ConstructMissingPartySlate(
 	wallet Wallet,
 	slates []*Slate,
 	multipartyOutput SavedOutput,
+	amount uint64,
 	fee uint64,
 	transactionID uuid.UUID,
 	missingParticipantID string,
@@ -140,7 +147,7 @@ func ConstructMissingPartySlate(
 	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	multipartyOutput.PartialAssetBlind = &partialAssetBlind
 
-	slate, savedSlate, _, err = InitMultipartyTransaction(wallet, []SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
+	slate, savedSlate, _, err = InitMultipartyTransaction(wallet, amount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return

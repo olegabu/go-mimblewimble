@@ -90,14 +90,16 @@ type Slate struct {
 	ReceiveAsset  string        `json:"receive_asset,omitempty"`
 
 	// Verifiable blind's shares for m-of-n multiparty outputs
-	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
-	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
+	VerifiableBlindsShares        map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
+	PartialAssetBlinds            map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
+	NewMultipartyUtxoIsNeccessary bool                 `json:"new_multiparty_utxo_is_neccessary,omitempty"`
+	MultisigFundBalance           *uint64              `json:"multisig_fund_balance,omitempty"` // TODO: подумай
 }
 
 // ParticipantData is a public data for each participant in the slate
 type ParticipantData struct {
-	// Value
-	Value ledger.Uint64 `json:"value"`
+	// IsMultisigFundOwner
+	IsMultisigFundOwner bool `json:"multisig_fund_owner"`
 	// Public key corresponding to blinding factor
 	PublicBlind string `json:"public_blind"`
 	// Asset blinding factor
