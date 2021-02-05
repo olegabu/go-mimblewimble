@@ -92,6 +92,5 @@ func Receive(wallet Wallet, amount uint64, asset string, combinedSlate *Slate, p
 	}
 
 	slate.Transaction.Offset = hex.EncodeToString(totalOffset[:])
-
 	return
 }
