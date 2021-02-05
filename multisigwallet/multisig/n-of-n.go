@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func InitMultipartyTransaction(
+func InitMultisigTransaction(
 	wallet Wallet,
 	amount uint64,
 	inputs []SavedOutput,
@@ -118,8 +118,6 @@ func InitMultipartyTransaction(
 		slate.MultisigFundBalance = &inputs[0].Value
 	}
 
-	slate.NewMultipartyUtxoIsNeccessary = slate.MultisigFundBalance == nil || *slate.MultisigFundBalance > uint64(slate.Amount)
-
 	savedSlate = &SavedSlate{
 		Slate:             *slate,
 		Nonce:             nonce,
@@ -192,15 +190,14 @@ func AggregateMultipartyTransaction(
 		return
 	}
 
-	newMultipartyUtxoIsNeccessary := slate.NewMultipartyUtxoIsNeccessary
-	signature, err := aggregatePartialSignatures(wallet, slate, savedSlate)
+	signature, err := aggregatePartialSignatures(wallet, slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregatePartialSignatures")
 		return
 	}
 
 	var output *SlateOutput
-	if newMultipartyUtxoIsNeccessary {
+	if newMultipartyUtxoIsNeccessary(slate) {
 		output, err = createMultipartyOutput(wallet.GetContext(), slate, savedSlate)
 		if err != nil {
 			err = errors.Wrap(err, "cannot createMultipartyOutput")
@@ -288,7 +285,7 @@ func AggregateMultipartyTransaction(
 		Status:      TransactionUnconfirmed,
 	}
 
-	if newMultipartyUtxoIsNeccessary {
+	if newMultipartyUtxoIsNeccessary(slate) {
 		value := getMultipartyOutputValue(slate)
 		multipartyOutput = &SavedOutput{
 			SlateOutput:       *output,
@@ -312,73 +309,7 @@ func preparePartyData(wallet Wallet, inputs []SavedOutput, change uint64) (
 	changeOutput *SavedOutput,
 	err error,
 ) {
-	// generate partial output blind
-	blind, _, err = wallet.NewSecret()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get newSecret")
-		return
-	}
 
-	// generate partial output asset blind
-	assetBlind, _, err = wallet.NewSecret()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get newSecret")
-		return
-	}
-
-	// generate random offset
-	offset, err = wallet.Nonce()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get nonce for offset")
-		return
-	}
-
-	// generate secret nonce
-	nonce, err = wallet.Nonce()
-	if err != nil {
-		err = errors.Wrap(err, "cannot get nonce")
-		return
-	}
-
-	// compute excess blinding factor
-	inputsBlindValueAssetBlinds := make([][]byte, 0)
-	for _, input := range inputs {
-		blindValueAssetBlind, e := computeBlindValueAssetBlind(wallet, input)
-		if e != nil {
-			err = errors.Wrap(e, "cannot getBlindValueAssetBlind")
-			return
-		}
-		inputsBlindValueAssetBlinds = append(inputsBlindValueAssetBlinds, blindValueAssetBlind[:])
-	}
-
-	// x = change - inputs - offset (now change = 0)
-	blindExcess, err = secp256k1.BlindSum(wallet.GetContext(), nil, append(inputsBlindValueAssetBlinds, offset[:]))
-	if err != nil {
-		err = errors.Wrap(err, "cannot BlindSum")
-		return
-	}
-
-	if change > 0 {
-		// create change output and remember its blinding factor
-		var e error
-		changeOutput, _, e = newOutput(wallet, change, ledger.PlainOutput, inputs[0].Asset, OutputUnconfirmed)
-		if e != nil {
-			err = errors.Wrap(e, "cannot create change output")
-			return
-		}
-
-		changeBlindValueAssetBlinds, e := computeBlindValueAssetBlind(wallet, *changeOutput)
-		if e != nil {
-			err = errors.Wrap(e, "cannot getBlindValueAssetBlind")
-			return
-		}
-
-		blindExcess, e = secp256k1.BlindSum(wallet.GetContext(), [][]byte{blindExcess[:], changeBlindValueAssetBlinds[:]}, nil)
-		if e != nil {
-			err = errors.Wrap(e, "cannot BlindSum")
-			return
-		}
-	}
 	return
 }
 
@@ -447,14 +378,13 @@ func CombineInitialSlates(wallet Wallet, slates []*Slate) (aggregatedSlate *Slat
 				}},
 			},
 		},
-		Amount:                        amount,
-		Fee:                           fee,
-		Height:                        0,
-		LockHeight:                    0,
-		ParticipantData:               participantDatas,
-		Asset:                         asset,
-		NewMultipartyUtxoIsNeccessary: slates[0].NewMultipartyUtxoIsNeccessary,
-		MultisigFundBalance:           slates[0].MultisigFundBalance,
+		Amount:              amount,
+		Fee:                 fee,
+		Height:              0,
+		LockHeight:          0,
+		ParticipantData:     participantDatas,
+		Asset:               asset,
+		MultisigFundBalance: slates[0].MultisigFundBalance,
 	}
 	return
 }
@@ -483,12 +413,7 @@ func computeMultipartyCommit(context *secp256k1.Context, slate *Slate, savedSlat
 	aggregatedAssetBlind [32]byte,
 	err error,
 ) {
-	publicBlinds, _, _, _, err := getSharedData(context, slate, true, savedSlate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot extractParticipantData")
-		return
-	}
-
+	publicBlinds := make([]*secp256k1.Commitment, 0)
 	for _, party := range slate.ParticipantData {
 		if !party.IsMultisigFundOwner {
 			continue
@@ -506,6 +431,13 @@ func computeMultipartyCommit(context *secp256k1.Context, slate *Slate, savedSlat
 			err = errors.Wrap(e, "cannot BlindSum")
 			return
 		}
+
+		publicBlind, e := secp256k1.CommitmentFromString(party.PublicBlind)
+		if e != nil {
+			err = errors.Wrap(e, "cannot CommitmentFromString")
+			return
+		}
+		publicBlinds = append(publicBlinds, publicBlind)
 	}
 
 	assetTag, err = secp256k1.FixedAssetTagParse(ledger.AssetSeed(slate.Asset))
@@ -579,4 +511,8 @@ func getMultipartyOutputValue(slate *Slate) uint64 {
 		value = *slate.MultisigFundBalance - uint64(slate.Amount)
 	}
 	return value
+}
+
+func newMultipartyUtxoIsNeccessary(slate *Slate) bool {
+	return slate.MultisigFundBalance == nil || *slate.MultisigFundBalance > uint64(slate.Amount)
 }

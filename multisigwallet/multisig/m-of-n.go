@@ -28,7 +28,7 @@ func InitMOfNFundingMultipartyTransaction(
 	}
 	amount -= change
 
-	slate, savedSlate, walletOutputs, err := InitMultipartyTransaction(wallet, amount, inputs, change, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err := InitMultisigTransaction(wallet, amount, inputs, change, 0, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -68,7 +68,7 @@ func InitMOfNSpendingMultipartyTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err = InitMultipartyTransaction(wallet, amount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err = InitMultisigTransaction(wallet, amount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -147,7 +147,7 @@ func ConstructMissingPartySlate(
 	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	multipartyOutput.PartialAssetBlind = &partialAssetBlind
 
-	slate, savedSlate, _, err = InitMultipartyTransaction(wallet, amount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
+	slate, savedSlate, _, err = InitMultisigTransaction(wallet, amount, []SavedOutput{multipartyOutput}, 0, 0, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return

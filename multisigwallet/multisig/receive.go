@@ -54,21 +54,9 @@ func Receive(wallet Wallet, amount uint64, asset string, combinedSlate *Slate, p
 		PublicNonce:       publicNonce.String(),
 	}
 
-	publicBlinds, publicBlindExcesses, publicNonces, publicValueAssetBlinds, err := getSharedData(wallet.GetContext(), slate, slate.NewMultipartyUtxoIsNeccessary, nil)
+	aggregatedPublicKey, aggregatedPublicNonce, err := getAggregatedPublicKeyAndNonce(wallet.GetContext(), slate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot extractParticipantData")
-		return
-	}
-
-	aggregatedPublicKey, err := calculateAggregatedPublicKey(wallet, publicBlinds, publicValueAssetBlinds, publicBlindExcesses)
-	if err != nil {
-		err = errors.Wrap(err, "cannot computeAggregatedPublicKey")
-		return
-	}
-
-	aggregatedPublicNonce, err := calculateAggregatedNonce(wallet, publicNonces)
-	if err != nil {
-		err = errors.Wrap(err, "cannot computeAggregatedNonce")
+		err = errors.Wrap(err, "cannot getAggregatedPublicKeyAndNonce")
 		return
 	}
 
