@@ -37,10 +37,6 @@ var createMultiparty = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "cannot parse needBroadcast")
 		}
-		var tendermintAddress *string
-		if needBroadcast {
-			tendermintAddress = &flagAddress
-		}
 
 		address := args[4]
 
@@ -55,7 +51,7 @@ var createMultiparty = &cobra.Command{
 		}
 		defer w.Close()
 
-		commit, err := multisigexchange.CreateMultisigUTXO(w, address, uint64(amount), asset, transactionID, participantsAddresses, tendermintAddress)
+		commit, err := multisigexchange.CreateMultisigUTXO(w, address, uint64(amount), asset, transactionID, participantsAddresses, flagAddress, needBroadcast)
 		if err != nil {
 			return errors.Wrap(err, "cannot CreateMultisigUTXO")
 		}

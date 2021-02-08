@@ -41,7 +41,8 @@ func CreateMultisigUTXO(
 	asset string,
 	id uuid.UUID,
 	participantsAddresses []string,
-	tendermintAddress *string,
+	tendermintAddress string,
+	needBroadcast bool,
 ) (
 	multipartyUtxoCommit string,
 	err error,
@@ -127,11 +128,36 @@ func CreateMultisigUTXO(
 	}
 
 	// Кто-то из участников броудкастит транзакцию
-	if tendermintAddress != nil {
-		err = broadcast(*tendermintAddress, transactionBytes)
+	if needBroadcast {
+		err = broadcast(tendermintAddress, transactionBytes)
 		if err != nil {
 			err = errors.Wrap(err, "cannot broadcast")
 			return
+		}
+	}
+
+	// Проверяем, что output появился в ledger
+	fmt.Print("Waiting for the output to appear in the ledger:...")
+	rpcClient, err := NewRPCClient(tendermintAddress)
+	if err != nil {
+		err = errors.Wrap(err, "cannot NewRPCClient")
+		return
+	}
+
+	outputExistsInLedger := false
+	for !outputExistsInLedger {
+		_, err = rpcClient.GetOutput(multipartyOutputCommmit)
+		if err != nil {
+			time.Sleep(1)
+		} else {
+			outputExistsInLedger = true
+			idBytes, _ := id.MarshalText()
+			err = w.Confirm(idBytes)
+			if err != nil {
+				err = errors.Wrap(err, "cannot Confirm")
+				return
+			}
+			fmt.Println("OK")
 		}
 	}
 
