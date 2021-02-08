@@ -102,8 +102,7 @@ func (t *Wallet) NewSlate(
 		Fee:        ledger.Uint64(fee),
 		Height:     0,
 		LockHeight: 0,
-		ParticipantData: []ParticipantData{{
-			ID:                0,
+		ParticipantData: map[string]*ParticipantData{"0": {
 			PublicBlindExcess: publicBlindExcess.Hex(t.context),
 			PublicNonce:       publicNonce.Hex(t.context),
 			PartSig:           nil,
@@ -183,7 +182,7 @@ func (t *Wallet) inputsAndOutputs(
 				Commit:      walletInput.Commit,
 				AssetCommit: walletInput.AssetCommit,
 			},
-			AssetTag: walletInput.AssetTag,
+			AssetTag:   walletInput.AssetTag,
 			AssetBlind: hex.EncodeToString(assetBlind),
 		}
 
@@ -283,12 +282,12 @@ func (t *Wallet) NewResponse(
 	}
 
 	// parse out sender public blind and public nonce
-	senderPublicBlind := t.context.PublicKeyFromHex(inSlate.ParticipantData[0].PublicBlindExcess)
+	senderPublicBlind := t.context.PublicKeyFromHex(inSlate.ParticipantData["0"].PublicBlindExcess)
 	if senderPublicBlind == nil {
 		err = errors.Wrap(err, "cannot get senderPublicBlindExcess")
 		return
 	}
-	senderPublicNonce := t.context.PublicKeyFromHex(inSlate.ParticipantData[0].PublicNonce)
+	senderPublicNonce := t.context.PublicKeyFromHex(inSlate.ParticipantData["0"].PublicNonce)
 	if senderPublicNonce == nil {
 		err = errors.Wrap(err, "cannot get senderPublicNonce")
 		return
@@ -324,14 +323,13 @@ func (t *Wallet) NewResponse(
 	// Update slate with the receiver's info
 	receiverPartSigBytes := secp256k1.AggsigSignaturePartialSerialize(&receiverPartSig)
 	receiverPartSigString := hex.EncodeToString(receiverPartSigBytes[:])
-	inSlate.ParticipantData = append(inSlate.ParticipantData, ParticipantData{
-		ID:                1,
+	inSlate.ParticipantData["1"] = &ParticipantData{
 		PublicBlindExcess: receiverPublicBlind.Hex(t.context),
 		PublicNonce:       receiverPublicNonce.Hex(t.context),
 		PartSig:           &receiverPartSigString,
 		Message:           nil,
 		MessageSig:        nil,
-	})
+	}
 
 	outSlateBytes, err = json.Marshal(inSlate)
 	if err != nil {
@@ -377,8 +375,8 @@ func (t *Wallet) NewTransaction(
 	}
 
 	// get public keys from responseSlate
-	senderPublicBlindFromResponseSlate := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicBlindExcess)
-	senderPublicNonceFromResponseSlate := t.context.PublicKeyFromHex(responseSlate.ParticipantData[0].PublicNonce)
+	senderPublicBlindFromResponseSlate := t.context.PublicKeyFromHex(responseSlate.ParticipantData["0"].PublicBlindExcess)
+	senderPublicNonceFromResponseSlate := t.context.PublicKeyFromHex(responseSlate.ParticipantData["0"].PublicNonce)
 
 	// verify the response we've got from Receiver has Sender's public key and secret unchanged
 	if (0 != bytes.Compare(senderPublicBlind.Bytes(t.context), senderPublicBlindFromResponseSlate.Bytes(t.context))) ||
@@ -387,8 +385,8 @@ func (t *Wallet) NewTransaction(
 		return
 	}
 
-	receiverPublicBlind := t.context.PublicKeyFromHex(responseSlate.ParticipantData[1].PublicBlindExcess)
-	receiverPublicNonce := t.context.PublicKeyFromHex(responseSlate.ParticipantData[1].PublicNonce)
+	receiverPublicBlind := t.context.PublicKeyFromHex(responseSlate.ParticipantData["1"].PublicBlindExcess)
+	receiverPublicNonce := t.context.PublicKeyFromHex(responseSlate.ParticipantData["1"].PublicNonce)
 
 	// combine sender and receiver public blinds and nonces
 	sumPublicBlinds, err := t.sumPubKeys([]*secp256k1.PublicKey{senderPublicBlind, receiverPublicBlind})
@@ -406,7 +404,7 @@ func (t *Wallet) NewTransaction(
 	msg := ledger.KernelSignatureMessage(responseSlate.Transaction.Body.Kernels[0])
 
 	// decode receiver's partial signature
-	receiverPartSigBytes, err := hex.DecodeString(*responseSlate.ParticipantData[1].PartSig)
+	receiverPartSigBytes, err := hex.DecodeString(*responseSlate.ParticipantData["1"].PartSig)
 	if err != nil {
 		err = errors.Wrap(err, "cannot decode receiverPartSigBytes from hex")
 		return
@@ -677,7 +675,7 @@ func (t *Wallet) newOutput(
 				},
 				Proof: hex.EncodeToString(proof),
 			},
-			AssetTag: assetTag.Hex(),
+			AssetTag:   assetTag.Hex(),
 			AssetBlind: hex.EncodeToString(assetBlind),
 		},
 		Value:      value,

@@ -4,10 +4,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/olegabu/go-secp256k1-zkp"
 	"os/user"
 	"path/filepath"
 	"testing"
+
+	"github.com/olegabu/go-secp256k1-zkp"
 
 	"github.com/stretchr/testify/assert"
 

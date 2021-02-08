@@ -336,9 +336,9 @@ func TestSurjection(t *testing.T) {
 		nInputs int = 10
 	)
 	var (
-		//outputIndex int = 9
-		maxIterations int = 100
-		assetNames         = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
+		outputIndex        int = 9
+		maxIterations      int = 100
+		assetNames             = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
 		fixedInputTags     [nInputs]*secp256k1.FixedAssetTag
 		ephemeralInputTags [nInputs]*secp256k1.Generator
 		inputAssetBlinds   [nInputs][32]byte

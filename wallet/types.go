@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
 )
@@ -92,7 +93,7 @@ type Slate struct {
 	// Participant data, each participant in the transaction will
 	// insert their public data here. For now, 0 is sender and 1
 	// is receiver, though this will change for multi-party
-	ParticipantData []ParticipantData `json:"participant_data"`
+	ParticipantData map[string]*ParticipantData `json:"participant_data"`
 
 	Asset         string        `json:"asset,omitempty"`
 	ReceiveAmount ledger.Uint64 `json:"receive_amount,omitempty"`
@@ -101,8 +102,6 @@ type Slate struct {
 
 // ParticipantData is a public data for each participant in the slate
 type ParticipantData struct {
-	// Id of participant in the transaction. (For now, 0=sender, 1=rec)
-	ID ledger.Uint64 `json:"id"`
 	// Public key corresponding to private blinding factor
 	PublicBlindExcess string `json:"public_blind_excess"`
 	// Public key corresponding to private nonce
