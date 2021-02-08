@@ -137,7 +137,7 @@ func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []strin
 	return
 }
 
-func TestCreateAndSpendMofNMultiparty(t *testing.T) {
+func TestCreateAndSpendMOfNMultiparty(t *testing.T) {
 	n := 5
 	k := 3
 
@@ -157,7 +157,7 @@ func TestCreateAndSpendMofNMultiparty(t *testing.T) {
 	missingParticipantIDs := participantIDs[k:]
 
 	receiver := createWalletWithBalance(t, 0, asset)
-	multipartyOutputCommit = spendMofNMultipartyUtxo(t, wallets, activeParticipantsIDs, missingParticipantIDs, multipartyOutputCommit, uint64(n)*amount, asset, receiver)
+	multipartyOutputCommit = spendMOfNMultipartyUtxo(t, wallets, activeParticipantsIDs, missingParticipantIDs, multipartyOutputCommit, uint64(n)*amount, asset, receiver)
 	closeWallets(wallets)
 }
 
@@ -207,7 +207,7 @@ func createMultipartyMOfNUtxo(t *testing.T, wallets []*Wallet, participantIDs []
 	return
 }
 
-func spendMofNMultipartyUtxo(t *testing.T, wallets []*Wallet, activeParticipantsIDs []string, missingParticipantsIDs []string, mulipartyOutputCommit string, transferAmount uint64, asset string, receiver *Wallet) (multipartyOutputCommit string) {
+func spendMOfNMultipartyUtxo(t *testing.T, wallets []*Wallet, activeParticipantsIDs []string, missingParticipantsIDs []string, mulipartyOutputCommit string, transferAmount uint64, asset string, receiver *Wallet) (multipartyOutputCommit string) {
 	id := uuid.New()
 
 	slates := make([][]byte, len(activeParticipantsIDs))
