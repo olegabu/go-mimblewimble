@@ -166,7 +166,7 @@ func main() {
 			}
 			defer w.Close()
 
-			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset, nil, nil)
+			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset, nil)
 			if err != nil {
 				return errors.Wrap(err, "cannot Send")
 			}
@@ -205,7 +205,7 @@ func main() {
 			}
 			defer w.Close()
 
-			slateBytes, err := w.Send(0, "", uint64(amount), asset, nil, nil)
+			slateBytes, err := w.Send(0, "", uint64(amount), asset, nil)
 			if err != nil {
 				return errors.Wrap(err, "cannot Send")
 			}
