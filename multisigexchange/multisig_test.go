@@ -15,6 +15,7 @@ import (
 )
 
 func TestCreateMultisigUTXO(t *testing.T) {
+	tendermintAddress := "tcp://0.0.0.0:26657"
 	partiesCount := 3
 	amount := uint64(100)
 	asset := "$"
@@ -23,7 +24,7 @@ func TestCreateMultisigUTXO(t *testing.T) {
 	participantIDs := make([]string, 0)
 	addresses := make([]string, 0)
 	for i := 0; i < partiesCount; i++ {
-		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset))
+		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset, tendermintAddress))
 		participantIDs = append(participantIDs, strconv.Itoa(i))
 		address := "127.0.0.1:" + strconv.Itoa(9000+i)
 		addresses = append(addresses, address)
@@ -36,32 +37,34 @@ func TestCreateMultisigUTXO(t *testing.T) {
 		participantsAddresses := make([]string, partiesCount)
 		copy(participantsAddresses, addresses)
 		participantsAddresses = append(participantsAddresses[:i], participantsAddresses[i+1:]...)
-		go createMultisigUtxo(wallets[i], addresses[i], amount, asset, id, participantsAddresses, nil, &wg)
+		go createMultipartyUtxo(wallets[i], addresses[i], amount, asset, id, participantsAddresses, tendermintAddress, i == 0, &wg)
 	}
 	wg.Wait()
 }
 
-func createMultisigUtxo(
+func createMultipartyUtxo(
 	w *multisigwallet.Wallet,
 	address string,
 	amount uint64,
 	asset string,
 	id uuid.UUID,
 	participantsAddresses []string,
-	tendermintAddress *string,
+	tendermintAddress string,
+	needBroadcast bool,
 	wg *sync.WaitGroup,
 ) (
 	multipartyUtxoCommit string,
 	err error,
 ) {
-	multipartyUtxoCommit, err = CreateMultisigUTXO(w, address, amount, asset, id, participantsAddresses, tendermintAddress)
+	multipartyUtxoCommit, err = CreateMultipartyUTXO(w, address, amount, asset, id, participantsAddresses, tendermintAddress, needBroadcast)
 	wg.Done()
 	return
 }
 
-func createWalletWithBalance(t *testing.T, balance uint64, asset string) *multisigwallet.Wallet {
+func createWalletWithBalance(t *testing.T, balance uint64, asset string, tendermintAddress string) *multisigwallet.Wallet {
 	wallet := newTestWallet(t, strconv.Itoa(rand.Int()))
-	_, err := wallet.Issue(balance, asset)
+	issueBytes, err := wallet.Issue(balance, asset)
+	broadcast(tendermintAddress, issueBytes)
 	assert.NoError(t, err)
 	return wallet
 }

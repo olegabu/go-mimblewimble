@@ -31,16 +31,16 @@ func (client *RPCClient) GetOutputs() ([]ledger.Output, error) {
 	return outputs, nil
 }
 
-func (client *RPCClient) GetOutput(commitment string) (output *ledger.Output, err error) {
+func (client *RPCClient) CheckOutput(commitment string) (exists bool, err error) {
 	outputs, err := client.GetOutputs()
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetOutputs")
+		return false, errors.Wrap(err, "cannot GetOutputs")
 	}
 
 	for _, output := range outputs {
 		if output.Commit == commitment {
-			return &output, nil
+			return true, nil
 		}
 	}
-	return nil, errors.Errorf("cannot find output with commitment %v", commitment)
+	return false, nil
 }

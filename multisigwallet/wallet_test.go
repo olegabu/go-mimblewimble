@@ -104,7 +104,7 @@ func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []strin
 	combinedSlate, err := receiver.CombineMultiparty(slates)
 	assert.NoError(t, err)
 
-	receiverSlate, err := receiver.ReceiveMultiparty(combinedSlate, transferAmount, asset, id, "receiver")
+	receiverSlate, _, err := receiver.ReceiveMultiparty(combinedSlate, transferAmount, asset, id, "receiver")
 	slates = append(slates, receiverSlate)
 
 	partiallySignedSlates := [][]byte{receiverSlate}
@@ -228,7 +228,7 @@ func spendMOfNMultipartyUtxo(t *testing.T, wallets []*Wallet, activeParticipants
 	combinedSlate, err := receiver.CombineMultiparty(slates)
 	assert.NoError(t, err)
 
-	receiverSlate, err := receiver.ReceiveMultiparty(combinedSlate, transferAmount, asset, id, "receiver")
+	receiverSlate, _, err := receiver.ReceiveMultiparty(combinedSlate, transferAmount, asset, id, "receiver")
 	slates = append(slates, receiverSlate)
 
 	partiallySignedSlates := [][]byte{receiverSlate}

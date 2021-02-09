@@ -553,7 +553,7 @@ func main() {
 
 	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, postCmd,
 		confirmCmd, cancelCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd,
-		createMultiparty)
+		createMultiparty, spendMultiparty, receiveMultiparty)
 
 	dir, err := homedir.Dir()
 	if err != nil {
