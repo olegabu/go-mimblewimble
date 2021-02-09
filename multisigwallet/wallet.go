@@ -255,7 +255,7 @@ func (t *Wallet) SpendMultiparty(multipartyOutputCommit string, spendingAmount u
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := multisig.Spend(t, spendingAmount, 0, 0, multipartyOutput.Asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
+	slate, savedSlate, outputs, err := multisig.Spend(t, spendingAmount, 0, 0, multipartyOutput.Asset, multipartyOutput, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot Spend")
 	}
