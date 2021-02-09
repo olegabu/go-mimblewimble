@@ -65,7 +65,7 @@ func SpendMOfN(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err = Spend(wallet, spendingAmount, 0, fee, asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err = Spend(wallet, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot InitMultisigTransaction")
 		return
@@ -110,7 +110,7 @@ func SpendMissingParty(
 	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	multipartyOutput.PartialAssetBlind = &partialAssetBlind
 
-	slate, savedSlate, _, err = Spend(wallet, spendingAmount, 0, fee, asset, []SavedOutput{multipartyOutput}, transactionID, missingParticipantID)
+	slate, savedSlate, _, err = Spend(wallet, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return

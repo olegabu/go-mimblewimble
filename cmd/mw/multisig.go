@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/olegabu/go-mimblewimble/multisigexchange"
 
@@ -15,10 +16,10 @@ import (
 )
 
 var createMultiparty = &cobra.Command{
-	Use:   "createMultiparty amount asset transactionID needBroadcast myIP:myPort otherIP1:otherPort1 otherIP2:otherPort2 ...",
+	Use:   "createMultiparty amount asset transactionID needBroadcast threshold myName@myIP:myPort otherName1@otherIP1:otherPort1 otherName2@otherIP2:otherPort2 ...",
 	Short: "Creates multiparty UTXO",
 	Long:  `Creates multiparty UTXO`,
-	Args:  cobra.MinimumNArgs(6),
+	Args:  cobra.MinimumNArgs(7),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		amount, err := strconv.Atoi(args[0])
 		if err != nil {
@@ -38,11 +39,19 @@ var createMultiparty = &cobra.Command{
 			return errors.Wrap(err, "cannot parse needBroadcast")
 		}
 
-		address := args[4]
+		threshold, err := strconv.Atoi(args[4])
+		if err != nil {
+			return errors.Wrap(err, "cannot parse threshold")
+		}
+
+		parts := strings.Split(args[5], "@")
+		name := parts[0]
+		address := parts[1]
 
 		participantsAddresses := make([]string, 0)
-		for i := 5; i < len(args); i++ {
-			participantsAddresses = append(participantsAddresses, args[i])
+		for i := 6; i < len(args); i++ {
+			parts := strings.Split(args[i], "@")
+			participantsAddresses = append(participantsAddresses, parts[1])
 		}
 
 		w, err := multisigwallet.NewWallet(flagPersist)
@@ -51,7 +60,7 @@ var createMultiparty = &cobra.Command{
 		}
 		defer w.Close()
 
-		commit, err := multisigexchange.CreateMultipartyUTXO(w, address, uint64(amount), asset, transactionID, participantsAddresses, flagAddress, needBroadcast)
+		commit, err := multisigexchange.CreateMultipartyUTXO(w, name, address, uint64(amount), asset, transactionID, participantsAddresses, flagAddress, needBroadcast, threshold)
 		if err != nil {
 			return errors.Wrap(err, "cannot CreateMultisigUTXO")
 		}
@@ -62,7 +71,7 @@ var createMultiparty = &cobra.Command{
 }
 
 var spendMultiparty = &cobra.Command{
-	Use:   "spendMultiparty multipartyOutputCommit amount asset transactionID needBroadcast myIP:myPort receiverIP:receiverPort otherIP1:otherPort1 otherIP2:otherPort2 ...",
+	Use:   "spendMultiparty multipartyOutputCommit amount asset transactionID needBroadcast myName@myIP:myPort receiverIP:receiverPort otherName1@otherIP1:otherPort1 otherName2@otherIP2:otherPort2 ...",
 	Short: "Spends multiparty UTXO",
 	Long:  `Spends multiparty UTXO`,
 	Args:  cobra.MinimumNArgs(8),
@@ -86,12 +95,20 @@ var spendMultiparty = &cobra.Command{
 			return errors.Wrap(err, "cannot parse needBroadcast")
 		}
 
-		address := args[5]
+		parts := strings.Split(args[5], "@")
+		name := parts[0]
+		address := parts[1]
 		receiverAddress := args[6]
 
 		participantsAddresses := make([]string, 0)
+		missingParticipantsNames := make([]string, 0)
 		for i := 7; i < len(args); i++ {
-			participantsAddresses = append(participantsAddresses, args[i])
+			parts := strings.Split(args[i], "@")
+			if len(parts) == 2 {
+				participantsAddresses = append(participantsAddresses, parts[1])
+			} else {
+				missingParticipantsNames = append(missingParticipantsNames, parts[0])
+			}
 		}
 
 		w, err := multisigwallet.NewWallet(flagPersist)
@@ -100,8 +117,8 @@ var spendMultiparty = &cobra.Command{
 		}
 		defer w.Close()
 
-		commit, err := multisigexchange.SpendMultipartyUTXO(w, multipartyOutputCommit, address, uint64(amount), asset, transactionID, participantsAddresses,
-			receiverAddress, flagAddress, needBroadcast)
+		commit, err := multisigexchange.SpendMultipartyUTXO(w, multipartyOutputCommit, name, address, uint64(amount), asset, transactionID, participantsAddresses,
+			missingParticipantsNames, receiverAddress, flagAddress, needBroadcast)
 		if err != nil {
 			return errors.Wrap(err, "cannot SpendMultipartyUTXO")
 		}

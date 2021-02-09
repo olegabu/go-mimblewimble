@@ -219,7 +219,7 @@ func spendMOfNMultipartyUtxo(t *testing.T, wallets []*Wallet, activeParticipants
 
 	missingSlates := make([][]byte, len(missingParticipantsIDs))
 	for i := 0; i < len(missingParticipantsIDs); i++ {
-		slate, err := wallets[0].SpendMissingParty(slates, 0, missingParticipantsIDs[i])
+		slate, err := wallets[0].SpendMissingParty(slates, transferAmount, missingParticipantsIDs[i])
 		assert.NoError(t, err)
 		missingSlates[i] = slate
 	}

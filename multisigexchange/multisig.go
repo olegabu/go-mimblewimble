@@ -61,6 +61,7 @@ func (context *ReceiverContext) receive(w http.ResponseWriter, req *http.Request
 
 func CreateMultipartyUTXO(
 	w *multisigwallet.Wallet,
+	name string,
 	address string,
 	amount uint64,
 	asset string,
@@ -68,6 +69,7 @@ func CreateMultipartyUTXO(
 	participantsAddresses []string,
 	tendermintAddress string,
 	needBroadcast bool,
+	threshold int,
 ) (
 	multipartyUtxoCommit string,
 	err error,
@@ -82,18 +84,33 @@ func CreateMultipartyUTXO(
 	defer server.Close()
 
 	// Осуществить первый шаг
-	slate, err := w.FundMultiparty(amount, asset, id, address)
-	if err != nil {
-		err = errors.Wrap(err, "cannot FundMultiparty")
-		return
-	}
-	context.mu.Lock()
-	context.InitialSlates = append(context.InitialSlates, slate)
-	context.mu.Unlock()
+	if threshold == len(participantsAddresses)+1 {
+		slate, e := w.FundMultiparty(amount, asset, id, address)
+		if e != nil {
+			err = errors.Wrap(e, "cannot FundMultiparty")
+			return
+		}
+		context.mu.Lock()
+		context.InitialSlates = append(context.InitialSlates, slate)
+		context.mu.Unlock()
 
-	// Разослать участникам slate-ы
-	println("First exchange:")
-	sendToAll(participantsAddresses, "/first", slate)
+		// Разослать участникам slate-ы
+		println("First exchange:")
+		sendToAll(participantsAddresses, "/first", slate)
+	} else {
+		slates, e := w.FundMOfNMultiparty(amount, asset, id, name, len(participantsAddresses)+1, threshold)
+		if e != nil {
+			err = errors.Wrap(e, "cannot FundMOfNMultiparty")
+			return
+		}
+		context.mu.Lock()
+		context.InitialSlates = append(context.InitialSlates, slates[0])
+		context.mu.Unlock()
+
+		// Разослать участникам slate-ы
+		println("First exchange:")
+		sendUniqueToAll(participantsAddresses, "/first", slates[1:])
+	}
 
 	// Дождаться получения всех slate-ов
 	for len(context.InitialSlates) < len(participantsAddresses)+1 {
@@ -101,10 +118,19 @@ func CreateMultipartyUTXO(
 	}
 
 	// Выполнить второй шаг
-	slate, err = w.SignMultiparty(context.InitialSlates)
-	if err != nil {
-		err = errors.Wrap(err, "cannot SignMultiparty")
-		return
+	var slate []byte
+	if threshold == len(participantsAddresses)+1 {
+		slate, err = w.SignMultiparty(context.InitialSlates)
+		if err != nil {
+			err = errors.Wrap(err, "cannot SignMultiparty")
+			return
+		}
+	} else {
+		slate, err = w.SignMOfNMultiparty(context.InitialSlates, nil)
+		if err != nil {
+			err = errors.Wrap(err, "cannot SignMOfNMultiparty")
+			return
+		}
 	}
 	context.mu.Lock()
 	context.SignedSlates = append(context.SignedSlates, slate)
@@ -120,10 +146,20 @@ func CreateMultipartyUTXO(
 	}
 
 	// Выполнить третий шаг
-	transactionBytes, multipartyOutputCommit, err := w.AggregateMultiparty(context.SignedSlates)
-	if err != nil {
-		err = errors.Wrap(err, "cannot AggregateMultiparty")
-		return
+	var transactionBytes []byte
+	var multipartyOutputCommit string
+	if threshold == len(participantsAddresses)+1 {
+		transactionBytes, multipartyOutputCommit, err = w.AggregateMultiparty(context.SignedSlates)
+		if err != nil {
+			err = errors.Wrap(err, "cannot AggregateMultiparty")
+			return
+		}
+	} else {
+		transactionBytes, multipartyOutputCommit, err = w.AggregateMOfNMultiparty(context.SignedSlates)
+		if err != nil {
+			err = errors.Wrap(err, "cannot AggregateMOfNMultiparty")
+			return
+		}
 	}
 
 	// Кто-то из участников броудкастит транзакцию
@@ -166,11 +202,13 @@ func CreateMultipartyUTXO(
 func SpendMultipartyUTXO(
 	w *multisigwallet.Wallet,
 	multipartyOutputCommit string,
+	name string,
 	address string,
 	amount uint64,
 	asset string,
 	id uuid.UUID,
 	participantsAddresses []string,
+	missingParticipantsNames []string,
 	receiverAddress string,
 	tendermintAddress string,
 	needBroadcast bool,
@@ -188,21 +226,36 @@ func SpendMultipartyUTXO(
 	defer server.Close()
 
 	// Осуществить первый шаг
-	slate, err := w.SpendMultiparty(multipartyOutputCommit, amount, id, address)
-	if err != nil {
-		err = errors.Wrap(err, "cannot SpendMultiparty")
-		return
-	}
-	context.mu.Lock()
-	context.InitialSlates = append(context.InitialSlates, slate)
-	context.mu.Unlock()
+	if missingParticipantsNames == nil || len(missingParticipantsNames) == 0 {
+		slate, e := w.SpendMultiparty(multipartyOutputCommit, amount, id, name)
+		if e != nil {
+			err = errors.Wrap(e, "cannot SpendMultiparty")
+			return
+		}
+		context.mu.Lock()
+		context.InitialSlates = append(context.InitialSlates, slate)
+		context.mu.Unlock()
 
-	// Разослать участникам slate-ы
-	println("First exchange:")
-	sendToAll(participantsAddresses, "/first", slate)
+		// Разослать участникам slate-ы
+		println("First exchange:")
+		sendToAll(participantsAddresses, "/first", slate)
+	} else {
+		slate, e := w.SpendMOfNMultiparty(multipartyOutputCommit, amount, id, name, missingParticipantsNames)
+		if e != nil {
+			err = errors.Wrap(e, "cannot SpendMultiparty")
+			return
+		}
+		context.mu.Lock()
+		context.InitialSlates = append(context.InitialSlates, slate)
+		context.mu.Unlock()
+
+		// Разослать участникам slate-ы
+		println("First exchange:")
+		sendToAll(participantsAddresses, "/first", slate)
+	}
 
 	// Тот кто отправляет объединенный slate получателю не дожидается его slate-а
-	waitingCount := len(participantsAddresses) + 2
+	waitingCount := len(participantsAddresses) + len(missingParticipantsNames) + 2
 	if needBroadcast {
 		waitingCount = len(participantsAddresses) + 1
 	}
@@ -213,6 +266,23 @@ func SpendMultipartyUTXO(
 	}
 
 	if needBroadcast {
+		if missingParticipantsNames != nil && len(missingParticipantsNames) > 0 {
+			println("Sending missing parties slates:")
+			for _, missingParticipant := range missingParticipantsNames {
+				slate, e := w.SpendMissingParty(context.InitialSlates, amount, missingParticipant)
+				if e != nil {
+					err = errors.Wrap(e, "cannot SpendMissingParty")
+					return
+				}
+				context.mu.Lock()
+				context.InitialSlates = append(context.InitialSlates, slate)
+				context.mu.Unlock()
+
+				// Разослать участникам slate-ы
+				sendToAll(participantsAddresses, "/first", slate)
+			}
+		}
+
 		// Объединить slate-ы и отправить их получателю
 		combinedSlate, e := w.CombineMultiparty(context.InitialSlates)
 		if e != nil {
@@ -246,10 +316,19 @@ func SpendMultipartyUTXO(
 	}
 
 	// Выполнить второй шаг
-	slate, err = w.SignMultiparty(context.InitialSlates)
-	if err != nil {
-		err = errors.Wrap(err, "cannot SignMultiparty")
-		return
+	var slate []byte
+	if missingParticipantsNames == nil || len(missingParticipantsNames) == 0 {
+		slate, err = w.SignMultiparty(context.InitialSlates)
+		if err != nil {
+			err = errors.Wrap(err, "cannot SignMultiparty")
+			return
+		}
+	} else {
+		slate, err = w.SignMOfNMultiparty(context.InitialSlates, nil)
+		if err != nil {
+			err = errors.Wrap(err, "cannot SignMOfNMultiparty")
+			return
+		}
 	}
 	context.mu.Lock()
 	context.SignedSlates = append(context.SignedSlates, slate)
@@ -259,16 +338,43 @@ func SpendMultipartyUTXO(
 	println("Second exchange:")
 	sendToAll(participantsAddresses, "/second", slate)
 
+	if needBroadcast && missingParticipantsNames != nil && len(missingParticipantsNames) > 0 {
+		println("Sending missing parties slates:")
+		for _, missingParticipant := range missingParticipantsNames {
+			slate, e := w.SignMOfNMultiparty(context.InitialSlates, &missingParticipant)
+			if e != nil {
+				err = errors.Wrap(e, "cannot SignMOfNMultiparty")
+				return
+			}
+			context.mu.Lock()
+			context.SignedSlates = append(context.SignedSlates, slate)
+			context.mu.Unlock()
+
+			// Разослать участникам slate-ы
+			sendToAll(participantsAddresses, "/second", slate)
+		}
+	}
+
 	// Дождаться получения всех slate-ов
-	for len(context.SignedSlates) < len(participantsAddresses)+2 {
+	for len(context.SignedSlates) < len(participantsAddresses)+len(missingParticipantsNames)+2 {
 		time.Sleep(1)
 	}
 
 	// Выполнить третий шаг
-	transactionBytes, newMultipartyOutputCommit, err := w.AggregateMultiparty(context.SignedSlates)
-	if err != nil {
-		err = errors.Wrap(err, "cannot AggregateMultiparty")
-		return
+	var transactionBytes []byte
+	var newMultipartyOutputCommit string
+	if missingParticipantsNames == nil || len(missingParticipantsNames) == 0 {
+		transactionBytes, newMultipartyOutputCommit, err = w.AggregateMultiparty(context.SignedSlates)
+		if err != nil {
+			err = errors.Wrap(err, "cannot AggregateMultiparty")
+			return
+		}
+	} else {
+		transactionBytes, newMultipartyOutputCommit, err = w.AggregateMOfNMultiparty(context.SignedSlates)
+		if err != nil {
+			err = errors.Wrap(err, "cannot AggregateMOfNMultiparty")
+			return
+		}
 	}
 
 	// Кто-то из участников броудкастит транзакцию
@@ -369,6 +475,21 @@ func sendToAll(addresses []string, action string, slate []byte) {
 		var ok bool
 		for !ok {
 			resp, err := http.Post("http://"+address+action, "application/json", bytes.NewReader(slate))
+			if err != nil || resp.StatusCode != 200 {
+				time.Sleep(1)
+			} else {
+				fmt.Println(address + ": OK")
+				ok = true
+			}
+		}
+	}
+}
+
+func sendUniqueToAll(addresses []string, action string, slates [][]byte) {
+	for i, address := range addresses {
+		var ok bool
+		for !ok {
+			resp, err := http.Post("http://"+address+action, "application/json", bytes.NewReader(slates[i]))
 			if err != nil || resp.StatusCode != 200 {
 				time.Sleep(1)
 			} else {

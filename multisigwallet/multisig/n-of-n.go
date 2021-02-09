@@ -35,7 +35,7 @@ func Spend(
 	change uint64,
 	fee uint64,
 	asset string,
-	inputs []SavedOutput,
+	multipartyOutput SavedOutput,
 	transactionID uuid.UUID,
 	participantID string,
 ) (
@@ -44,7 +44,11 @@ func Spend(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	return initTransaction(wallet, spendingAmount, change, fee, asset, inputs, transactionID, participantID)
+	if spendingAmount != multipartyOutput.Value {
+		err = errors.New("spending amount does not match to multiparty output value")
+		return
+	}
+	return initTransaction(wallet, spendingAmount, change, fee, asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
 }
 
 func initTransaction(
