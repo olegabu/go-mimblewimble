@@ -129,10 +129,12 @@ type VersionCompatInfo struct {
 
 type SavedSlate struct {
 	Slate
+	Blind [32]byte `json:"blind,omitempty"`
+	Nonce [32]byte `json:"nonce,omitempty"`
+
 	PartialBlind      [32]byte `json:"partial_blind,omitempty"`
 	PartialAssetBlind [32]byte `json:"partial_asset_blind,omitempty"`
 	ExcessBlind       [32]byte `json:"excess_blind,omitempty"`
-	Nonce             [32]byte `json:"nonce,omitempty"`
 	ParticipantID     string   `json:"participant_id,omitempty"`
 }
 

@@ -5,11 +5,13 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig/vss"
 	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
+	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 )
 
 func FundMOfN(
-	wallet Wallet,
+	sg SecretGenerator,
+	context *secp256k1.Context,
 	fundingAmount uint64,
 	change uint64,
 	fee uint64,
@@ -25,7 +27,7 @@ func FundMOfN(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err := Fund(wallet, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err := Fund(sg, context, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot InitMultisigTransaction")
 		return
@@ -51,7 +53,8 @@ func FundMOfN(
 }
 
 func SpendMOfN(
-	wallet Wallet,
+	sg SecretGenerator,
+	context *secp256k1.Context,
 	spendingAmount uint64,
 	fee uint64,
 	asset string,
@@ -65,7 +68,12 @@ func SpendMOfN(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err = Spend(wallet, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, participantID)
+	if spendingAmount != multipartyOutput.Value {
+		err = errors.New("spending amount does not match to multiparty output value")
+		return
+	}
+
+	slate, savedSlate, walletOutputs, err = Spend(sg, context, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot InitMultisigTransaction")
 		return
@@ -80,7 +88,8 @@ func SpendMOfN(
 }
 
 func SpendMissingParty(
-	wallet Wallet,
+	sg SecretGenerator,
+	context *secp256k1.Context,
 	spendingAmount uint64,
 	fee uint64,
 	asset string,
@@ -93,6 +102,11 @@ func SpendMissingParty(
 	savedSlate *SavedSlate,
 	err error,
 ) {
+	if spendingAmount != multipartyOutput.Value {
+		err = errors.New("spending amount does not match to multiparty output value")
+		return
+	}
+
 	shares := make([]string, 0)
 	for _, slate := range slates {
 		shares = append(shares, slate.VerifiableBlindsShares[missingParticipantID].VerifiableShare)
@@ -110,7 +124,7 @@ func SpendMissingParty(
 	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	multipartyOutput.PartialAssetBlind = &partialAssetBlind
 
-	slate, savedSlate, _, err = Spend(wallet, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, missingParticipantID)
+	slate, savedSlate, _, err = Spend(sg, context, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -119,7 +133,7 @@ func SpendMissingParty(
 }
 
 func SignMOfN(
-	wallet Wallet,
+	context *secp256k1.Context,
 	slates []*Slate,
 	inSavedSlate *SavedSlate,
 ) (
@@ -127,7 +141,7 @@ func SignMOfN(
 	outSavedSlate *SavedSlate,
 	err error,
 ) {
-	outSlate, err = Sign(wallet, slates, inSavedSlate)
+	outSlate, err = Sign(context, slates, inSavedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot signMultipartyTransaction")
 		return
@@ -154,7 +168,7 @@ func SignMOfN(
 }
 
 func AggregateMOfN(
-	wallet Wallet,
+	context *secp256k1.Context,
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
@@ -163,7 +177,7 @@ func AggregateMOfN(
 	multipartyOutput *SavedOutput,
 	err error,
 ) {
-	transaction, savedTransaction, multipartyOutput, err = Aggregate(wallet, slates, savedSlate)
+	transaction, savedTransaction, multipartyOutput, err = Aggregate(context, slates, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
 		return

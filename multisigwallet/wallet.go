@@ -14,7 +14,9 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/db"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/transfer"
 	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/utils"
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 
@@ -73,8 +75,115 @@ func (t *Wallet) GetContext() *secp256k1.Context {
 	return t.context
 }
 
+func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string) (slateBytes []byte, err error) {
+	inputs, change, err := t.db.GetInputs(amount, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	slateBytes, outputs, savedSlate, err := transfer.Initiate(t, t.context, amount, 0, asset, change, inputs, receiveAmount, receiveAsset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewSlate")
+	}
+
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
+	}
+
+	err = t.db.PutSenderSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutSlate")
+	}
+
+	return
+}
+
+func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) {
+	var inSlate = &Slate{}
+	err = json.Unmarshal(inSlateBytes, inSlate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+		return
+	}
+
+	fee := uint64(inSlate.Fee)
+
+	// my counterparty who sent the inSlate wishes to receive this amount, this is the amount I will send
+	amount := uint64(inSlate.ReceiveAmount)
+	asset := inSlate.ReceiveAsset
+
+	// my counterparty sends this amount to me, this is the receive amount for me
+	receiveAmount := uint64(inSlate.Amount)
+	receiveAsset := inSlate.Asset
+
+	inputs, change, err := t.db.GetInputs(amount, asset)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	outSlateBytes, outputs, savedSlate, err := transfer.Respond(t, t.context, amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewReceive")
+	}
+
+	for _, o := range outputs {
+		err = t.db.PutOutput(o)
+		if err != nil {
+			return nil, errors.Wrap(err, "cannot PutOutput")
+		}
+	}
+
+	err = t.db.PutReceiverSlate(savedSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
+	}
+
+	//tx := SavedTransaction{
+	//	Transaction: savedSlate.Transaction,
+	//	Status:      TransactionUnconfirmed,
+	//}
+	//
+	//err = t.db.PutTransaction(tx)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "cannot PutTransaction")
+	//}
+
+	return
+}
+
+func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error) {
+	responseSlate := &Slate{}
+
+	err = json.Unmarshal(responseSlateBytes, responseSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot unmarshal responseSlateBytes")
+	}
+
+	id, _ := responseSlate.Transaction.ID.MarshalText()
+
+	senderSlate, err := t.db.GetSenderSlate(id)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot GetSlate")
+	}
+
+	txBytes, tx, err := transfer.Finalize(t.context, responseSlate, senderSlate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot NewTransaction")
+	}
+
+	err = t.db.PutTransaction(tx)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot PutTransaction")
+	}
+
+	return txBytes, nil
+}
+
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
-	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed)
+	walletOutput, blind, err := utils.NewOutput(t, t.context, value, ledger.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create output")
 	}
@@ -224,7 +333,7 @@ func (t *Wallet) FundMultiparty(fundingAmount uint64, asset string, transactionI
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := multisig.Fund(t, fundingAmount, change, 0, asset, inputs, transactionID, participantID)
+	slate, savedSlate, outputs, err := multisig.Fund(t, t.context, fundingAmount, change, 0, asset, inputs, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot Fund")
 	}
@@ -255,7 +364,7 @@ func (t *Wallet) SpendMultiparty(multipartyOutputCommit string, spendingAmount u
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, outputs, err := multisig.Spend(t, spendingAmount, 0, 0, multipartyOutput.Asset, multipartyOutput, transactionID, participantID)
+	slate, savedSlate, outputs, err := multisig.Spend(t, t.context, spendingAmount, 0, 0, multipartyOutput.Asset, multipartyOutput, transactionID, participantID)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot Spend")
 	}
@@ -293,7 +402,7 @@ func (t *Wallet) CombineMultiparty(slatesBytes [][]byte) (slateBytes []byte, err
 		slates = append(slates, slate)
 	}
 
-	combinedSlate, err := multisig.Combine(t, slates)
+	combinedSlate, err := multisig.Combine(t.context, slates)
 	if err != nil {
 		return
 	}
@@ -324,7 +433,7 @@ func (t *Wallet) ReceiveMultiparty(
 		return
 	}
 
-	slate, output, err := multisig.Receive(t, receiveAmount, asset, slate, participantID)
+	slate, output, err := multisig.Receive(t, t.context, receiveAmount, asset, slate, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot Receive")
 		return
@@ -365,7 +474,7 @@ func (t *Wallet) SignMultiparty(slatesBytes [][]byte) (slateBytes []byte, err er
 		return nil, errors.Wrap(err, "cannot GetSenderSlate")
 	}
 
-	slate, err := multisig.Sign(t, slates, savedSlate)
+	slate, err := multisig.Sign(t.context, slates, savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot Sign")
 	}
@@ -398,7 +507,7 @@ func (t *Wallet) AggregateMultiparty(slatesBytes [][]byte) (transactionBytes []b
 		return
 	}
 
-	transaction, walletTx, multipartyOutput, err := multisig.Aggregate(t, slates, savedSlate)
+	transaction, walletTx, multipartyOutput, err := multisig.Aggregate(t.context, slates, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot Aggregate")
 		return
@@ -445,6 +554,7 @@ func (t *Wallet) FundMOfNMultiparty(
 
 	slates, savedSlate, outputs, err := multisig.FundMOfN(
 		t,
+		t.context,
 		fundingAmount,
 		change,
 		0,
@@ -498,6 +608,7 @@ func (t *Wallet) SpendMOfNMultiparty(
 
 	slate, savedSlate, outputs, err := multisig.SpendMOfN(
 		t,
+		t.context,
 		spendingAmount,
 		0,
 		multipartyOutput.Asset,
@@ -554,7 +665,16 @@ func (t *Wallet) SpendMissingParty(slatesBytes [][]byte, spendingAmount uint64, 
 		return nil, errors.Wrap(err, "cannot GetInputs")
 	}
 
-	slate, savedSlate, err := multisig.SpendMissingParty(t, spendingAmount, 0, slates[0].Asset, multipartyOutput, savedSlate.Transaction.ID, missingParticipantID, slates)
+	slate, savedSlate, err := multisig.SpendMissingParty(
+		t,
+		t.context,
+		spendingAmount,
+		0,
+		slates[0].Asset,
+		multipartyOutput,
+		savedSlate.Transaction.ID,
+		missingParticipantID,
+		slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot constructMissingPartySlate")
 		return nil, err
@@ -600,7 +720,7 @@ func (t *Wallet) SignMOfNMultiparty(slatesBytes [][]byte, missingPartyID *string
 		}
 	}
 
-	slate, savedSlate, err := multisig.SignMOfN(t, slates, savedSlate)
+	slate, savedSlate, err := multisig.SignMOfN(t.context, slates, savedSlate)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot signMultipartyTransaction")
 	}
@@ -645,7 +765,7 @@ func (t *Wallet) AggregateMOfNMultiparty(slatesBytes [][]byte) (transactionBytes
 		return
 	}
 
-	transaction, walletTx, multipartyOutput, err := multisig.AggregateMOfN(t, slates, savedSlate)
+	transaction, walletTx, multipartyOutput, err := multisig.AggregateMOfN(t.context, slates, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
 		return

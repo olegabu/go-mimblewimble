@@ -7,12 +7,14 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig/bulletproof"
 	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/utils"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 )
 
 func Fund(
-	wallet Wallet,
+	sg SecretGenerator,
+	context *secp256k1.Context,
 	fundingAmount uint64,
 	change uint64,
 	fee uint64,
@@ -26,11 +28,12 @@ func Fund(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	return initTransaction(wallet, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
+	return initTransaction(sg, context, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
 }
 
 func Spend(
-	wallet Wallet,
+	sg SecretGenerator,
+	context *secp256k1.Context,
 	spendingAmount uint64,
 	change uint64,
 	fee uint64,
@@ -44,15 +47,12 @@ func Spend(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	if spendingAmount != multipartyOutput.Value {
-		err = errors.New("spending amount does not match to multiparty output value")
-		return
-	}
-	return initTransaction(wallet, spendingAmount, change, fee, asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
+	return initTransaction(sg, context, spendingAmount, change, fee, asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
 }
 
 func initTransaction(
-	wallet Wallet,
+	sg SecretGenerator,
+	context *secp256k1.Context,
 	amount uint64,
 	change uint64,
 	fee uint64,
@@ -69,7 +69,7 @@ func initTransaction(
 	// compute excess blinding factor
 	inputsBlindValueAssetBlinds := make([][]byte, 0)
 	for _, input := range inputs {
-		blindValueAssetBlind, e := computeBlindValueAssetBlind(wallet, input)
+		blindValueAssetBlind, e := computeBlindValueAssetBlind(sg, input)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeBlindValueAssetBlind")
 			return
@@ -78,14 +78,14 @@ func initTransaction(
 	}
 
 	// generate random offset
-	offset, err := wallet.Nonce()
+	offset, err := sg.Nonce()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce for offset")
 		return
 	}
 
 	// x = change - inputs - offset (now change = 0)
-	blindExcess, err := secp256k1.BlindSum(wallet.GetContext(), nil, append(inputsBlindValueAssetBlinds, offset[:]))
+	blindExcess, err := secp256k1.BlindSum(context, nil, append(inputsBlindValueAssetBlinds, offset[:]))
 	if err != nil {
 		err = errors.Wrap(err, "cannot compute blind excess")
 		return
@@ -95,19 +95,19 @@ func initTransaction(
 	if change > 0 {
 		// create change output and remember its blinding factor
 		var e error
-		changeOutput, _, e = newOutput(wallet, change, ledger.PlainOutput, inputs[0].Asset, OutputUnconfirmed)
+		changeOutput, _, e = utils.NewOutput(sg, context, change, ledger.PlainOutput, inputs[0].Asset, OutputUnconfirmed)
 		if e != nil {
 			err = errors.Wrap(e, "cannot create change output")
 			return
 		}
 
-		changeBlindValueAssetBlinds, e := computeBlindValueAssetBlind(wallet, *changeOutput)
+		changeBlindValueAssetBlinds, e := computeBlindValueAssetBlind(sg, *changeOutput)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeBlindValueAssetBlind")
 			return
 		}
 
-		blindExcess, e = secp256k1.BlindSum(wallet.GetContext(), [][]byte{blindExcess[:], changeBlindValueAssetBlinds[:]}, nil)
+		blindExcess, e = secp256k1.BlindSum(context, [][]byte{blindExcess[:], changeBlindValueAssetBlinds[:]}, nil)
 		if e != nil {
 			err = errors.Wrap(e, "cannot compute blind excess")
 			return
@@ -115,13 +115,13 @@ func initTransaction(
 	}
 
 	// generate secret nonce
-	nonce, err := wallet.Nonce()
+	nonce, err := sg.Nonce()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
 		return
 	}
 
-	commits, err := commitsFromBlinds(wallet.GetContext(), blindExcess[:], nonce[:])
+	commits, err := commitsFromBlinds(context, blindExcess[:], nonce[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot get commits from blinds")
 		return
@@ -201,13 +201,13 @@ func initTransaction(
 
 	if newMultipartyUtxoIsNeccessary(slate) {
 		// generate partial output blind
-		blind, _, e := wallet.NewSecret()
+		blind, _, e := sg.NewSecret()
 		if e != nil {
 			err = errors.Wrap(e, "cannot get NewSecret")
 			return
 		}
 
-		commits, e := commitsFromBlinds(wallet.GetContext(), blind[:])
+		commits, e := commitsFromBlinds(context, blind[:])
 		if e != nil {
 			err = errors.Wrap(e, "cannot get commits from blinds")
 			return
@@ -215,13 +215,13 @@ func initTransaction(
 		publicBlind := commits[0]
 
 		// generate partial output asset blind
-		assetBlind, _, e := wallet.NewSecret()
+		assetBlind, _, e := sg.NewSecret()
 		if e != nil {
 			err = errors.Wrap(e, "cannot get NewSecret")
 			return
 		}
 
-		bulletproofsShare, e := bulletproof.GeneratePublicTaus(wallet.GetContext(), blind[:])
+		bulletproofsShare, e := bulletproof.GeneratePublicTaus(context, blind[:])
 		if e != nil {
 			err = errors.Wrap(e, "cannot GeneratePublicTaus")
 			return
@@ -239,14 +239,14 @@ func initTransaction(
 	return
 }
 
-func Sign(wallet Wallet, slates []*Slate, savedSlate *SavedSlate) (slate *Slate, err error) {
-	slate, err = Combine(wallet, slates)
+func Sign(context *secp256k1.Context, slates []*Slate, savedSlate *SavedSlate) (slate *Slate, err error) {
+	slate, err = Combine(context, slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CombineInitialSlates")
 		return
 	}
 
-	partialSignature, err := createPartialSignature(wallet, slate, savedSlate)
+	partialSignature, err := createPartialSignature(context, slate, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot createPartialSignature")
 		return
@@ -257,20 +257,20 @@ func Sign(wallet Wallet, slates []*Slate, savedSlate *SavedSlate) (slate *Slate,
 		assetBlind := savedSlate.PartialAssetBlind
 		blind := savedSlate.PartialBlind
 
-		sumPublicTau1, sumPublicTau2, _, commonNonce, e := aggregateBulletproofMPCValues(wallet.GetContext(), slate)
+		sumPublicTau1, sumPublicTau2, _, commonNonce, e := aggregateBulletproofMPCValues(context, slate)
 		if e != nil {
 			err = errors.Wrap(e, "cannot aggregateBulletproofMPCValues")
 			return
 		}
 
-		commit, assetCommit, _, _, e := computeMultipartyCommit(wallet.GetContext(), slate, savedSlate)
+		commit, assetCommit, _, _, e := computeMultipartyCommit(context, slate, savedSlate)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeMultipartyCommit")
 			return
 		}
 
 		value := getMultipartyOutputValue(slate)
-		taux, e := bulletproof.ComputeTaux(wallet.GetContext(), value, blind[:], assetBlind[:], commit, assetCommit, sumPublicTau1, sumPublicTau2, commonNonce)
+		taux, e := bulletproof.ComputeTaux(context, value, blind[:], assetBlind[:], commit, assetCommit, sumPublicTau1, sumPublicTau2, commonNonce)
 		if e != nil {
 			err = errors.Wrap(e, "cannot ComputeTaux")
 			return
@@ -281,7 +281,7 @@ func Sign(wallet Wallet, slates []*Slate, savedSlate *SavedSlate) (slate *Slate,
 }
 
 func Aggregate(
-	wallet Wallet,
+	context *secp256k1.Context,
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
@@ -296,7 +296,7 @@ func Aggregate(
 		return
 	}
 
-	signature, err := aggregatePartialSignatures(wallet, slate)
+	signature, err := aggregatePartialSignatures(context, slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregatePartialSignatures")
 		return
@@ -304,7 +304,7 @@ func Aggregate(
 
 	var output *SlateOutput
 	if newMultipartyUtxoIsNeccessary(slate) {
-		output, err = createMultipartyOutput(wallet.GetContext(), slate, savedSlate)
+		output, err = createMultipartyOutput(context, slate, savedSlate)
 		if err != nil {
 			err = errors.Wrap(err, "cannot createMultipartyOutput")
 			return
@@ -337,13 +337,13 @@ func Aggregate(
 		return
 	}
 
-	kernelExcess, err := ledger.CalculateExcess(wallet.GetContext(), inputCommitments, outputCommitments, offsetBytes, uint64(slate.Transaction.Body.Kernels[0].Fee))
+	kernelExcess, err := ledger.CalculateExcess(context, inputCommitments, outputCommitments, offsetBytes, uint64(slate.Transaction.Body.Kernels[0].Fee))
 	if err != nil {
 		err = errors.Wrap(err, "cannot calculate kernel excess")
 		return
 	}
 
-	excessPublicKey, err := secp256k1.CommitmentToPublicKey(wallet.GetContext(), kernelExcess)
+	excessPublicKey, err := secp256k1.CommitmentToPublicKey(context, kernelExcess)
 	if err != nil {
 		err = errors.Wrap(err, "excessPublicKey: CommitmentToPublicKey failed")
 		return
@@ -352,12 +352,12 @@ func Aggregate(
 	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
 	// verify final sig with pk from excess
-	err = secp256k1.AggsigVerifySingle(wallet.GetContext(), &signature, msg, nil, excessPublicKey, excessPublicKey, nil, false)
+	err = secp256k1.AggsigVerifySingle(context, &signature, msg, nil, excessPublicKey, excessPublicKey, nil, false)
 	if err != nil {
 		err = errors.Wrap(err, "AggsigVerifySingle failed to verify the finalSig with excessPublicKey")
 		return
 	}
-	excessSig := secp256k1.AggsigSignatureSerialize(wallet.GetContext(), &signature)
+	excessSig := secp256k1.AggsigSignatureSerialize(context, &signature)
 
 	transaction = &ledger.Transaction{
 		Offset: slate.Transaction.Offset,
@@ -377,7 +377,7 @@ func Aggregate(
 	}
 
 	for _, o := range slate.Transaction.Body.Outputs {
-		e := addSurjectionProof(wallet.GetContext(), &o, slate.Transaction.Body.Inputs, slate.Asset)
+		e := utils.AddSurjectionProof(context, &o, slate.Transaction.Body.Inputs, slate.Asset)
 		if e != nil {
 			err = errors.Wrap(e, "cannot addSurjectionProof")
 			return
@@ -404,7 +404,7 @@ func Aggregate(
 	return
 }
 
-func Combine(wallet Wallet, slates []*Slate) (aggregatedSlate *Slate, err error) {
+func Combine(context *secp256k1.Context, slates []*Slate) (aggregatedSlate *Slate, err error) {
 	err = validateInitialSlates(slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot validateInitialSlates")
@@ -434,7 +434,7 @@ func Combine(wallet Wallet, slates []*Slate) (aggregatedSlate *Slate, err error)
 			return nil, err
 		}
 
-		totalOffset, err = secp256k1.BlindSum(wallet.GetContext(), [][]byte{totalOffset[:], offset}, nil)
+		totalOffset, err = secp256k1.BlindSum(context, [][]byte{totalOffset[:], offset}, nil)
 		if err != nil {
 			return nil, err
 		}

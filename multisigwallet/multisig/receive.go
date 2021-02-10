@@ -8,39 +8,51 @@ import (
 
 	"github.com/olegabu/go-mimblewimble/ledger"
 	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
+	"github.com/olegabu/go-mimblewimble/multisigwallet/utils"
 )
 
-func Receive(wallet Wallet, amount uint64, asset string, combinedSlate *Slate, participantID string) (slate *Slate, walletOutput *SavedOutput, err error) {
+func Receive(
+	sg SecretGenerator,
+	context *secp256k1.Context,
+	amount uint64,
+	asset string,
+	combinedSlate *Slate,
+	participantID string,
+) (
+	slate *Slate,
+	walletOutput *SavedOutput,
+	err error,
+) {
 	slate = combinedSlate
 	if amount != uint64(slate.Amount) {
 		err = errors.New("amount does not match slate's amount")
 		return
 	}
 
-	walletOutput, blindValueAssetBlind, err := newOutput(wallet, amount, ledger.PlainOutput, asset, OutputUnconfirmed)
+	walletOutput, blindValueAssetBlind, err := utils.NewOutput(sg, context, amount, ledger.PlainOutput, asset, OutputUnconfirmed)
 	if err != nil {
 		return
 	}
 
-	kernelOffset, err := wallet.Nonce()
+	kernelOffset, err := sg.Nonce()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce for kernelOffset")
 		return
 	}
 
-	blindExcess, err := secp256k1.BlindSum(wallet.GetContext(), [][]byte{blindValueAssetBlind[:]}, [][]byte{kernelOffset[:]})
+	blindExcess, err := secp256k1.BlindSum(context, [][]byte{blindValueAssetBlind[:]}, [][]byte{kernelOffset[:]})
 	if err != nil {
 		err = errors.Wrap(err, "cannot BlindSum")
 		return
 	}
 
-	nonce, err := wallet.Nonce()
+	nonce, err := sg.Nonce()
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
 		return
 	}
 
-	commits, err := commitsFromBlinds(wallet.GetContext(), blindExcess[:], nonce[:])
+	commits, err := commitsFromBlinds(context, blindExcess[:], nonce[:])
 	if err != nil {
 		err = errors.Wrap(err, "cannot get commits from blinds")
 		return
@@ -54,7 +66,7 @@ func Receive(wallet Wallet, amount uint64, asset string, combinedSlate *Slate, p
 		PublicNonce:       publicNonce.String(),
 	}
 
-	aggregatedPublicKey, aggregatedPublicNonce, err := getAggregatedPublicKeyAndNonce(wallet.GetContext(), slate)
+	aggregatedPublicKey, aggregatedPublicNonce, err := getAggregatedPublicKeyAndNonce(context, slate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot getAggregatedPublicKeyAndNonce")
 		return
@@ -63,13 +75,13 @@ func Receive(wallet Wallet, amount uint64, asset string, combinedSlate *Slate, p
 	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
 
 	var privateKey [32]byte
-	privateKey, err = secp256k1.BlindSum(wallet.GetContext(), [][]byte{blindExcess[:]}, nil)
+	privateKey, err = secp256k1.BlindSum(context, [][]byte{blindExcess[:]}, nil)
 	if err != nil {
 		err = errors.Wrap(err, "cannot compute private key")
 		return
 	}
 
-	partialSignature, err := secp256k1.AggsigSignPartial(wallet.GetContext(), privateKey[:], nonce[:], aggregatedPublicNonce, aggregatedPublicKey, msg)
+	partialSignature, err := secp256k1.AggsigSignPartial(context, privateKey[:], nonce[:], aggregatedPublicNonce, aggregatedPublicKey, msg)
 	if err != nil {
 		err = errors.Wrap(err, "cannot calculate receiver's partial signature")
 		return
@@ -86,7 +98,7 @@ func Receive(wallet Wallet, amount uint64, asset string, combinedSlate *Slate, p
 		return nil, nil, err
 	}
 
-	totalOffset, err := secp256k1.BlindSum(wallet.GetContext(), [][]byte{offset[:], kernelOffset[:]}, nil)
+	totalOffset, err := secp256k1.BlindSum(context, [][]byte{offset[:], kernelOffset[:]}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
