@@ -13,7 +13,6 @@ import (
 )
 
 func Finalize(
-	context *secp256k1.Context,
 	responseSlate *Slate,
 	senderSlate *SavedSlate,
 ) (
@@ -21,6 +20,13 @@ func Finalize(
 	walletTx SavedTransaction,
 	err error,
 ) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+	defer secp256k1.ContextDestroy(context)
+
 	// get secret keys from sender's responseSlate that has blind and secret nonces
 	senderBlind := senderSlate.Blind[:]
 	senderNonce := senderSlate.Nonce[:]

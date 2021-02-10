@@ -14,7 +14,6 @@ import (
 
 func Fund(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	fundingAmount uint64,
 	change uint64,
 	fee uint64,
@@ -28,12 +27,11 @@ func Fund(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	return initTransaction(sg, context, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
+	return initTransaction(sg, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
 }
 
 func Spend(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	spendingAmount uint64,
 	change uint64,
 	fee uint64,
@@ -47,12 +45,11 @@ func Spend(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	return initTransaction(sg, context, spendingAmount, change, fee, asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
+	return initTransaction(sg, spendingAmount, change, fee, asset, []SavedOutput{multipartyOutput}, transactionID, participantID)
 }
 
 func initTransaction(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	amount uint64,
 	change uint64,
 	fee uint64,
@@ -66,10 +63,17 @@ func initTransaction(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+	defer secp256k1.ContextDestroy(context)
+
 	// compute excess blinding factor
 	inputsBlindValueAssetBlinds := make([][]byte, 0)
 	for _, input := range inputs {
-		blindValueAssetBlind, e := computeBlindValueAssetBlind(sg, input)
+		blindValueAssetBlind, e := computeBlindValueAssetBlind(sg, context, input)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeBlindValueAssetBlind")
 			return
@@ -78,7 +82,7 @@ func initTransaction(
 	}
 
 	// generate random offset
-	offset, err := sg.Nonce()
+	offset, err := sg.Nonce(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce for offset")
 		return
@@ -101,7 +105,7 @@ func initTransaction(
 			return
 		}
 
-		changeBlindValueAssetBlinds, e := computeBlindValueAssetBlind(sg, *changeOutput)
+		changeBlindValueAssetBlinds, e := computeBlindValueAssetBlind(sg, context, *changeOutput)
 		if e != nil {
 			err = errors.Wrap(e, "cannot computeBlindValueAssetBlind")
 			return
@@ -115,7 +119,7 @@ func initTransaction(
 	}
 
 	// generate secret nonce
-	nonce, err := sg.Nonce()
+	nonce, err := sg.Nonce(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
 		return
@@ -201,7 +205,7 @@ func initTransaction(
 
 	if newMultipartyUtxoIsNeccessary(slate) {
 		// generate partial output blind
-		blind, _, e := sg.NewSecret()
+		blind, _, e := sg.NewSecret(context)
 		if e != nil {
 			err = errors.Wrap(e, "cannot get NewSecret")
 			return
@@ -215,7 +219,7 @@ func initTransaction(
 		publicBlind := commits[0]
 
 		// generate partial output asset blind
-		assetBlind, _, e := sg.NewSecret()
+		assetBlind, _, e := sg.NewSecret(context)
 		if e != nil {
 			err = errors.Wrap(e, "cannot get NewSecret")
 			return
@@ -239,7 +243,14 @@ func initTransaction(
 	return
 }
 
-func Sign(context *secp256k1.Context, slates []*Slate, savedSlate *SavedSlate) (slate *Slate, err error) {
+func Sign(slates []*Slate, savedSlate *SavedSlate) (slate *Slate, err error) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+	defer secp256k1.ContextDestroy(context)
+
 	slate, err = Combine(context, slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot CombineInitialSlates")
@@ -281,7 +292,6 @@ func Sign(context *secp256k1.Context, slates []*Slate, savedSlate *SavedSlate) (
 }
 
 func Aggregate(
-	context *secp256k1.Context,
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
@@ -290,6 +300,13 @@ func Aggregate(
 	multipartyOutput *SavedOutput,
 	err error,
 ) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+	defer secp256k1.ContextDestroy(context)
+
 	slate, err := combinePartiallySignedSlates(slates)
 	if err != nil {
 		err = errors.Wrap(err, "cannot combinePartiallySignedSlates")

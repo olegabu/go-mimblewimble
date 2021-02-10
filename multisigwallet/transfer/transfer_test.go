@@ -34,17 +34,17 @@ func TestSendReceive(t *testing.T) {
 	assert.NoError(t, err)
 	inputs := []SavedOutput{*input1, *input2}
 
-	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, context, amount, fee, asset, change, inputs, 0, "")
+	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, amount, fee, asset, change, inputs, 0, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, senderSlateBytes)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, context, 0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, 0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate)
 	assert.NoError(t, err)
 	assert.NotNil(t, responseSlateBytes)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, tx, err := Finalize(context, &responseSavedSlate.Slate, senderSavedSlate)
+	txBytes, tx, err := Finalize(&responseSavedSlate.Slate, senderSavedSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)
@@ -73,17 +73,17 @@ func TestSendReceiveSingle(t *testing.T) {
 	assert.NoError(t, err)
 	inputs := []SavedOutput{*input1}
 
-	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, context, amount, fee, asset, change, inputs, 0, "")
+	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, amount, fee, asset, change, inputs, 0, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, senderSlateBytes)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, context, 0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, 0, fee, "", 0, nil, amount, asset, &senderSavedSlate.Slate)
 	assert.NoError(t, err)
 	assert.NotNil(t, responseSlateBytes)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, tx, err := Finalize(context, &responseSavedSlate.Slate, senderSavedSlate)
+	txBytes, tx, err := Finalize(&responseSavedSlate.Slate, senderSavedSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)
@@ -117,7 +117,7 @@ func TestExchange(t *testing.T) {
 	assert.NoError(t, err)
 	sendInputs := []SavedOutput{*sendInput1, *sendInput2}
 
-	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, context, sendAmount, fee, sendAsset, sendChange, sendInputs, receiveAmount, receiveAsset)
+	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, sendAmount, fee, sendAsset, sendChange, sendInputs, receiveAmount, receiveAsset)
 	assert.NoError(t, err)
 	assert.NotNil(t, senderSlateBytes)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
@@ -131,12 +131,12 @@ func TestExchange(t *testing.T) {
 	assert.NoError(t, err)
 	receiveInputs := []SavedOutput{*receiveInput1, *receiveInput2}
 
-	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, context, receiveAmount, fee, receiveAsset, receiveChange, receiveInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, receiveAmount, fee, receiveAsset, receiveChange, receiveInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
 	assert.NoError(t, err)
 	assert.NotNil(t, responseSlateBytes)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, tx, err := Finalize(context, &responseSavedSlate.Slate, senderSavedSlate)
+	txBytes, tx, err := Finalize(&responseSavedSlate.Slate, senderSavedSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)
@@ -175,7 +175,7 @@ func TestNewExchange(t *testing.T) {
 	exchangeAmount := uint64(100)
 	exchangeAsset := "apple"
 
-	slateBytes, walletOutput, savedSlate, err := Initiate(sg, context, amount, fee, asset, change, inputs, exchangeAmount, exchangeAsset)
+	slateBytes, walletOutput, savedSlate, err := Initiate(sg, amount, fee, asset, change, inputs, exchangeAmount, exchangeAsset)
 	assert.NoError(t, err)
 	assert.NotNil(t, slateBytes)
 	assert.NotNil(t, walletOutput)
@@ -195,7 +195,7 @@ func TestInvoicePay(t *testing.T) {
 	fee := uint64(0)
 	asset := "cash"
 
-	invoiceSlateBytes, walletOutput, invoiceSavedSlate, err := Initiate(sg, context, 0, fee, "", 0, nil, amount, asset)
+	invoiceSlateBytes, walletOutput, invoiceSavedSlate, err := Initiate(sg, 0, fee, "", 0, nil, amount, asset)
 	assert.NoError(t, err)
 	assert.NotNil(t, invoiceSlateBytes)
 	assert.NotNil(t, walletOutput)
@@ -210,14 +210,14 @@ func TestInvoicePay(t *testing.T) {
 	assert.NoError(t, err)
 	inputs := []SavedOutput{*input1, *input2}
 
-	paySlateBytes, changeOutput, paySavedSlate, err := Respond(sg, context, amount, fee, asset, change, inputs, 0, "", &invoiceSavedSlate.Slate)
+	paySlateBytes, changeOutput, paySavedSlate, err := Respond(sg, amount, fee, asset, change, inputs, 0, "", &invoiceSavedSlate.Slate)
 	assert.NoError(t, err)
 	assert.NotNil(t, paySlateBytes)
 	assert.NotNil(t, changeOutput)
 	assert.NotNil(t, paySavedSlate)
 	fmt.Printf("pay %s\n", string(paySlateBytes))
 
-	txBytes, tx, err := Finalize(context, &paySavedSlate.Slate, invoiceSavedSlate)
+	txBytes, tx, err := Finalize(&paySavedSlate.Slate, invoiceSavedSlate)
 	assert.NotNil(t, txBytes)
 	assert.NotNil(t, tx)
 	assert.NoError(t, err)
@@ -428,15 +428,15 @@ func TestSurjectionOutputs(t *testing.T) {
 	assert.NoError(t, err)
 	receiveWalletInputs := []SavedOutput{*receiveInput1, *receiveInput2}
 
-	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, context, sendAmount, 0, sendAsset, 0, sendWalletInputs, receiveAmount, receiveAsset)
+	senderSlateBytes, _, senderSavedSlate, err := Initiate(sg, sendAmount, 0, sendAsset, 0, sendWalletInputs, receiveAmount, receiveAsset)
 	assert.NoError(t, err)
 	fmt.Printf("send %s\n", string(senderSlateBytes))
 
-	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, context, receiveAmount, 0, receiveAsset, 0, receiveWalletInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
+	responseSlateBytes, _, responseSavedSlate, err := Respond(sg, receiveAmount, 0, receiveAsset, 0, receiveWalletInputs, sendAmount, sendAsset, &senderSavedSlate.Slate)
 	assert.NoError(t, err)
 	fmt.Printf("resp %s\n", string(responseSlateBytes))
 
-	txBytes, _, err := Finalize(context, &responseSavedSlate.Slate, senderSavedSlate)
+	txBytes, _, err := Finalize(&responseSavedSlate.Slate, senderSavedSlate)
 	assert.NoError(t, err)
 	fmt.Printf("tran %s\n", string(txBytes))
 

@@ -7,9 +7,9 @@ import (
 )
 
 type SecretGenerator interface {
-	Secret(index uint32) (secret [32]byte, err error)
-	NewSecret() (secret [32]byte, index uint32, err error)
-	Nonce() (rnd32 [32]byte, err error)
+	Secret(context *secp256k1.Context, index uint32) (secret [32]byte, err error)
+	NewSecret(context *secp256k1.Context) (secret [32]byte, index uint32, err error)
+	Nonce(context *secp256k1.Context) (rnd32 [32]byte, err error)
 }
 
 type TestSecretGenerator struct {
@@ -20,17 +20,17 @@ func NewTestSecretGenerator() (secretGenerator SecretGenerator, err error) {
 	return &TestSecretGenerator{0}, nil
 }
 
-func (w *TestSecretGenerator) Secret(index uint32) (secret [32]byte, err error) {
+func (w *TestSecretGenerator) Secret(context *secp256k1.Context, index uint32) (secret [32]byte, err error) {
 	return sha256.Sum256(i32tob(index)), nil
 }
 
-func (w *TestSecretGenerator) NewSecret() (secret [32]byte, index uint32, err error) {
+func (w *TestSecretGenerator) NewSecret(context *secp256k1.Context) (secret [32]byte, index uint32, err error) {
 	w.currentIndex++
-	secret, _ = w.Secret(w.currentIndex)
+	secret, _ = w.Secret(context, w.currentIndex)
 	return secret, w.currentIndex, nil
 }
 
-func (w *TestSecretGenerator) Nonce() (rnd32 [32]byte, err error) {
+func (w *TestSecretGenerator) Nonce(context *secp256k1.Context) (rnd32 [32]byte, err error) {
 	return secp256k1.Random256(), nil
 }
 

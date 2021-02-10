@@ -13,7 +13,6 @@ import (
 
 func Initiate(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	amount uint64,
 	fee uint64,
 	asset string,
@@ -27,6 +26,13 @@ func Initiate(
 	walletSlate *SavedSlate,
 	err error,
 ) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+	defer secp256k1.ContextDestroy(context)
+
 	slateInputs, walletOutputs, blindExcess, err := inputsAndOutputs(
 		sg,
 		context,
@@ -43,14 +49,14 @@ func Initiate(
 	}
 
 	// generate secret nonce
-	nonce, err := sg.Nonce()
+	nonce, err := sg.Nonce(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
 		return
 	}
 
 	// generate random kernel offset
-	kernelOffset, err := sg.Nonce()
+	kernelOffset, err := sg.Nonce(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce for kernelOffset")
 		return

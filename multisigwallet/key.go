@@ -16,9 +16,9 @@ const mnemonicPassword = ""
 const masterKeyFilename = "master.key"
 const entropyBitSize = 128
 
-func (t *Wallet) Nonce() (rnd32 [32]byte, err error) {
+func (t *Wallet) Nonce(context *secp256k1.Context) (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
-	rnd32, err = secp256k1.AggsigGenerateSecureNonce(t.context, seed32[:])
+	rnd32, err = secp256k1.AggsigGenerateSecureNonce(context, seed32[:])
 	return
 }
 
@@ -168,13 +168,13 @@ func (t *Wallet) InitMasterKey(mnemonic string) (createdMnemonic string, err err
 	return
 }
 
-func (t *Wallet) NewSecret() (secret [32]byte, index uint32, err error) {
+func (t *Wallet) NewSecret(context *secp256k1.Context) (secret [32]byte, index uint32, err error) {
 	index, err = t.db.NextIndex()
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get NextIndex from db")
 	}
 
-	secret, err = t.Secret(index)
+	secret, err = t.Secret(context, index)
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get secretFromIndex")
 	}
@@ -182,7 +182,7 @@ func (t *Wallet) NewSecret() (secret [32]byte, index uint32, err error) {
 	return
 }
 
-func (t *Wallet) Secret(index uint32) (secret [32]byte, err error) {
+func (t *Wallet) Secret(context *secp256k1.Context, index uint32) (secret [32]byte, err error) {
 	childKey, err := t.masterKey.NewChildKey(index)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot get NewChildKey")
@@ -193,7 +193,7 @@ func (t *Wallet) Secret(index uint32) (secret [32]byte, err error) {
 		return [32]byte{}, errors.Wrap(err, "cannot Serialize childKey")
 	}
 
-	secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
+	secret, err = secp256k1.AggsigGenerateSecureNonce(context, childKeyBytes)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot AggsigGenerateSecureNonce from childKeyBytes")
 	}

@@ -21,12 +21,12 @@ func commitsFromBlinds(context *secp256k1.Context, blinds ...[]byte) (commits []
 }
 
 // blind + v * assetBlind
-func computeBlindValueAssetBlind(sg SecretGenerator, output SavedOutput) (blindValueAssetBlind [32]byte, err error) {
+func computeBlindValueAssetBlind(sg SecretGenerator, context *secp256k1.Context, output SavedOutput) (blindValueAssetBlind [32]byte, err error) {
 	var blind [32]byte
 	if output.PartialBlind != nil {
 		blind = *output.PartialBlind
 	} else {
-		blind, err = sg.Secret(output.Index)
+		blind, err = sg.Secret(context, output.Index)
 		if err != nil {
 			err = errors.Wrap(err, "cannot get blind by index")
 			return
@@ -37,7 +37,7 @@ func computeBlindValueAssetBlind(sg SecretGenerator, output SavedOutput) (blindV
 	if output.PartialBlind != nil {
 		assetBlind = *output.PartialAssetBlind
 	} else {
-		assetBlind, err = sg.Secret(output.AssetIndex)
+		assetBlind, err = sg.Secret(context, output.AssetIndex)
 		if err != nil {
 			err = errors.Wrap(err, "cannot get blind by index")
 			return

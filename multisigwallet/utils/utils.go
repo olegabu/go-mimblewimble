@@ -105,14 +105,14 @@ func NewOutput(
 	sumBlinds []byte,
 	err error,
 ) {
-	secret, blindIndex, err := sg.NewSecret()
+	secret, blindIndex, err := sg.NewSecret(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return
 	}
 	blind := secret
 
-	assetSecret, assetIndex, err := sg.NewSecret()
+	assetSecret, assetIndex, err := sg.NewSecret(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get newSecret")
 		return

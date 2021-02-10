@@ -34,7 +34,7 @@ func inputsAndOutputs(
 		inputsTotal += walletInput.Value
 
 		// re-create child secret key from its saved index and use it as this walletInput's blind
-		secret, e := sg.Secret(walletInput.Index)
+		secret, e := sg.Secret(context, walletInput.Index)
 		if e != nil {
 			err = errors.Wrapf(e, "cannot get secret for walletInput with key index %d", walletInput.Index)
 			return
@@ -42,7 +42,7 @@ func inputsAndOutputs(
 
 		blind := secret[:]
 
-		assetSecret, e := sg.Secret(walletInput.AssetIndex)
+		assetSecret, e := sg.Secret(context, walletInput.AssetIndex)
 		if e != nil {
 			err = errors.Wrapf(e, "cannot get assetSecret for walletInput with key index %d", walletInput.AssetIndex)
 			return

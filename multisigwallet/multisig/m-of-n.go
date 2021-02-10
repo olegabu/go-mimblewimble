@@ -5,13 +5,11 @@ import (
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/multisigwallet/multisig/vss"
 	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
-	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 )
 
 func FundMOfN(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	fundingAmount uint64,
 	change uint64,
 	fee uint64,
@@ -27,7 +25,7 @@ func FundMOfN(
 	walletOutputs []SavedOutput,
 	err error,
 ) {
-	slate, savedSlate, walletOutputs, err := Fund(sg, context, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err := Fund(sg, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot InitMultisigTransaction")
 		return
@@ -54,7 +52,6 @@ func FundMOfN(
 
 func SpendMOfN(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	spendingAmount uint64,
 	fee uint64,
 	asset string,
@@ -73,7 +70,7 @@ func SpendMOfN(
 		return
 	}
 
-	slate, savedSlate, walletOutputs, err = Spend(sg, context, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, participantID)
+	slate, savedSlate, walletOutputs, err = Spend(sg, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, participantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot InitMultisigTransaction")
 		return
@@ -89,7 +86,6 @@ func SpendMOfN(
 
 func SpendMissingParty(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	spendingAmount uint64,
 	fee uint64,
 	asset string,
@@ -124,7 +120,7 @@ func SpendMissingParty(
 	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
 	multipartyOutput.PartialAssetBlind = &partialAssetBlind
 
-	slate, savedSlate, _, err = Spend(sg, context, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, missingParticipantID)
+	slate, savedSlate, _, err = Spend(sg, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, missingParticipantID)
 	if err != nil {
 		err = errors.Wrap(err, "cannot initMultipartyTransaction")
 		return
@@ -133,7 +129,6 @@ func SpendMissingParty(
 }
 
 func SignMOfN(
-	context *secp256k1.Context,
 	slates []*Slate,
 	inSavedSlate *SavedSlate,
 ) (
@@ -141,7 +136,7 @@ func SignMOfN(
 	outSavedSlate *SavedSlate,
 	err error,
 ) {
-	outSlate, err = Sign(context, slates, inSavedSlate)
+	outSlate, err = Sign(slates, inSavedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot signMultipartyTransaction")
 		return
@@ -168,7 +163,6 @@ func SignMOfN(
 }
 
 func AggregateMOfN(
-	context *secp256k1.Context,
 	slates []*Slate,
 	savedSlate *SavedSlate,
 ) (
@@ -177,7 +171,7 @@ func AggregateMOfN(
 	multipartyOutput *SavedOutput,
 	err error,
 ) {
-	transaction, savedTransaction, multipartyOutput, err = Aggregate(context, slates, savedSlate)
+	transaction, savedTransaction, multipartyOutput, err = Aggregate(slates, savedSlate)
 	if err != nil {
 		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
 		return

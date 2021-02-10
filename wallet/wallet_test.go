@@ -20,7 +20,8 @@ func testDbDir() string {
 	return filepath.Join(usr.HomeDir, ".mw_test")
 }
 
-func TestWalletSendReceive(t *testing.T) {
+ss, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
+		assert.Nfunc TestWalletSendReceive(t *testing.T) {
 	w := newTestWallet(t)
 	defer w.Close()
 
@@ -243,8 +244,7 @@ func TestTotalIssues(t *testing.T) {
 		issue := ledger.Issue{}
 		err = json.Unmarshal(issueBytes, &issue)
 		assert.NoError(t, err)
-		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
-		assert.NoError(t, err)
+		issueExceoError(t, err)
 		excessCommitments = append(excessCommitments, issueExcess)
 
 		issueCommit, err := secp256k1.CommitmentFromString(issue.Output.Commit)

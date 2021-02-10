@@ -13,7 +13,6 @@ import (
 
 func Receive(
 	sg SecretGenerator,
-	context *secp256k1.Context,
 	amount uint64,
 	asset string,
 	combinedSlate *Slate,
@@ -23,6 +22,13 @@ func Receive(
 	walletOutput *SavedOutput,
 	err error,
 ) {
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	if err != nil {
+		err = errors.Wrap(err, "cannot ContextCreate")
+		return
+	}
+	defer secp256k1.ContextDestroy(context)
+
 	slate = combinedSlate
 	if amount != uint64(slate.Amount) {
 		err = errors.New("amount does not match slate's amount")
@@ -34,7 +40,7 @@ func Receive(
 		return
 	}
 
-	kernelOffset, err := sg.Nonce()
+	kernelOffset, err := sg.Nonce(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce for kernelOffset")
 		return
@@ -46,7 +52,7 @@ func Receive(
 		return
 	}
 
-	nonce, err := sg.Nonce()
+	nonce, err := sg.Nonce(context)
 	if err != nil {
 		err = errors.Wrap(err, "cannot get nonce")
 		return
