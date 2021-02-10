@@ -4,25 +4,22 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"testing"
 
-	"github.com/olegabu/go-secp256k1-zkp"
-
-	"github.com/stretchr/testify/assert"
+	"github.com/google/uuid"
 
 	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-secp256k1-zkp"
+	"github.com/stretchr/testify/assert"
 )
 
-func testDbDir() string {
-	var usr, _ = user.Current()
-	return filepath.Join(usr.HomeDir, ".mw_test")
-}
-
-ss, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
-		assert.Nfunc TestWalletSendReceive(t *testing.T) {
-	w := newTestWallet(t)
+func TestWalletSendReceive(t *testing.T) {
+	w := newTestWallet(t, "test")
 	defer w.Close()
 
 	for _, value := range []uint64{1, 2, 3} {
@@ -47,7 +44,7 @@ ss, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
 }
 
 func TestWalletInvoicePay(t *testing.T) {
-	w := newTestWallet(t)
+	w := newTestWallet(t, "test")
 	defer w.Close()
 
 	for _, value := range []uint64{1, 2, 3} {
@@ -72,7 +69,7 @@ func TestWalletInvoicePay(t *testing.T) {
 }
 
 func TestWalletIssue(t *testing.T) {
-	w := newTestWallet(t)
+	w := newTestWallet(t, "test")
 	defer w.Close()
 
 	issueBytes, err := w.Issue(1, "cash")
@@ -86,8 +83,12 @@ func TestWalletIssue(t *testing.T) {
 }
 
 func TestWalletIssueChangeAssetBlind(t *testing.T) {
-	w := newTestWallet(t)
+	w := newTestWallet(t, "test")
 	defer w.Close()
+
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	assert.NoError(t, err)
+	defer secp256k1.ContextDestroy(context)
 
 	issueBytes, err := w.Issue(1, "cash")
 	assert.NoError(t, err)
@@ -102,9 +103,9 @@ func TestWalletIssueChangeAssetBlind(t *testing.T) {
 	seed := ledger.AssetSeed("cash")
 
 	// change asset blind and expect to fail bulletproof validation
-	assetBlindInvalid, _ := w.nonce()
+	assetBlindInvalid, _ := w.Nonce(context)
 
-	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(w.context, seed, assetBlindInvalid[:])
+	assetCommitment, err := secp256k1.GeneratorGenerateBlinded(context, seed, assetBlindInvalid[:])
 	assert.NoError(t, err)
 
 	issue.Output.AssetCommit = assetCommitment.String()
@@ -116,9 +117,9 @@ func TestWalletIssueChangeAssetBlind(t *testing.T) {
 	assert.Error(t, err)
 
 	// change asset blind back to the one saved in the wallet and expect to pass validation
-	assetBlindValid, _ := w.secret(1)
+	assetBlindValid, _ := w.Secret(context, 1)
 
-	assetCommitment, err = secp256k1.GeneratorGenerateBlinded(w.context, seed, assetBlindValid[:])
+	assetCommitment, err = secp256k1.GeneratorGenerateBlinded(context, seed, assetBlindValid[:])
 	assert.NoError(t, err)
 
 	issue.Output.AssetCommit = assetCommitment.String()
@@ -131,7 +132,7 @@ func TestWalletIssueChangeAssetBlind(t *testing.T) {
 }
 
 func TestWalletInvoicePaySingle(t *testing.T) {
-	w := newTestWallet(t)
+	w := newTestWallet(t, "test")
 	defer w.Close()
 
 	for _, value := range []uint64{1, 2} {
@@ -149,7 +150,7 @@ func TestWalletInvoicePaySingle(t *testing.T) {
 }
 
 func TestWalletExchange(t *testing.T) {
-	w := newTestWallet(t)
+	w := newTestWallet(t, "test")
 	defer w.Close()
 
 	for _, value := range []uint64{1, 2, 3} {
@@ -207,8 +208,12 @@ func TestWalletExchange(t *testing.T) {
 }
 
 func TestTotalIssues(t *testing.T) {
-	w := newTestWallet(t)
+	w := newTestWallet(t, "test")
 	defer w.Close()
+
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	assert.NoError(t, err)
+	defer secp256k1.ContextDestroy(context)
 
 	var outputCommitments []*secp256k1.Commitment
 	var excessCommitments []*secp256k1.Commitment
@@ -244,7 +249,8 @@ func TestTotalIssues(t *testing.T) {
 		issue := ledger.Issue{}
 		err = json.Unmarshal(issueBytes, &issue)
 		assert.NoError(t, err)
-		issueExceoError(t, err)
+		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
+		assert.NoError(t, err)
 		excessCommitments = append(excessCommitments, issueExcess)
 
 		issueCommit, err := secp256k1.CommitmentFromString(issue.Output.Commit)
@@ -272,17 +278,17 @@ func TestTotalIssues(t *testing.T) {
 
 	// add kernel offset to excessCommitments
 	offsetBytes, _ := hex.DecodeString(tx.Offset)
-	kernelOffset, err := secp256k1.Commit(w.context, offsetBytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	kernelOffset, err := secp256k1.Commit(context, offsetBytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	assert.NoError(t, err)
 	excessCommitments = append(excessCommitments, kernelOffset)
 
 	// subtract all kernel excesses (from issues and transfers) from all remaining outputs
 	// sum(outputs) - (sum(KE) + sum(offset)*G + sum(KEI))
-	sumCommitment, err := secp256k1.CommitSum(w.context, outputCommitments, excessCommitments)
+	sumCommitment, err := secp256k1.CommitSum(context, outputCommitments, excessCommitments)
 	assert.NoError(t, err)
 
 	// sum up commitments to total number of both assets issued
-	totalIssuesCommitment, err := secp256k1.CommitSum(w.context, []*secp256k1.Commitment{totalCashIssuesCommitment, totalAppleIssuesCommitment}, nil)
+	totalIssuesCommitment, err := secp256k1.CommitSum(context, []*secp256k1.Commitment{totalCashIssuesCommitment, totalAppleIssuesCommitment}, nil)
 	assert.NoError(t, err)
 
 	// difference of remaining outputs and all excesses should equal to the commitment to value of total issued;
@@ -360,11 +366,274 @@ func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *l
 	return
 }
 
-func TestPrint(t *testing.T) {
-	dir := testDbDir()
-	w, err := NewWallet(dir)
+func TestCreateAndSpendMultiparty(t *testing.T) {
+	partiesCount := 3
+	amount := uint64(100)
+	asset := "$"
+
+	wallets := make([]*Wallet, 0)
+	participantIDs := make([]string, 0)
+	for i := 0; i < partiesCount; i++ {
+		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset))
+		participantIDs = append(participantIDs, strconv.Itoa(i))
+	}
+
+	multipartyOutputCommit := createMultipartyUtxo(t, wallets, participantIDs, amount, asset)
+
+	receiver := createWalletWithBalance(t, 0, asset)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, 100, asset, receiver)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, 100, asset, receiver)
+	multipartyOutputCommit = spendMultipartyUtxo(t, wallets, participantIDs, multipartyOutputCommit, 100, asset, receiver)
+	closeWallets(wallets)
+}
+
+func createWalletWithBalance(t *testing.T, balance uint64, asset string) *Wallet {
+	wallet := newTestWallet(t, strconv.Itoa(rand.Int()))
+	_, err := wallet.Issue(balance, asset)
 	assert.NoError(t, err)
-	defer w.Close()
-	err = w.Print()
+	return wallet
+}
+
+func closeWallets(wallets []*Wallet) {
+	for _, wallet := range wallets {
+		wallet.Close()
+	}
+}
+
+func createMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, partialAmount uint64, asset string) (multipartyOutputCommit string) {
+	id := uuid.New()
+	count := len(wallets)
+
+	slates := make([][]byte, 0)
+	for i := 0; i < count; i++ {
+		slate, err := wallets[i].FundMultiparty(partialAmount, asset, id, participantIDs[i])
+		assert.NoError(t, err)
+		slates = append(slates, slate)
+	}
+
+	partiallySignedSlates := make([][]byte, 0)
+	for i := 0; i < count; i++ {
+		slate, err := wallets[i].SignMultiparty(slates)
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	var transactionBytes []byte
+	for i := 0; i < count; i++ {
+		var err error
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateMultiparty(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
+
+	var transaction ledger.Transaction
+	err := json.Unmarshal(transactionBytes, &transaction)
 	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
+
+	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < count; i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+	}
+	return
+}
+
+func spendMultipartyUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, mulipartyOutputCommit string, transferAmount uint64, asset string, receiver *Wallet) (multipartyOutputCommit string) {
+	id := uuid.New()
+	count := len(wallets)
+
+	slates := make([][]byte, 0)
+	for i := 0; i < count; i++ {
+		slate, err := wallets[i].SpendMultiparty(mulipartyOutputCommit, transferAmount, id, participantIDs[i])
+		assert.NoError(t, err)
+		slates = append(slates, slate)
+	}
+
+	combinedSlate, err := receiver.CombineMultiparty(slates)
+	assert.NoError(t, err)
+
+	receiverSlate, _, err := receiver.ReceiveMultiparty(combinedSlate, transferAmount, asset, id, "receiver")
+	slates = append(slates, receiverSlate)
+
+	partiallySignedSlates := [][]byte{receiverSlate}
+	for i := 0; i < count; i++ {
+		slate, err := wallets[i].SignMultiparty(slates)
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	var transactionBytes []byte
+	for i := 0; i < count; i++ {
+		var err error
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateMultiparty(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
+
+	var transaction ledger.Transaction
+	err = json.Unmarshal(transactionBytes, &transaction)
+	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
+
+	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < count; i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+	}
+	return
+}
+
+func TestCreateAndSpendMOfNMultiparty(t *testing.T) {
+	n := 5
+	k := 3
+
+	amount := uint64(100)
+	asset := "$"
+
+	wallets := make([]*Wallet, 0)
+	participantIDs := make([]string, 0)
+	for i := 0; i < n; i++ {
+		wallets = append(wallets, createWalletWithBalance(t, amount+uint64(rand.Intn(100)), asset))
+		participantIDs = append(participantIDs, strconv.Itoa(i))
+	}
+
+	multipartyOutputCommit := createMultipartyMOfNUtxo(t, wallets, participantIDs, amount, asset, n, k)
+	println(multipartyOutputCommit)
+	activeParticipantsIDs := participantIDs[:k]
+	missingParticipantIDs := participantIDs[k:]
+
+	receiver := createWalletWithBalance(t, 0, asset)
+	multipartyOutputCommit = spendMOfNMultipartyUtxo(t, wallets, activeParticipantsIDs, missingParticipantIDs, multipartyOutputCommit, uint64(n)*amount, asset, receiver)
+	closeWallets(wallets)
+}
+
+func createMultipartyMOfNUtxo(t *testing.T, wallets []*Wallet, participantIDs []string, partialAmount uint64, asset string, n int, k int) (multipartyOutputCommit string) {
+	id := uuid.New()
+	count := len(wallets)
+
+	allSlates := make([][][]byte, 0)
+	for i := 0; i < count; i++ {
+		slates, err := wallets[i].FundMOfNMultiparty(partialAmount, asset, id, participantIDs[i], n, k)
+		assert.NoError(t, err)
+		allSlates = append(allSlates, slates)
+	}
+
+	partiallySignedSlates := make([][]byte, 0)
+	for i := 0; i < count; i++ {
+		slates := make([][]byte, 0)
+		for j := 0; j < len(allSlates); j++ {
+			slates = append(slates, allSlates[j][i])
+		}
+
+		slate, err := wallets[i].SignMOfNMultiparty(slates, nil)
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	var transactionBytes []byte
+	for i := 0; i < count; i++ {
+		var err error
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateMOfNMultiparty(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
+
+	var transaction ledger.Transaction
+	err := json.Unmarshal(transactionBytes, &transaction)
+	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
+
+	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < count; i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+	}
+	return
+}
+
+func spendMOfNMultipartyUtxo(t *testing.T, wallets []*Wallet, activeParticipantsIDs []string, missingParticipantsIDs []string, mulipartyOutputCommit string, transferAmount uint64, asset string, receiver *Wallet) (multipartyOutputCommit string) {
+	id := uuid.New()
+
+	slates := make([][]byte, len(activeParticipantsIDs))
+	for i := 0; i < len(activeParticipantsIDs); i++ {
+		slate, err := wallets[i].SpendMOfNMultiparty(mulipartyOutputCommit, transferAmount, id, activeParticipantsIDs[i], missingParticipantsIDs)
+		assert.NoError(t, err)
+		slates[i] = slate
+	}
+
+	missingSlates := make([][]byte, len(missingParticipantsIDs))
+	for i := 0; i < len(missingParticipantsIDs); i++ {
+		slate, err := wallets[0].SpendMissingParty(slates, transferAmount, missingParticipantsIDs[i])
+		assert.NoError(t, err)
+		missingSlates[i] = slate
+	}
+	slates = append(slates, missingSlates...)
+
+	combinedSlate, err := receiver.CombineMultiparty(slates)
+	assert.NoError(t, err)
+
+	receiverSlate, _, err := receiver.ReceiveMultiparty(combinedSlate, transferAmount, asset, id, "receiver")
+	slates = append(slates, receiverSlate)
+
+	partiallySignedSlates := [][]byte{receiverSlate}
+	for i := 0; i < len(activeParticipantsIDs); i++ {
+		slate, err := wallets[i].SignMOfNMultiparty(slates, nil)
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	for i := 0; i < len(missingParticipantsIDs); i++ {
+		slate, err := wallets[0].SignMOfNMultiparty(slates, &missingParticipantsIDs[i])
+		assert.NoError(t, err)
+		partiallySignedSlates = append(partiallySignedSlates, slate)
+	}
+
+	var transactionBytes []byte
+	for i := 0; i < len(activeParticipantsIDs); i++ {
+		var err error
+		transactionBytes, multipartyOutputCommit, err = wallets[i].AggregateMOfNMultiparty(partiallySignedSlates)
+		assert.NoError(t, err)
+	}
+
+	var transaction ledger.Transaction
+	err = json.Unmarshal(transactionBytes, &transaction)
+	assert.NoError(t, err)
+	err = ledger.ValidateTransaction(&transaction)
+	assert.NoError(t, err)
+
+	transactionID, err := transaction.ID.MarshalText()
+	assert.NoError(t, err)
+
+	for i := 0; i < len(activeParticipantsIDs); i++ {
+		err = wallets[i].Confirm(transactionID)
+		assert.NoError(t, err)
+	}
+	return
+}
+
+func testDbDir(walletName string) string {
+	var usr, _ = user.Current()
+	return filepath.Join(usr.HomeDir, ".mw_test_"+walletName)
+}
+
+func newTestWallet(t *testing.T, walletName string) (w *Wallet) {
+	dir := testDbDir(walletName)
+
+	err := os.RemoveAll(dir)
+	assert.NoError(t, err)
+
+	w, err = NewWalletWithoutMasterKey(dir)
+	assert.NoError(t, err)
+
+	_, err = w.InitMasterKey("")
+	assert.NoError(t, err)
+
+	return
 }

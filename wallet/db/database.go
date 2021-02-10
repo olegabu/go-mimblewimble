@@ -1,6 +1,6 @@
 package db
 
-import . "github.com/olegabu/go-mimblewimble/multisigwallet/types"
+import . "github.com/olegabu/go-mimblewimble/wallet/types"
 
 type Database interface {
 	PutSenderSlate(slate *SavedSlate) error

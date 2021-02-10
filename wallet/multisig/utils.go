@@ -3,7 +3,7 @@ package multisig
 import (
 	"encoding/hex"
 
-	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
+	. "github.com/olegabu/go-mimblewimble/wallet/types"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 )

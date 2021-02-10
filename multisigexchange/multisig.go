@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/abci"
-	"github.com/olegabu/go-mimblewimble/multisigwallet"
+	"github.com/olegabu/go-mimblewimble/wallet"
 	"github.com/pkg/errors"
 )
 
@@ -35,7 +35,7 @@ func (context *MultisigContext) secondExchange(w http.ResponseWriter, req *http.
 }
 
 type ReceiverContext struct {
-	Wallet       *multisigwallet.Wallet
+	Wallet       *wallet.Wallet
 	Amount       uint64
 	Asset        string
 	ID           uuid.UUID
@@ -60,7 +60,7 @@ func (context *ReceiverContext) receive(w http.ResponseWriter, req *http.Request
 }
 
 func CreateMultipartyUTXO(
-	w *multisigwallet.Wallet,
+	w *wallet.Wallet,
 	name string,
 	address string,
 	amount uint64,
@@ -200,7 +200,7 @@ func CreateMultipartyUTXO(
 }
 
 func SpendMultipartyUTXO(
-	w *multisigwallet.Wallet,
+	w *wallet.Wallet,
 	multipartyOutputCommit string,
 	name string,
 	address string,
@@ -415,7 +415,7 @@ func SpendMultipartyUTXO(
 }
 
 func ReceiveFromMultipartyUTXO(
-	w *multisigwallet.Wallet,
+	w *wallet.Wallet,
 	address string,
 	amount uint64,
 	asset string,

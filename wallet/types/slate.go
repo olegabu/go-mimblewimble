@@ -1,42 +1,28 @@
-package wallet
+package types
 
 import (
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/wallet/multisig/bulletproof"
+	"github.com/olegabu/go-mimblewimble/wallet/multisig/vss"
 )
-
-type Database interface {
-	PutSenderSlate(slate *SavedSlate) error
-	PutReceiverSlate(slate *SavedSlate) error
-	PutTransaction(tx SavedTransaction) error
-	PutOutput(output SavedOutput) error
-	GetSenderSlate(id []byte) (slate *SavedSlate, err error)
-	GetTransaction(id []byte) (transaction SavedTransaction, err error)
-	GetOutput(commit string) (output SavedOutput, err error)
-	ListSlates() (slates []SavedSlate, err error)
-	ListTransactions() (transactions []SavedTransaction, err error)
-	ListOutputs() (outputs []SavedOutput, err error)
-	GetInputs(amount uint64, asset string) (inputs []SavedOutput, change uint64, err error)
-	Confirm(transactionID []byte) error
-	Cancel(transactionID []byte) error
-	NextIndex() (uint32, error)
-	Close()
-}
 
 type SlateInput struct {
 	ledger.Input
 	//Asset      string       `json:"asset,omitempty"`
-	AssetTag   string `json:"asset_tag"`
-	AssetBlind string `json:"asset_blind"`
+	AssetTag     string `json:"asset_tag"`
+	AssetBlind   string `json:"asset_blind"`
+	IsMultiparty bool   `json:"multiparty"`
 }
 
 type SlateOutput struct {
 	ledger.Output
 	//Asset      string       `json:"asset,omitempty"`
-	AssetTag   string `json:"asset_tag"`
-	AssetBlind string `json:"asset_blind"`
+	AssetTag     string `json:"asset_tag"`
+	AssetBlind   string `json:"asset_blind"`
+	IsMultiparty bool   `json:"multiparty"`
 }
 
 type SavedOutput struct {
@@ -46,6 +32,11 @@ type SavedOutput struct {
 	Value      uint64       `json:"value"`
 	Asset      string       `json:"asset,omitempty"`
 	Status     OutputStatus `json:"status,omitempty"`
+
+	PartialBlind           *[32]byte            `json:"partial_blind,omitempty"`       // TODO: Кажется лишним
+	PartialAssetBlind      *[32]byte            `json:"partial_asset_blind,omitempty"` // TODO: Кажется лишним
+	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
+	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
 }
 
 type OutputStatus int
@@ -91,18 +82,28 @@ type Slate struct {
 	// Lock height
 	LockHeight ledger.Uint64 `json:"lock_height"`
 	// Participant data, each participant in the transaction will
-	// insert their public data here. For now, 0 is sender and 1
-	// is receiver, though this will change for multi-party
+	// insert their public data here.
 	ParticipantData map[string]*ParticipantData `json:"participant_data"`
 
 	Asset         string        `json:"asset,omitempty"`
 	ReceiveAmount ledger.Uint64 `json:"receive_amount,omitempty"`
 	ReceiveAsset  string        `json:"receive_asset,omitempty"`
+
+	// Verifiable blind's shares for m-of-n multiparty outputs
+	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
+	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
+	MultisigFundBalance    *uint64              `json:"multisig_fund_balance,omitempty"` // TODO: подумай стоит ли раскрывать это
 }
 
 // ParticipantData is a public data for each participant in the slate
 type ParticipantData struct {
-	// Public key corresponding to private blinding factor
+	// IsMultisigFundOwner
+	IsMultisigFundOwner bool `json:"multisig_fund_owner"`
+	// Public key corresponding to blinding factor
+	PublicBlind string `json:"public_blind"`
+	// Asset blinding factor
+	AssetBlind string `json:"asset_blind"`
+	// Public key corresponding to private excess blinding factor
 	PublicBlindExcess string `json:"public_blind_excess"`
 	// Public key corresponding to private nonce
 	PublicNonce string `json:"public_nonce"`
@@ -112,6 +113,8 @@ type ParticipantData struct {
 	Message *string `json:"message"`
 	// Signature, created with private key corresponding to 'public_blind_excess'
 	MessageSig *string `json:"message_sig"`
+	// Shared data for Bulletproof MPC
+	BulletproofsShare *bulletproof.Share `json:"bulletproofs_share"`
 }
 
 // VersionCompatInfo is the versioning and compatibility info about this slate
@@ -128,6 +131,11 @@ type SavedSlate struct {
 	Slate
 	Blind [32]byte `json:"blind,omitempty"`
 	Nonce [32]byte `json:"nonce,omitempty"`
+
+	PartialBlind      [32]byte `json:"partial_blind,omitempty"`
+	PartialAssetBlind [32]byte `json:"partial_asset_blind,omitempty"`
+	ExcessBlind       [32]byte `json:"excess_blind,omitempty"`
+	ParticipantID     string   `json:"participant_id,omitempty"`
 }
 
 type SlateTransactionBody struct {

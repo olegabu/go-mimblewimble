@@ -7,7 +7,7 @@ import (
 
 	"github.com/olegabu/go-mimblewimble/multisigexchange"
 
-	"github.com/olegabu/go-mimblewimble/multisigwallet"
+	"github.com/olegabu/go-mimblewimble/wallet"
 
 	"github.com/google/uuid"
 
@@ -54,7 +54,7 @@ var createMultiparty = &cobra.Command{
 			participantsAddresses = append(participantsAddresses, parts[1])
 		}
 
-		w, err := multisigwallet.NewWallet(flagPersist)
+		w, err := wallet.NewWallet(flagPersist)
 		if err != nil {
 			return errors.Wrap(err, "cannot create wallet")
 		}
@@ -111,7 +111,7 @@ var spendMultiparty = &cobra.Command{
 			}
 		}
 
-		w, err := multisigwallet.NewWallet(flagPersist)
+		w, err := wallet.NewWallet(flagPersist)
 		if err != nil {
 			return errors.Wrap(err, "cannot create wallet")
 		}
@@ -152,7 +152,7 @@ var receiveMultiparty = &cobra.Command{
 
 		address := args[3]
 
-		w, err := multisigwallet.NewWallet(flagPersist)
+		w, err := wallet.NewWallet(flagPersist)
 		if err != nil {
 			return errors.Wrap(err, "cannot create wallet")
 		}

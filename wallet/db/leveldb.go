@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
+	. "github.com/olegabu/go-mimblewimble/wallet/types"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"

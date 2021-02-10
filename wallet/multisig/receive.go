@@ -7,8 +7,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/olegabu/go-mimblewimble/ledger"
-	. "github.com/olegabu/go-mimblewimble/multisigwallet/types"
-	"github.com/olegabu/go-mimblewimble/multisigwallet/utils"
+	. "github.com/olegabu/go-mimblewimble/wallet/types"
+	"github.com/olegabu/go-mimblewimble/wallet/utils"
 )
 
 func Receive(

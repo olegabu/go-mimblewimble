@@ -2,16 +2,18 @@ package wallet
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
+
+	"github.com/olegabu/go-secp256k1-zkp"
+	"github.com/stretchr/testify/assert"
 )
 
 const testMnemonic = "dish salon sea unlock asthma rigid grass gather action dignity quiz vacuum"
 const testMasterKey = "xprv9s21ZrQH143K24mEfYXCoeYDgPT5y18UJvNUc9JZZU37fRsS9znJF78KS2epJAzEbz6aRNH4fb2ptkf1AzDuBxivRx6LH9VQymyVRvw94hv"
 
 func TestInitMasterKeyWhenDoesntExist(t *testing.T) {
-	dir := testDbDir()
+	dir := testDbDir("test")
 
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
@@ -31,7 +33,7 @@ func TestInitMasterKeyWhenDoesntExist(t *testing.T) {
 func TestInitMasterKeyWhenExists(t *testing.T) {
 	TestInitMasterKeyWhenDoesntExist(t)
 
-	dir := testDbDir()
+	dir := testDbDir("test")
 
 	w, err := NewWallet(dir)
 	assert.NoError(t, err)
@@ -46,7 +48,7 @@ func TestInitMasterKeyWhenExists(t *testing.T) {
 func TestInitMasterKeyWithMnemonicWhenExists(t *testing.T) {
 	TestInitMasterKeyWhenDoesntExist(t)
 
-	dir := testDbDir()
+	dir := testDbDir("test")
 
 	w, err := NewWallet(dir)
 	assert.NoError(t, err)
@@ -59,7 +61,7 @@ func TestInitMasterKeyWithMnemonicWhenExists(t *testing.T) {
 }
 
 func TestInitMasterKeyWithMnemonicWhenDoesntExist(t *testing.T) {
-	dir := testDbDir()
+	dir := testDbDir("test")
 
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
@@ -77,7 +79,7 @@ func TestInitMasterKeyWithMnemonicWhenDoesntExist(t *testing.T) {
 }
 
 func TestMasterKeyFromMnemonic(t *testing.T) {
-	dir := testDbDir()
+	dir := testDbDir("test")
 
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
@@ -94,7 +96,7 @@ func TestMasterKeyFromMnemonic(t *testing.T) {
 }
 
 func TestCreateAndGetMasterKey(t *testing.T) {
-	dir := testDbDir()
+	dir := testDbDir("test")
 
 	err := os.RemoveAll(dir)
 	assert.NoError(t, err)
@@ -118,9 +120,13 @@ func TestCreateAndGetMasterKey(t *testing.T) {
 }
 
 func TestSecretFromHDWallet(t *testing.T) {
-	dir := testDbDir()
+	dir := testDbDir("test")
 
-	err := os.RemoveAll(dir)
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	assert.NoError(t, err)
+	defer secp256k1.ContextDestroy(context)
+
+	err = os.RemoveAll(dir)
 	assert.NoError(t, err)
 
 	w, err := NewWalletWithoutMasterKey(dir)
@@ -133,7 +139,7 @@ func TestSecretFromHDWallet(t *testing.T) {
 	secrets := map[uint32][32]byte{}
 
 	for i := 0; i < 3; i++ {
-		secret, index, err := w.newSecret()
+		secret, index, err := w.NewSecret(context)
 		assert.NoError(t, err)
 		fmt.Printf("created i %d index %d secret %v\n", i, index, secret)
 		secrets[index] = secret
@@ -142,7 +148,7 @@ func TestSecretFromHDWallet(t *testing.T) {
 	fmt.Printf("created secrets %v\n", secrets)
 
 	for i := uint32(0); i < 3; i++ {
-		secret, err := w.secret(i)
+		secret, err := w.Secret(context, i)
 		assert.NoError(t, err)
 		fmt.Printf("got i %d secret %v\n", i, secret)
 
@@ -151,16 +157,20 @@ func TestSecretFromHDWallet(t *testing.T) {
 }
 
 func TestNonce(t *testing.T) {
-	dir := testDbDir()
+	dir := testDbDir("test")
 
-	err := os.RemoveAll(dir)
+	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
+	assert.NoError(t, err)
+	defer secp256k1.ContextDestroy(context)
+
+	err = os.RemoveAll(dir)
 	assert.NoError(t, err)
 
 	w, err := NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 	defer w.Close()
 
-	nonceBytes, err := w.nonce()
+	nonceBytes, err := w.Nonce(context)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nonceBytes)
 

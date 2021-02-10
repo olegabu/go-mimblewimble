@@ -2,11 +2,12 @@ package wallet
 
 import (
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
+
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
-	"io/ioutil"
-	"path/filepath"
 
 	"github.com/pkg/errors"
 )
@@ -15,9 +16,9 @@ const mnemonicPassword = ""
 const masterKeyFilename = "master.key"
 const entropyBitSize = 128
 
-func (t *Wallet) nonce() (rnd32 [32]byte, err error) {
+func (t *Wallet) Nonce(context *secp256k1.Context) (rnd32 [32]byte, err error) {
 	seed32 := secp256k1.Random256()
-	rnd32, err = secp256k1.AggsigGenerateSecureNonce(t.context, seed32[:])
+	rnd32, err = secp256k1.AggsigGenerateSecureNonce(context, seed32[:])
 	return
 }
 
@@ -167,13 +168,13 @@ func (t *Wallet) InitMasterKey(mnemonic string) (createdMnemonic string, err err
 	return
 }
 
-func (t *Wallet) newSecret() (secret [32]byte, index uint32, err error) {
+func (t *Wallet) NewSecret(context *secp256k1.Context) (secret [32]byte, index uint32, err error) {
 	index, err = t.db.NextIndex()
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get NextIndex from db")
 	}
 
-	secret, err = t.secret(index)
+	secret, err = t.Secret(context, index)
 	if err != nil {
 		return [32]byte{}, 0, errors.Wrap(err, "cannot get secretFromIndex")
 	}
@@ -181,7 +182,7 @@ func (t *Wallet) newSecret() (secret [32]byte, index uint32, err error) {
 	return
 }
 
-func (t *Wallet) secret(index uint32) (secret [32]byte, err error) {
+func (t *Wallet) Secret(context *secp256k1.Context, index uint32) (secret [32]byte, err error) {
 	childKey, err := t.masterKey.NewChildKey(index)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot get NewChildKey")
@@ -192,7 +193,7 @@ func (t *Wallet) secret(index uint32) (secret [32]byte, err error) {
 		return [32]byte{}, errors.Wrap(err, "cannot Serialize childKey")
 	}
 
-	secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
+	secret, err = secp256k1.AggsigGenerateSecureNonce(context, childKeyBytes)
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "cannot AggsigGenerateSecureNonce from childKeyBytes")
 	}
