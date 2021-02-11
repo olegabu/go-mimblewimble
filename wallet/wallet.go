@@ -344,24 +344,33 @@ func (t *Wallet) FundMultiparty(fundingAmount uint64, asset string, transactionI
 func (t *Wallet) SpendMultiparty(multipartyOutputCommit string, spendingAmount uint64, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
 	multipartyOutput, err := t.db.GetOutput(multipartyOutputCommit)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetOutput")
+		err = errors.Wrap(err, "cannot GetOutput")
+		return
+	}
+
+	if multipartyOutput.Status != OutputConfirmed {
+		err = errors.New("output is not confirmed")
+		return
 	}
 
 	slate, savedSlate, outputs, err := multisig.Spend(t, spendingAmount, 0, 0, multipartyOutput.Asset, multipartyOutput, transactionID, participantID)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot Spend")
+		err = errors.Wrap(err, "cannot Spend")
+		return
 	}
 
 	for _, o := range outputs {
 		err = t.db.PutOutput(o)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot PutOutput")
+			err = errors.Wrap(err, "cannot PutOutput")
+			return
 		}
 	}
 
 	err = t.db.PutSenderSlate(savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
+		err = errors.Wrap(err, "cannot PutSenderSlate")
+		return
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -592,7 +601,12 @@ func (t *Wallet) SpendMOfNMultiparty(
 ) {
 	multipartyOutput, err := t.db.GetOutput(multipartyOutputCommit)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetInputs")
+		return nil, errors.Wrap(err, "cannot GetOutput")
+	}
+
+	if multipartyOutput.Status != OutputConfirmed {
+		err = errors.New("output is not confirmed")
+		return
 	}
 
 	slate, savedSlate, outputs, err := multisig.SpendMOfN(
@@ -651,6 +665,11 @@ func (t *Wallet) SpendMissingParty(slatesBytes [][]byte, spendingAmount uint64, 
 	multipartyOutput, err := t.db.GetOutput(savedSlate.Transaction.Body.Inputs[0].Commit)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot GetInputs")
+	}
+
+	if multipartyOutput.Status != OutputConfirmed {
+		err = errors.New("output is not confirmed")
+		return
 	}
 
 	slate, savedSlate, err := multisig.SpendMissingParty(
