@@ -20,14 +20,14 @@ func FundMOfN(
 	participantsCount int,
 	minParticipantsCount int,
 ) (
-	slates []*Slate,
+	slates []Slate,
 	savedSlate *SavedSlate,
 	walletOutputs []SavedOutput,
 	err error,
 ) {
 	slate, savedSlate, walletOutputs, err := Fund(sg, fundingAmount, change, fee, asset, inputs, transactionID, participantID)
 	if err != nil {
-		err = errors.Wrap(err, "cannot InitMultisigTransaction")
+		err = errors.Wrap(err, "cannot Fund")
 		return
 	}
 
@@ -39,13 +39,10 @@ func FundMOfN(
 		return
 	}
 
-	slates = make([]*Slate, 0)
+	slates = make([]Slate, 0)
 	for _, share := range shares {
-		curSlate := &Slate{}
-		*curSlate = *slate
-		curSlate.VerifiableBlindsShares = make(map[string]vss.Share)
-		curSlate.VerifiableBlindsShares[participantID] = share
-		slates = append(slates, curSlate)
+		slate.VerifiableBlindsShares = map[string]vss.Share{participantID: share}
+		slates = append(slates, *slate)
 	}
 	return
 }
@@ -66,18 +63,17 @@ func SpendMOfN(
 	err error,
 ) {
 	if spendingAmount != multipartyOutput.Value {
-		err = errors.New("spending amount does not match to multiparty output value")
+		err = errors.New("spending amount doesn't match multiparty output value")
 		return
 	}
 
 	slate, savedSlate, walletOutputs, err = Spend(sg, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, participantID)
 	if err != nil {
-		err = errors.Wrap(err, "cannot InitMultisigTransaction")
+		err = errors.Wrap(err, "cannot Spend")
 		return
 	}
 
 	slate.VerifiableBlindsShares = make(map[string]vss.Share)
-	slate.PartialAssetBlinds = make(map[string][32]byte)
 	for _, missingParticipantID := range missingParticipantsIDs {
 		slate.VerifiableBlindsShares[missingParticipantID] = multipartyOutput.VerifiableBlindsShares[missingParticipantID]
 	}
@@ -99,7 +95,7 @@ func SpendMissingParty(
 	err error,
 ) {
 	if spendingAmount != multipartyOutput.Value {
-		err = errors.New("spending amount does not match to multiparty output value")
+		err = errors.New("spending amount does not match multiparty output value")
 		return
 	}
 
@@ -110,7 +106,7 @@ func SpendMissingParty(
 
 	secret, e := vss.OpenBlind(shares)
 	if e != nil {
-		err = errors.Wrap(e, "cannot openBlind")
+		err = errors.Wrap(e, "cannot OpenBlind")
 		return
 	}
 	var blind [32]byte
@@ -122,7 +118,7 @@ func SpendMissingParty(
 
 	slate, savedSlate, _, err = Spend(sg, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, missingParticipantID)
 	if err != nil {
-		err = errors.Wrap(err, "cannot initMultipartyTransaction")
+		err = errors.Wrap(err, "cannot Spend")
 		return
 	}
 	return
@@ -138,7 +134,7 @@ func SignMOfN(
 ) {
 	outSlate, err = Sign(slates, inSavedSlate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot signMultipartyTransaction")
+		err = errors.Wrap(err, "cannot Sign")
 		return
 	}
 
@@ -146,17 +142,17 @@ func SignMOfN(
 	outSavedSlate.VerifiableBlindsShares = make(map[string]vss.Share)
 	outSavedSlate.PartialAssetBlinds = make(map[string][32]byte)
 	for _, slate := range slates {
-		for participantID, verifiableBlindShare := range slate.VerifiableBlindsShares {
+		for partyID, verifiableBlindShare := range slate.VerifiableBlindsShares {
 			ok, e := vss.VerifyShare(verifiableBlindShare)
 			if e != nil || !ok {
-				err = errors.New("verifiable blinds shares does not correct")
+				err = errors.Errorf("verifiable blind share of participant with id %s does not correct", partyID)
 				return
 			}
-			outSavedSlate.VerifiableBlindsShares[participantID] = verifiableBlindShare
+			outSavedSlate.VerifiableBlindsShares[partyID] = verifiableBlindShare
 		}
 
-		for participantID, partialAssetBlinds := range slate.PartialAssetBlinds {
-			outSavedSlate.PartialAssetBlinds[participantID] = partialAssetBlinds
+		for partyID, partialAssetBlinds := range slate.PartialAssetBlinds {
+			outSavedSlate.PartialAssetBlinds[partyID] = partialAssetBlinds
 		}
 	}
 	return
@@ -173,7 +169,7 @@ func AggregateMOfN(
 ) {
 	transaction, savedTransaction, multipartyOutput, err = Aggregate(slates, savedSlate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
+		err = errors.Wrap(err, "cannot Aggregate")
 		return
 	}
 

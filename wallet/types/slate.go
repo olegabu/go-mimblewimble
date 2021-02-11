@@ -114,7 +114,7 @@ type ParticipantData struct {
 	// Signature, created with private key corresponding to 'public_blind_excess'
 	MessageSig *string `json:"message_sig"`
 	// Shared data for Bulletproof MPC
-	BulletproofsShare *bulletproof.Share `json:"bulletproofs_share"`
+	BulletproofShare *bulletproof.Share `json:"bulletproof_share"`
 }
 
 // VersionCompatInfo is the versioning and compatibility info about this slate

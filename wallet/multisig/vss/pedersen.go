@@ -20,7 +20,7 @@ func ShareBlind(n int, k int, blind []byte) (shares []Share, err error) {
 	indices := getIndices(n)
 	vshares, c, e := vss.VShareSecret(indices, types.GeneratorH(), secret, k)
 	if e != nil {
-		err = errors.Wrap(e, "cannot VShareSecret")
+		err = errors.Wrap(e, "cannot shard blinding factor according to Pedersen's VSS scheme")
 		return
 	}
 
@@ -35,14 +35,14 @@ func VerifyShare(share Share) (isValid bool, err error) {
 	c := &types.Commitment{}
 	e := c.SetHex(share.Commitment)
 	if e != nil {
-		err = errors.Wrap(e, "cannot parse Commitment")
+		err = errors.Wrap(e, "cannot parse commitment")
 		return
 	}
 
 	vs := &types.VerifiableShare{}
 	e = vs.SetHex(share.VerifiableShare)
 	if e != nil {
-		err = errors.Wrap(e, "cannot parse VerifiableShare")
+		err = errors.Wrap(e, "cannot parse verifiable share")
 		return
 	}
 
@@ -58,7 +58,7 @@ func OpenBlind(shares []string) (blind []byte, err error) {
 		verifiableShare := types.VerifiableShare{}
 		e := verifiableShare.SetHex(share)
 		if e != nil {
-			err = errors.Wrap(e, "cannot parse VerifiableShare")
+			err = errors.Wrap(e, "cannot parse verifiable share")
 			return
 		}
 		verifiableShares = append(verifiableShares, verifiableShare)

@@ -36,10 +36,6 @@ func (t *leveldbDatabase) Close() {
 	}
 }
 
-func senderSlateKey(id string) []byte {
-	return []byte("slate." + id + ".s")
-}
-
 func (t *leveldbDatabase) PutSenderSlate(slate *SavedSlate) error {
 	slateBytes, err := json.Marshal(slate)
 	if err != nil {
@@ -52,10 +48,6 @@ func (t *leveldbDatabase) PutSenderSlate(slate *SavedSlate) error {
 	}
 
 	return nil
-}
-
-func receiverSlateKey(id string) []byte {
-	return []byte("slate." + id + ".r")
 }
 
 func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
@@ -72,14 +64,10 @@ func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
 	return nil
 }
 
-func missingPartySlateKey(transactionID, missingPartyID string) []byte {
-	return []byte("slate." + transactionID + "." + missingPartyID + ".mp")
-}
-
 func (t *leveldbDatabase) PutMissingPartySlate(slate *SavedSlate, missingPartyID string) error {
 	slateBytes, err := json.Marshal(slate)
 	if err != nil {
-		return errors.Wrap(err, "cannot marshal SenderSlate into json")
+		return errors.Wrap(err, "cannot marshal MissingPartySlate into json")
 	}
 
 	err = t.db.Put(missingPartySlateKey(slate.Transaction.ID.String(), missingPartyID), slateBytes, nil)
@@ -87,22 +75,6 @@ func (t *leveldbDatabase) PutMissingPartySlate(slate *SavedSlate, missingPartyID
 		return errors.Wrap(err, "cannot Put slate")
 	}
 	return nil
-}
-
-func (t *leveldbDatabase) GetMissingPartySlate(transactionID string, missingPartyID string) (slate *SavedSlate, err error) {
-	slateBytes, err := t.db.Get(missingPartySlateKey(transactionID, missingPartyID), nil)
-	if err != nil {
-		err = errors.Wrap(err, "cannot Get slate")
-		return
-	}
-
-	slate = &SavedSlate{}
-	err = json.Unmarshal(slateBytes, slate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal slateBytes")
-		return
-	}
-	return slate, nil
 }
 
 func (t *leveldbDatabase) PutTransaction(transaction SavedTransaction) error {
@@ -119,18 +91,6 @@ func (t *leveldbDatabase) PutTransaction(transaction SavedTransaction) error {
 	}
 
 	return nil
-}
-
-func outputKey(commit string) []byte {
-	return []byte("output." + commit)
-}
-
-func outputRange() *util.Range {
-	return util.BytesPrefix([]byte("output."))
-}
-
-func transactionKey(id string) []byte {
-	return []byte("transaction." + id)
 }
 
 func (t *leveldbDatabase) PutOutput(output SavedOutput) error {
@@ -162,6 +122,22 @@ func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate *SavedSlate, err erro
 		return
 	}
 
+	return slate, nil
+}
+
+func (t *leveldbDatabase) GetMissingPartySlate(transactionID string, missingPartyID string) (slate *SavedSlate, err error) {
+	slateBytes, err := t.db.Get(missingPartySlateKey(transactionID, missingPartyID), nil)
+	if err != nil {
+		err = errors.Wrap(err, "cannot Get slate")
+		return
+	}
+
+	slate = &SavedSlate{}
+	err = json.Unmarshal(slateBytes, slate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot unmarshal slateBytes")
+		return
+	}
 	return slate, nil
 }
 
@@ -329,6 +305,61 @@ func (t *leveldbDatabase) Cancel(transactionID []byte) error {
 	return t.update(transactionID, TransactionCanceled, OutputConfirmed, OutputCanceled)
 }
 
+const indexKey = "index"
+
+func (t *leveldbDatabase) NextIndex() (uint32, error) {
+	exists, err := t.db.Has([]byte(indexKey), nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "cannot check if Has index")
+	}
+
+	var index uint32 = 0
+	var indexBytes = make([]byte, 4)
+
+	if exists {
+		indexBytes, err := t.db.Get([]byte(indexKey), nil)
+		if err != nil {
+			return 0, errors.Wrap(err, "cannot Get index")
+		}
+
+		index = binary.BigEndian.Uint32(indexBytes)
+		index++
+	}
+
+	binary.BigEndian.PutUint32(indexBytes, index)
+
+	err = t.db.Put([]byte(indexKey), indexBytes, nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "cannot Put index")
+	}
+
+	return index, nil
+}
+
+func senderSlateKey(id string) []byte {
+	return []byte("slate." + id + ".s")
+}
+
+func receiverSlateKey(id string) []byte {
+	return []byte("slate." + id + ".r")
+}
+
+func missingPartySlateKey(transactionID, missingPartyID string) []byte {
+	return []byte("slate." + transactionID + "." + missingPartyID + ".mp")
+}
+
+func outputKey(commit string) []byte {
+	return []byte("output." + commit)
+}
+
+func outputRange() *util.Range {
+	return util.BytesPrefix([]byte("output."))
+}
+
+func transactionKey(id string) []byte {
+	return []byte("transaction." + id)
+}
+
 func (t *leveldbDatabase) update(transactionID []byte, transactionStatus TransactionStatus, inputStatus OutputStatus, outputStatus OutputStatus) error {
 	tx, err := t.GetTransaction(transactionID)
 	if err != nil {
@@ -383,35 +414,4 @@ func (t *leveldbDatabase) update(transactionID []byte, transactionStatus Transac
 	}
 
 	return nil
-}
-
-const indexKey = "index"
-
-func (t *leveldbDatabase) NextIndex() (uint32, error) {
-	exists, err := t.db.Has([]byte(indexKey), nil)
-	if err != nil {
-		return 0, errors.Wrap(err, "cannot check if Has index")
-	}
-
-	var index uint32 = 0
-	var indexBytes = make([]byte, 4)
-
-	if exists {
-		indexBytes, err := t.db.Get([]byte(indexKey), nil)
-		if err != nil {
-			return 0, errors.Wrap(err, "cannot Get index")
-		}
-
-		index = binary.BigEndian.Uint32(indexBytes)
-		index++
-	}
-
-	binary.BigEndian.PutUint32(indexBytes, index)
-
-	err = t.db.Put([]byte(indexKey), indexBytes, nil)
-	if err != nil {
-		return 0, errors.Wrap(err, "cannot Put index")
-	}
-
-	return index, nil
 }

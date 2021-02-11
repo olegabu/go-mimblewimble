@@ -17,14 +17,14 @@ func GeneratePublicTaus(context *secp256k1.Context, blind []byte) (bulletproofsS
 	fakeCommonNonce := make([]byte, 32)
 	fakeCommit, err := secp256k1.Commit(context, fakeBlind[:], 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create fakeCommit")
+		err = errors.Wrap(err, "cannot create fake commit")
 		return
 	}
 
 	_, _, publicTau1, publicTau2, err := secp256k1.BulletproofRangeproofProveMulti(context, nil, nil, nil, nil, nil,
 		[]uint64{0}, [][]byte{fakeBlind[:]}, []*secp256k1.Commitment{fakeCommit}, &secp256k1.GeneratorH, 64, fakeCommonNonce, blind, nil, nil)
 	if err != nil {
-		err = errors.Wrap(err, "cannot process first step of bulletproof mpc protocol")
+		err = errors.Wrap(err, "cannot process the first step of bulletproof mpc protocol")
 		return
 	}
 
@@ -48,7 +48,7 @@ func ComputeTaux(
 	_, taux, _, _, err = secp256k1.BulletproofRangeproofProveMulti(context, nil, nil, nil, sumPublicTau1, sumPublicTau2,
 		[]uint64{amount}, [][]byte{blind[:]}, []*secp256k1.Commitment{commit}, assetCommit, 64, commonNonce, blind, nil, nil)
 	if err != nil {
-		err = errors.Wrap(err, "cannot process second step of bulletproof mpc protocol")
+		err = errors.Wrap(err, "cannot process the second step of bulletproof mpc protocol")
 		return
 	}
 	return
@@ -71,7 +71,7 @@ func AggregateProof(
 	proof, _, _, _, err = secp256k1.BulletproofRangeproofProveMulti(context, nil, nil, sumTaux[:], sumPublicTau1, sumPublicTau2,
 		[]uint64{amount}, [][]byte{fakeBlind[:]}, []*secp256k1.Commitment{commit}, assetCommit, 64, commonNonce, fakeBlind[:], nil, nil)
 	if err != nil {
-		err = errors.Wrap(err, "cannot process third step of bulletproof mpc protocol")
+		err = errors.Wrap(err, "cannot process the third step of bulletproof mpc protocol")
 		return
 	}
 	return

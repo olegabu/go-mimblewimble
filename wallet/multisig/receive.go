@@ -24,7 +24,7 @@ func Receive(
 ) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		err = errors.Wrap(err, "cannot ContextCreate")
+		err = errors.Wrap(err, "cannot create secp256k1 context")
 		return
 	}
 	defer secp256k1.ContextDestroy(context)
@@ -37,18 +37,19 @@ func Receive(
 
 	walletOutput, blindValueAssetBlind, err := utils.NewOutput(sg, context, amount, ledger.PlainOutput, asset, OutputUnconfirmed)
 	if err != nil {
+		err = errors.Wrap(err, "cannot create new output")
 		return
 	}
 
-	kernelOffset, err := sg.Nonce(context)
+	partialOffset, err := sg.Nonce(context)
 	if err != nil {
-		err = errors.Wrap(err, "cannot get nonce for kernelOffset")
+		err = errors.Wrap(err, "cannot get nonce for partial offset")
 		return
 	}
 
-	blindExcess, err := secp256k1.BlindSum(context, [][]byte{blindValueAssetBlind[:]}, [][]byte{kernelOffset[:]})
+	blindExcess, err := secp256k1.BlindSum(context, [][]byte{blindValueAssetBlind[:]}, [][]byte{partialOffset[:]})
 	if err != nil {
-		err = errors.Wrap(err, "cannot BlindSum")
+		err = errors.Wrap(err, "cannot compute excess: blind + value * assetBlind - partialOffset")
 		return
 	}
 
@@ -60,10 +61,9 @@ func Receive(
 
 	commits, err := commitsFromBlinds(context, blindExcess[:], nonce[:])
 	if err != nil {
-		err = errors.Wrap(err, "cannot get commits from blinds")
+		err = errors.Wrap(err, "cannot compute public blind and public nonce")
 		return
 	}
-
 	publicBlindExcess := commits[0]
 	publicNonce := commits[1]
 
@@ -74,20 +74,12 @@ func Receive(
 
 	aggregatedPublicKey, aggregatedPublicNonce, err := getAggregatedPublicKeyAndNonce(context, slate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot getAggregatedPublicKeyAndNonce")
+		err = errors.Wrap(err, "cannot compute aggregated public key and aggregated public nonce")
 		return
 	}
 
 	msg := ledger.KernelSignatureMessage(slate.Transaction.Body.Kernels[0])
-
-	var privateKey [32]byte
-	privateKey, err = secp256k1.BlindSum(context, [][]byte{blindExcess[:]}, nil)
-	if err != nil {
-		err = errors.Wrap(err, "cannot compute private key")
-		return
-	}
-
-	partialSignature, err := secp256k1.AggsigSignPartial(context, privateKey[:], nonce[:], aggregatedPublicNonce, aggregatedPublicKey, msg)
+	partialSignature, err := secp256k1.AggsigSignPartial(context, blindExcess[:], nonce[:], aggregatedPublicNonce, aggregatedPublicKey, msg)
 	if err != nil {
 		err = errors.Wrap(err, "cannot calculate receiver's partial signature")
 		return
@@ -101,14 +93,15 @@ func Receive(
 
 	offset, err := hex.DecodeString(slate.Transaction.Offset)
 	if err != nil {
-		return nil, nil, err
+		err = errors.Wrap(err, "cannot parse transaction's offset")
+		return
 	}
 
-	totalOffset, err := secp256k1.BlindSum(context, [][]byte{offset[:], kernelOffset[:]}, nil)
+	totalOffset, err := secp256k1.BlindSum(context, [][]byte{offset[:], partialOffset[:]}, nil)
 	if err != nil {
-		return nil, nil, err
+		err = errors.Wrap(err, "cannot add partial offset to transaction's offset")
+		return
 	}
-
 	slate.Transaction.Offset = hex.EncodeToString(totalOffset[:])
 	return
 }

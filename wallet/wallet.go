@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -220,10 +221,10 @@ func (t *Wallet) Info() (string, error) {
 		return tableString.String(), errors.Wrap(err, "cannot ListOutputs")
 	}
 
-	// // sort outputs decreasing by child key index
-	// sort.Slice(outputs, func(i, j int) bool {
-	// 	return outputs[i].Index > outputs[j].Index
-	// })
+	// sort outputs decreasing by child key index
+	sort.Slice(outputs, func(i, j int) bool {
+		return outputs[i].Index > outputs[j].Index
+	})
 
 	outputTable := tablewriter.NewWriter(tableString)
 	outputTable.SetHeader([]string{"value", "asset", "status", "features", "commit", "multiparty"})
@@ -307,19 +308,6 @@ func (t *Wallet) Print() error {
 	}
 	print(s)
 	return nil
-}
-
-func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
-	slate := Slate{}
-	err = json.Unmarshal(slateBytes, &slate)
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot unmarshal slate from json")
-	}
-	id, err := slate.Transaction.ID.MarshalText()
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot marshal from uuid")
-	}
-	return id, nil
 }
 
 func (t *Wallet) FundMultiparty(fundingAmount uint64, asset string, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
