@@ -344,7 +344,7 @@ func (t *Wallet) FundMultiparty(fundingAmount uint64, asset string, transactionI
 func (t *Wallet) SpendMultiparty(multipartyOutputCommit string, spendingAmount uint64, transactionID uuid.UUID, participantID string) (slateBytes []byte, err error) {
 	multipartyOutput, err := t.db.GetOutput(multipartyOutputCommit)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetInputs")
+		return nil, errors.Wrap(err, "cannot GetOutput")
 	}
 
 	slate, savedSlate, outputs, err := multisig.Spend(t, spendingAmount, 0, 0, multipartyOutput.Asset, multipartyOutput, transactionID, participantID)
@@ -801,4 +801,17 @@ func (t *Wallet) ConfirmOutput(commit string) error {
 		return errors.Wrap(err, "cannot PutOutput")
 	}
 	return nil
+}
+
+func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
+	slate := Slate{}
+	err = json.Unmarshal(slateBytes, &slate)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot unmarshal slate from json")
+	}
+	id, err := slate.Transaction.ID.MarshalText()
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot marshal from uuid")
+	}
+	return id, nil
 }
