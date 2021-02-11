@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -798,6 +799,45 @@ func (t *Wallet) AggregateMOfNMultiparty(slatesBytes [][]byte) (transactionBytes
 		return
 	}
 	return
+}
+
+func (t *Wallet) Sync(tendermintAddress string) error {
+	walletOutputs, err := t.db.ListOutputs()
+	if err != nil {
+		return errors.Wrap(err, "cannot get outputs from local wallet db")
+	}
+
+	rpcClient, err := NewRPCClient(tendermintAddress)
+	if err != nil {
+		return errors.Wrap(err, "cannot initiate rpc client")
+	}
+
+	ledgerOutputs, err := rpcClient.GetOutputs()
+	if err != nil {
+		return errors.Wrap(err, "cannot get outputs from ledger")
+	}
+
+	for _, output := range walletOutputs {
+		if output.Status != OutputSpent {
+			exists := false
+			for _, ledgerOutput := range ledgerOutputs {
+				if output.Commit == ledgerOutput.Commit {
+					exists = true
+					break
+				}
+			}
+
+			if !exists {
+				fmt.Printf("output with commitment %s doesn't exist in the ledger, output status will be updated to OutputSpent\n", output.Commit)
+				output.Status = OutputSpent
+				err = t.db.PutOutput(output)
+				if err != nil {
+					return errors.Wrap(err, "cannot PutOutput")
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (t *Wallet) Confirm(transactionID []byte) error {

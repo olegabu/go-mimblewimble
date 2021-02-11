@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var createMultiparty = &cobra.Command{
+var createMultipartyCmd = &cobra.Command{
 	Use:   "createMultiparty amount asset transactionID needBroadcast threshold myName@myIP:myPort otherName1@otherIP1:otherPort1 otherName2@otherIP2:otherPort2 ...",
 	Short: "Creates multiparty UTXO",
 	Long:  `Creates multiparty UTXO`,
@@ -70,7 +70,7 @@ var createMultiparty = &cobra.Command{
 	},
 }
 
-var spendMultiparty = &cobra.Command{
+var spendMultipartyCmd = &cobra.Command{
 	Use:   "spendMultiparty multipartyOutputCommit amount asset transactionID needBroadcast myName@myIP:myPort receiverIP:receiverPort otherName1@otherIP1:otherPort1 otherName2@otherIP2:otherPort2 ...",
 	Short: "Spends multiparty UTXO",
 	Long:  `Spends multiparty UTXO`,
@@ -131,7 +131,7 @@ var spendMultiparty = &cobra.Command{
 	},
 }
 
-var receiveMultiparty = &cobra.Command{
+var receiveMultipartyCmd = &cobra.Command{
 	Use:   "receiveMultiparty amount asset transactionID myIP:myPort",
 	Short: "Receives multiparty UTXO",
 	Long:  `Receives multiparty UTXO`,
@@ -164,6 +164,26 @@ var receiveMultiparty = &cobra.Command{
 		}
 
 		fmt.Println("received new output with commit:", commit)
+		return nil
+	},
+}
+
+var syncCmd = &cobra.Command{
+	Use:   "sync",
+	Short: "Syncs the wallet with the state of the ledger",
+	Long:  `Syncs the wallet with the state of the ledger`,
+	Args:  cobra.MinimumNArgs(0),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		w, err := wallet.NewWallet(flagPersist)
+		if err != nil {
+			return errors.Wrap(err, "cannot create wallet")
+		}
+		defer w.Close()
+
+		err = w.Sync(flagAddress)
+		if err != nil {
+			return errors.Wrap(err, "cannot sync wallet with the state of the ledger")
+		}
 		return nil
 	},
 }

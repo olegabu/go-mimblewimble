@@ -152,7 +152,7 @@ func CreateMultipartyUTXO(
 	}
 
 	fmt.Print("Waiting for the output to appear in the ledger:...")
-	rpcClient, err := NewRPCClient(tendermintAddress)
+	rpcClient, err := wallet.NewRPCClient(tendermintAddress)
 	if err != nil {
 		err = errors.Wrap(err, "cannot NewRPCClient")
 		return
@@ -357,7 +357,7 @@ func SpendMultipartyUTXO(
 	}
 
 	fmt.Print("Waiting for the output to disappear from the ledger:...")
-	rpcClient, e := NewRPCClient(tendermintAddress)
+	rpcClient, e := wallet.NewRPCClient(tendermintAddress)
 	if e != nil {
 		err = errors.Wrap(e, "cannot NewRPCClient")
 		return

@@ -67,7 +67,7 @@ func ReceiveFromMultipartyUTXO(
 	fmt.Println("OK")
 
 	fmt.Print("Waiting for the output to appear in the ledger:...")
-	rpcClient, e := NewRPCClient(tendermintAddress)
+	rpcClient, e := wallet.NewRPCClient(tendermintAddress)
 	if e != nil {
 		err = errors.Wrap(e, "cannot NewRPCClient")
 		return

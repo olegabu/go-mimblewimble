@@ -1,4 +1,4 @@
-package multisigexchange
+package wallet
 
 import (
 	"encoding/json"
