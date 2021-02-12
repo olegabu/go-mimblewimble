@@ -132,3 +132,9 @@ func aggregateBulletproofMPCValues(context *secp256k1.Context, slate *Slate) (
 	}
 	return
 }
+
+func sliceTo32Array(slice []byte) *[32]byte {
+	var array [32]byte
+	copy(array[:], slice)
+	return &array
+}

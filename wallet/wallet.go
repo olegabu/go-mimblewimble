@@ -331,7 +331,7 @@ func (t *Wallet) FundMultiparty(fundingAmount uint64, asset string, transactionI
 
 	err = t.db.PutSenderSlate(savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
+		return nil, errors.Wrap(err, "cannot PutSenderSlate")
 	}
 
 	slateBytes, err = json.Marshal(slate)
@@ -386,7 +386,7 @@ func (t *Wallet) SpendMultiparty(multipartyOutputCommit string, spendingAmount u
 func (t *Wallet) CombineMultiparty(slatesBytes [][]byte) (slateBytes []byte, err error) {
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		err = errors.Wrap(err, "cannot ContextCreate")
+		err = errors.Wrap(err, "cannot create secp256k1 context")
 		return
 	}
 	defer secp256k1.ContextDestroy(context)
@@ -576,7 +576,7 @@ func (t *Wallet) FundMOfNMultiparty(
 
 	err = t.db.PutSenderSlate(savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
+		return nil, errors.Wrap(err, "cannot PutSenderSlate")
 	}
 
 	for _, slate := range slates {
@@ -620,7 +620,7 @@ func (t *Wallet) SpendMOfNMultiparty(
 		participantID,
 		missingParticipantsIDs)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewMultipartySlate")
+		return nil, errors.Wrap(err, "cannot SpendMOfN")
 	}
 
 	for _, o := range outputs {
@@ -665,7 +665,7 @@ func (t *Wallet) SpendMissingParty(slatesBytes [][]byte, spendingAmount uint64, 
 
 	multipartyOutput, err := t.db.GetOutput(savedSlate.Transaction.Body.Inputs[0].Commit)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetInputs")
+		return nil, errors.Wrap(err, "cannot GetOutput")
 	}
 
 	if multipartyOutput.Status != OutputConfirmed {
@@ -683,7 +683,7 @@ func (t *Wallet) SpendMissingParty(slatesBytes [][]byte, spendingAmount uint64, 
 		missingParticipantID,
 		slates)
 	if err != nil {
-		err = errors.Wrap(err, "cannot constructMissingPartySlate")
+		err = errors.Wrap(err, "cannot SpendMissingParty")
 		return nil, err
 	}
 
@@ -723,19 +723,19 @@ func (t *Wallet) SignMOfNMultiparty(slatesBytes [][]byte, missingPartyID *string
 	} else {
 		savedSlate, err = t.db.GetMissingPartySlate(string(id), *missingPartyID)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot GetSenderSlate")
+			return nil, errors.Wrap(err, "cannot GetMissingPartySlate")
 		}
 	}
 
 	slate, savedSlate, err := multisig.SignMOfN(slates, savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot signMultipartyTransaction")
+		return nil, errors.Wrap(err, "cannot SignMOfN(")
 	}
 
 	if missingPartyID == nil {
 		err = t.db.PutSenderSlate(savedSlate)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot PutSlate")
+			return nil, errors.Wrap(err, "cannot PutSenderSlate")
 		}
 	} else {
 		err = t.db.PutMissingPartySlate(savedSlate, *missingPartyID)
@@ -774,7 +774,7 @@ func (t *Wallet) AggregateMOfNMultiparty(slatesBytes [][]byte) (transactionBytes
 
 	transaction, walletTx, multipartyOutput, err := multisig.AggregateMOfN(slates, savedSlate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot aggregateFundingTransaction")
+		err = errors.Wrap(err, "cannot AggregateMOfN")
 		return
 	}
 

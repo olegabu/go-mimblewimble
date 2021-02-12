@@ -33,10 +33,10 @@ type SavedOutput struct {
 	Asset      string       `json:"asset,omitempty"`
 	Status     OutputStatus `json:"status,omitempty"`
 
-	PartialBlind           *[32]byte            `json:"partial_blind,omitempty"`       // TODO: Кажется лишним
-	PartialAssetBlind      *[32]byte            `json:"partial_asset_blind,omitempty"` // TODO: Кажется лишним
+	PartialBlind           *[32]byte            `json:"partial_blind,omitempty"`
+	PartialAssetBlind      *[32]byte            `json:"partial_asset_blind,omitempty"`
 	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
-	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
+	PartialAssetBlinds     map[string]string    `json:"partial_asset_blinds,omitempty"`
 }
 
 type OutputStatus int
@@ -91,8 +91,8 @@ type Slate struct {
 
 	// Verifiable blind's shares for m-of-n multiparty outputs
 	VerifiableBlindsShares map[string]vss.Share `json:"verifiable_blinds_shares,omitempty"`
-	PartialAssetBlinds     map[string][32]byte  `json:"partial_asset_blinds,omitempty"`
-	MultisigFundBalance    *uint64              `json:"multisig_fund_balance,omitempty"` // TODO: подумай стоит ли раскрывать это
+	PartialAssetBlinds     map[string]string    `json:"partial_asset_blinds,omitempty"`
+	MultisigFundBalance    *uint64              `json:"multisig_fund_balance,omitempty"` // TODO: check it
 }
 
 // ParticipantData is a public data for each participant in the slate

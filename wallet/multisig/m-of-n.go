@@ -1,6 +1,8 @@
 package multisig
 
 import (
+	"encoding/hex"
+
 	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-mimblewimble/wallet/multisig/vss"
@@ -31,7 +33,7 @@ func FundMOfN(
 		return
 	}
 
-	slate.PartialAssetBlinds = map[string][32]byte{participantID: savedSlate.PartialAssetBlind}
+	slate.PartialAssetBlinds = map[string]string{participantID: hex.EncodeToString(savedSlate.PartialAssetBlind[:])}
 
 	shares, e := vss.ShareBlind(participantsCount, minParticipantsCount, savedSlate.PartialBlind[:])
 	if e != nil {
@@ -104,17 +106,19 @@ func SpendMissingParty(
 		shares = append(shares, slate.VerifiableBlindsShares[missingParticipantID].VerifiableShare)
 	}
 
-	secret, e := vss.OpenBlind(shares)
-	if e != nil {
-		err = errors.Wrap(e, "cannot OpenBlind")
+	secret, err := vss.OpenBlind(shares)
+	if err != nil {
+		err = errors.Wrap(err, "cannot OpenBlind")
 		return
 	}
-	var blind [32]byte
-	copy(blind[:], secret)
-	multipartyOutput.PartialBlind = &blind
+	multipartyOutput.PartialBlind = sliceTo32Array(secret)
 
-	partialAssetBlind := multipartyOutput.PartialAssetBlinds[missingParticipantID]
-	multipartyOutput.PartialAssetBlind = &partialAssetBlind
+	partialAssetBlind, err := hex.DecodeString(multipartyOutput.PartialAssetBlinds[missingParticipantID])
+	if err != nil {
+		err = errors.Wrapf(err, "cannot partse asset blind of missing party with id %s", missingParticipantID)
+		return
+	}
+	multipartyOutput.PartialAssetBlind = sliceTo32Array(partialAssetBlind)
 
 	slate, savedSlate, _, err = Spend(sg, spendingAmount, 0, fee, asset, multipartyOutput, transactionID, missingParticipantID)
 	if err != nil {
@@ -132,15 +136,9 @@ func SignMOfN(
 	outSavedSlate *SavedSlate,
 	err error,
 ) {
-	outSlate, err = Sign(slates, inSavedSlate)
-	if err != nil {
-		err = errors.Wrap(err, "cannot Sign")
-		return
-	}
-
 	outSavedSlate = inSavedSlate
 	outSavedSlate.VerifiableBlindsShares = make(map[string]vss.Share)
-	outSavedSlate.PartialAssetBlinds = make(map[string][32]byte)
+	outSavedSlate.PartialAssetBlinds = make(map[string]string)
 	for _, slate := range slates {
 		for partyID, verifiableBlindShare := range slate.VerifiableBlindsShares {
 			ok, e := vss.VerifyShare(verifiableBlindShare)
@@ -154,6 +152,15 @@ func SignMOfN(
 		for partyID, partialAssetBlinds := range slate.PartialAssetBlinds {
 			outSavedSlate.PartialAssetBlinds[partyID] = partialAssetBlinds
 		}
+
+		slate.VerifiableBlindsShares = nil
+		slate.PartialAssetBlinds = nil
+	}
+
+	outSlate, err = Sign(slates, inSavedSlate)
+	if err != nil {
+		err = errors.Wrap(err, "cannot Sign")
+		return
 	}
 	return
 }
