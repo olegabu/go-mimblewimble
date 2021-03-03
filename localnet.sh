@@ -8,7 +8,7 @@ d=${2:-0}
 network=${3:-mytestnet}
 
 # generate config files for nodes
-mw tendermint testnet --config ./config-template.toml --v "$v" --o "./$network"
+mw tendermint testnet --config ./config-template.toml --v "$v" --o "./$network" --populate-persistent-peers
 
 docker network create "$network"
 
