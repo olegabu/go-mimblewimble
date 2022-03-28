@@ -271,7 +271,7 @@ func TestTotalIssues(t *testing.T) {
 
 	// add kernel offset to excessCommitments
 	offsetBytes, _ := hex.DecodeString(tx.Offset)
-	kernelOffset, err := secp256k1.Commit(w.context, offsetBytes, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	kernelOffset, err := secp256k1.Commit(w.context, offsetBytes, 0, &secp256k1.GeneratorH)
 	assert.NoError(t, err)
 	excessCommitments = append(excessCommitments, kernelOffset)
 

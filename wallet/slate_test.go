@@ -258,7 +258,7 @@ func TestExcess(t *testing.T) {
 
 	kex, err := ledger.CalculateExcess(context, inputCommitments, outputCommitments, offsetBytes, fee)
 	assert.NoError(t, err)
-	fmt.Printf("ledger.CalculateExcess: %s\n", kex.String())
+	fmt.Printf("ledger.CalculateExcess: %v\n", kex.String())
 
 	kex0 := slate.Transaction.Body.Kernels[0].Excess
 	fmt.Printf("slate.SavedTransaction.Body.Kernels[0].Excess: %s\n", kex0)
@@ -266,7 +266,7 @@ func TestExcess(t *testing.T) {
 	assert.Equal(t, kex0, kex.String())
 }
 
-var slateFinal []byte = []byte(`{
+var slateFinal = []byte(`{
     "version_info": {
         "version": 3,
         "orig_version": 3,
@@ -337,7 +337,7 @@ func TestSurjection(t *testing.T) {
 	)
 	var (
 		//outputIndex int = 9
-		maxIterations int = 100
+		maxIterations      = 100
 		assetNames         = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "k"}
 		fixedInputTags     [nInputs]*secp256k1.FixedAssetTag
 		ephemeralInputTags [nInputs]*secp256k1.Generator
@@ -362,7 +362,7 @@ func TestSurjection(t *testing.T) {
 		inputAssetBlinds[i] = assetBlind
 	}
 
-	outputAssetSeed := ledger.AssetSeed(assetNames[outputIndex])
+	outputAssetSeed := ledger.AssetSeed(assetNames[nInputs - 1])
 	fixedOutputTag, err := secp256k1.FixedAssetTagParse(outputAssetSeed[:])
 	assert.NoError(t, err)
 	outputAssetBlind := secp256k1.Random256()

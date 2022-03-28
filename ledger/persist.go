@@ -2,8 +2,9 @@ package ledger
 
 import (
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"github.com/olegabu/go-secp256k1-zkp"
-	"github.com/pkg/errors"
 )
 
 func PersistTransaction(tx *Transaction, db Database, doublespend bool) error {
@@ -11,13 +12,13 @@ func PersistTransaction(tx *Transaction, db Database, doublespend bool) error {
 	for i, input := range tx.Body.Inputs {
 		err := db.InputExists(input)
 		if err != nil {
-			return errors.Wrapf(err, "input does not exist: %v at position %v", input.Commit, i)
+			return fmt.Errorf("%w: input does not exist: %v at position %v", err, input.Commit, i)
 		}
 
 		if !doublespend {
 			err = db.SpendInput(input)
 			if err != nil {
-				return errors.Wrapf(err, "cannot mark input as spent: %v at position %v", input.Commit, i)
+				return fmt.Errorf("%w: cannot mark input as spent: %v at position %v", err, input.Commit, i)
 			}
 		}
 	}
@@ -26,7 +27,7 @@ func PersistTransaction(tx *Transaction, db Database, doublespend bool) error {
 	for i, output := range tx.Body.Outputs {
 		err := db.PutOutput(output)
 		if err != nil {
-			return errors.Wrapf(err, "cannot save output: %v at position %v", output.Commit, i)
+			return fmt.Errorf("%w: cannot save output: %v at position %v", err, output.Commit, i)
 		}
 	}
 
@@ -39,32 +40,32 @@ func PersistTransaction(tx *Transaction, db Database, doublespend bool) error {
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		return errors.Wrap(err, "cannot ContextCreate")
+		return fmt.Errorf("%w: cannot ContextCreate", err)
 	}
 
 	defer secp256k1.ContextDestroy(context)
 
 	excess, err := secp256k1.CommitmentFromString(kernel.Excess)
 	if err != nil {
-		return errors.Wrap(err, "cannot CommitmentFromString")
+		return fmt.Errorf("%w: cannot CommitmentFromString", err)
 	}
 
 	offsetBytes, _ := hex.DecodeString(tx.Offset)
 	kernelOffset, err := secp256k1.Commit(context, offsetBytes, 0, &secp256k1.GeneratorH)
 	if err != nil {
-		return errors.Wrap(err, "cannot Commit")
+		return fmt.Errorf("%w: cannot Commit", err)
 	}
 
 	fullExcess, err := secp256k1.CommitSum(context, []*secp256k1.Commitment{excess, kernelOffset}, []*secp256k1.Commitment{})
 	if err != nil {
-		return errors.Wrap(err, "cannot CommitSum")
+		return fmt.Errorf("%w: cannot CommitSum", err)
 	}
 
-	kernel.Excess = fullExcess.String()
+	kernel.Excess = secp256k1.CommitmentString(fullExcess)
 
 	err = db.PutKernel(kernel)
 	if err != nil {
-		return errors.Wrapf(err, "cannot save kernel: %v", kernel)
+		return fmt.Errorf("%w: cannot save kernel: %v", err, kernel)
 	}
 
 	return nil
@@ -73,13 +74,13 @@ func PersistIssue(issue *Issue, db Database) error {
 	// save new output
 	err := db.PutOutput(issue.Output)
 	if err != nil {
-		return errors.Wrapf(err, "cannot save issue output: %v", issue.Output.Commit)
+		return fmt.Errorf("%w: cannot save issue output: %v", err, issue.Output.Commit)
 	}
 
 	// save kernel
 	err = db.PutKernel(issue.Kernel)
 	if err != nil {
-		return errors.Wrapf(err, "cannot save issue kernel: %v", issue.Kernel)
+		return fmt.Errorf("%w: cannot save issue kernel: %v", err, issue.Kernel)
 	}
 
 	// save asset

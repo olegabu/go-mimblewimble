@@ -2,8 +2,8 @@ package wallet
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/uuid"
 )
 
 type Database interface {

@@ -3,8 +3,8 @@ package ledger
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
+	"errors"
+	"github.com/olegabu/go-mimblewimble/uuid"
 	"strconv"
 )
 
@@ -72,11 +72,11 @@ type Uint64 uint64
 // MarshalJSON marshals the Uint64 as a quoted uint64 string
 func (u Uint64) MarshalJSON() ([]byte, error) {
 	str := strconv.FormatUint(uint64(u), 10)
-	bytes, err := json.Marshal(str)
+	jsonBytes, err := json.Marshal(str)
 	if err != nil {
 		return nil, err
 	}
-	return bytes, nil
+	return jsonBytes, nil
 }
 
 // UnmarshalJSON unmarshals a quoted an uint64 or a string to an uint64 value

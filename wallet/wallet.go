@@ -2,13 +2,13 @@ package wallet
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/tyler-smith/go-bip32"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 
 	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
@@ -24,18 +24,18 @@ type Wallet struct {
 func NewWallet(persistDir string) (w *Wallet, err error) {
 	w, err = NewWalletWithoutMasterKey(persistDir)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create NewWalletWithoutMasterKey")
+		err = fmt.Errorf("%w: cannot create NewWalletWithoutMasterKey", err)
 		return
 	}
 
 	if !w.masterKeyExists() {
-		err = errors.Errorf("cannot find master key in %v, run init first", persistDir)
+		err = fmt.Errorf("%w: cannot find master key in %v, run init first", err, persistDir)
 		return
 	}
 
 	_, err = w.InitMasterKey("")
 	if err != nil {
-		err = errors.Wrap(err, "cannot InitMasterKey")
+		err = fmt.Errorf("%w: cannot InitMasterKey", err)
 		return
 	}
 
@@ -45,13 +45,13 @@ func NewWallet(persistDir string) (w *Wallet, err error) {
 func NewWalletWithoutMasterKey(persistDir string) (w *Wallet, err error) {
 	db, err := NewLeveldbDatabase(persistDir)
 	if err != nil {
-		err = errors.Wrap(err, "cannot create NewLeveldbDatabase")
+		err = fmt.Errorf("%w: cannot create NewLeveldbDatabase", err)
 		return
 	}
 
 	context, err := secp256k1.ContextCreate(secp256k1.ContextBoth)
 	if err != nil {
-		err = errors.Wrap(err, "cannot ContextCreate")
+		err = fmt.Errorf("%w: cannot ContextCreate", err)
 		return
 	}
 
@@ -68,24 +68,24 @@ func (t *Wallet) Close() {
 func (t *Wallet) Send(amount uint64, asset string, receiveAmount uint64, receiveAsset string) (slateBytes []byte, err error) {
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetInputs")
+		return nil, fmt.Errorf("%w: cannot GetInputs", err)
 	}
 
 	slateBytes, outputs, savedSlate, err := t.NewSlate(amount, 0, asset, change, inputs, receiveAmount, receiveAsset)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewSlate")
+		return nil, fmt.Errorf("%w: cannot NewSlate", err)
 	}
 
 	for _, o := range outputs {
 		err = t.db.PutOutput(o)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot PutOutput")
+			return nil, fmt.Errorf("%w: cannot PutOutput", err)
 		}
 	}
 
 	err = t.db.PutSenderSlate(savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutSlate")
+		return nil, fmt.Errorf("%w: cannot PutSlate", err)
 	}
 
 	return
@@ -95,7 +95,7 @@ func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) 
 	var inSlate = &Slate{}
 	err = json.Unmarshal(inSlateBytes, inSlate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal json to inSlate")
+		err = fmt.Errorf("%w: cannot unmarshal json to inSlate", err)
 		return
 	}
 
@@ -111,24 +111,24 @@ func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) 
 
 	inputs, change, err := t.db.GetInputs(amount, asset)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetInputs")
+		return nil, fmt.Errorf("%w: cannot GetInputs", err)
 	}
 
 	outSlateBytes, outputs, savedSlate, err := t.NewResponse(amount, fee, asset, change, inputs, receiveAmount, receiveAsset, inSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewReceive")
+		return nil, fmt.Errorf("%w: cannot NewReceive", err)
 	}
 
 	for _, o := range outputs {
 		err = t.db.PutOutput(o)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot PutOutput")
+			return nil, fmt.Errorf("%w: cannot PutOutput", err)
 		}
 	}
 
 	err = t.db.PutReceiverSlate(savedSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutReceiverSlate")
+		return nil, fmt.Errorf("%w: cannot PutReceiverSlate", err)
 	}
 
 	//tx := SavedTransaction{
@@ -138,7 +138,7 @@ func (t *Wallet) Respond(inSlateBytes []byte) (outSlateBytes []byte, err error) 
 	//
 	//err = t.db.PutTransaction(tx)
 	//if err != nil {
-	//	return nil, errors.Wrap(err, "cannot PutTransaction")
+	//	return nil, fmt.Errorf("%w: cannot PutTransaction", err)
 	//}
 
 	return
@@ -149,24 +149,24 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 
 	err = json.Unmarshal(responseSlateBytes, responseSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot unmarshal responseSlateBytes")
+		return nil, fmt.Errorf("%w: cannot unmarshal responseSlateBytes", err)
 	}
 
 	id, _ := responseSlate.Transaction.ID.MarshalText()
 
 	senderSlate, err := t.db.GetSenderSlate(id)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot GetSlate")
+		return nil, fmt.Errorf("%w: cannot GetSlate", err)
 	}
 
 	txBytes, tx, err := t.NewTransaction(responseSlate, senderSlate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot NewTransaction")
+		return nil, fmt.Errorf("%w: cannot NewTransaction", err)
 	}
 
 	err = t.db.PutTransaction(tx)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutTransaction")
+		return nil, fmt.Errorf("%w: cannot PutTransaction", err)
 	}
 
 	return txBytes, nil
@@ -175,18 +175,18 @@ func (t *Wallet) Finalize(responseSlateBytes []byte) (txBytes []byte, err error)
 func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error) {
 	walletOutput, blind, err := t.newOutput(value, ledger.CoinbaseOutput, asset, OutputConfirmed)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot create output")
+		return nil, fmt.Errorf("%w: cannot create output", err)
 	}
 
 	// issue kernel excess is a public blind, as input value to an issue is zero: KEI = RI*G + 0*H
-	excess, err := secp256k1.Commit(t.context, blind, 0, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
+	excess, err := secp256k1.Commit(t.context, blind, 0, &secp256k1.GeneratorH)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot create excess")
+		return nil, fmt.Errorf("%w: cannot create excess", err)
 	}
 
 	err = t.db.PutOutput(*walletOutput)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot PutOutput")
+		return nil, fmt.Errorf("%w: cannot PutOutput", err)
 	}
 
 	ledgerIssue := ledger.Issue{
@@ -195,13 +195,13 @@ func (t *Wallet) Issue(value uint64, asset string) (issueBytes []byte, err error
 		Value:  value,
 		Kernel: ledger.TxKernel{
 			Features: ledger.CoinbaseKernel,
-			Excess:   excess.String(),
+			Excess:   secp256k1.CommitmentString(excess),
 		},
 	}
 
 	issueBytes, err = json.Marshal(ledgerIssue)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot marshal ledgerIssue to json")
+		return nil, fmt.Errorf("%w: cannot marshal ledgerIssue to json", err)
 	}
 
 	return
@@ -212,7 +212,7 @@ func (t *Wallet) Info() (string, error) {
 
 	outputs, err := t.db.ListOutputs()
 	if err != nil {
-		return tableString.String(), errors.Wrap(err, "cannot ListOutputs")
+		return tableString.String(), fmt.Errorf("%w: cannot ListOutputs", err)
 	}
 
 	// sort outputs decreasing by child key index
@@ -232,7 +232,7 @@ func (t *Wallet) Info() (string, error) {
 
 	slates, err := t.db.ListSlates()
 	if err != nil {
-		return tableString.String(), errors.Wrap(err, "cannot ListSlates")
+		return tableString.String(), fmt.Errorf("%w: cannot ListSlates", err)
 	}
 	slateTable := tablewriter.NewWriter(tableString)
 	slateTable.SetHeader([]string{"id", "send", "receive", "inputs", "outputs"})
@@ -269,7 +269,7 @@ func (t *Wallet) Info() (string, error) {
 
 	transactions, err := t.db.ListTransactions()
 	if err != nil {
-		return tableString.String(), errors.Wrap(err, "cannot ListTransactions")
+		return tableString.String(), fmt.Errorf("%w: cannot ListTransactions", err)
 	}
 	transactionTable := tablewriter.NewWriter(tableString)
 	transactionTable.SetHeader([]string{"id", "status", "inputs", "outputs"})
@@ -316,11 +316,11 @@ func ParseIDFromSlate(slateBytes []byte) (ID []byte, err error) {
 	slate := Slate{}
 	err = json.Unmarshal(slateBytes, &slate)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot unmarshal slate from json")
+		return nil, fmt.Errorf("%w: cannot unmarshal slate from json", err)
 	}
 	id, err := slate.Transaction.ID.MarshalText()
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot marshal from uuid")
+		return nil, fmt.Errorf("%w: cannot marshal from uuid", err)
 	}
 	return id, nil
 }

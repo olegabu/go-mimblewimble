@@ -2,23 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/mitchellh/go-homedir"
-	"github.com/olegabu/go-mimblewimble/abci"
-	"github.com/olegabu/go-mimblewimble/ledger"
+	secp256k1 "github.com/olegabu/go-secp256k1-zkp"
 	"github.com/olegabu/go-mimblewimble/wallet"
-	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
-	tendermintCmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
-	cfg "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/cli"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strconv"
-
-	"github.com/spf13/cobra"
 )
+
+/*
+import "github.com/spf13/cobra"
+import "github.com/spf13/pflag"
 
 const defaultAsset = "¤"
 
@@ -64,9 +54,44 @@ func presetRequiredFlags(cmd *cobra.Command) {
 		}
 	})
 }
+*/
+
+//export Random256
+func Issue(amount int, asset string) string {
+    
+    w, err := wallet.NewWalletWithoutMasterKey("")
+    if err != nil {
+       panic(err)
+    }
+    defer w.Close()
+
+    txBytes, err := w.Issue(uint64(amount), asset)
+    if err != nil {
+        panic(fmt.Errorf("%w: cannot Issue %d%s", err, amount, asset))
+    }
+    fmt.Println(txBytes)
+    return string(txBytes)
+}
 
 func main() {
+	const amount = 100
+	const asset = "RUB"
 
+	rand := secp256k1.Random256()
+	fmt.Println(rand)
+
+/*	w, err := wallet.NewWalletWithoutMasterKey("")
+	if err != nil {
+		panic(err)
+	}
+	defer w.Close()*/
+
+	//txBytes, err := w.Issue(amount, asset)
+	//if err != nil {
+	//	panic(fmt.Errorf("%w: cannot Issue %d%s", err, amount, asset))
+	//}
+	//fmt.Println(txBytes)
+/*
 	var initCmd = &cobra.Command{
 		Use:     "init [mnemonic]",
 		Short:   "Creates or recovers user's secret key",
@@ -75,7 +100,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			w, err := wallet.NewWalletWithoutMasterKey(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
@@ -88,7 +113,7 @@ func main() {
 
 			createdMnemonic, err := w.InitMasterKey(mnemonic)
 			if err != nil {
-				return errors.Wrap(err, "cannot initialize key")
+				return fmt.Errorf("%w: cannot initialize key", err)
 			}
 
 			if len(createdMnemonic) > 0 {
@@ -107,7 +132,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
 			if err != nil {
-				return errors.Wrap(err, "cannot parse amount")
+				return fmt.Errorf("%w: cannot parse amount", err)
 			}
 			asset := defaultAsset
 			if len(args) > 1 {
@@ -116,18 +141,18 @@ func main() {
 
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			txBytes, err := w.Issue(uint64(amount), asset)
 			if err != nil {
-				return errors.Wrap(err, "cannot Issue")
+				return fmt.Errorf("%w: cannot Issue", err)
 			}
 			fileName := "issue-" + args[0] + ".json"
 			err = ioutil.WriteFile(fileName, txBytes, 0644)
 			if err != nil {
-				return errors.Wrap(err, "cannot write file "+fileName)
+				return fmt.Errorf("%w: cannot write file %v", err, fileName)
 			}
 			fmt.Printf("wrote transaction to issue %v, send it to the network: broadcast %v\n", args[0], fileName)
 			return nil
@@ -142,7 +167,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
 			if err != nil {
-				return errors.Wrap(err, "cannot parse amount")
+				return fmt.Errorf("%w: cannot parse amount", err)
 			}
 			asset := defaultAsset
 			if len(args) > 1 {
@@ -154,29 +179,29 @@ func main() {
 			if len(args) == 4 {
 				receiveAmount, err = strconv.Atoi(args[2])
 				if err != nil {
-					return errors.Wrap(err, "cannot parse receive amount")
+					return fmt.Errorf("%w: cannot parse receive amount", err)
 				}
 				receiveAsset = args[3]
 			}
 
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			slateBytes, err := w.Send(uint64(amount), asset, uint64(receiveAmount), receiveAsset)
 			if err != nil {
-				return errors.Wrap(err, "cannot Send")
+				return fmt.Errorf("%w: cannot Send", err)
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot parse id from slate")
+				return fmt.Errorf("%w: cannot parse id from slate", err)
 			}
 			fileName := "slate-send-" + string(id) + ".json"
 			err = ioutil.WriteFile(fileName, slateBytes, 0644)
 			if err != nil {
-				return errors.Wrap(err, "cannot write file "+fileName)
+				return fmt.Errorf("%w: cannot write file %v", err, fileName)
 			}
 			fmt.Printf("wrote slate, pass it to the receiver to fill in and respond: receive %v \n", fileName)
 			return nil
@@ -191,7 +216,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			amount, err := strconv.Atoi(args[0])
 			if err != nil {
-				return errors.Wrap(err, "cannot parse amount")
+				return fmt.Errorf("%w: cannot parse amount", err)
 			}
 			asset := defaultAsset
 			if len(args) > 1 {
@@ -200,22 +225,22 @@ func main() {
 
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			slateBytes, err := w.Send(0, "", uint64(amount), asset)
 			if err != nil {
-				return errors.Wrap(err, "cannot Send")
+				return fmt.Errorf("%w: cannot Send", err)
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot parse id from slate")
+				return fmt.Errorf("%w: cannot parse id from slate", err)
 			}
 			fileName := "slate-send-" + string(id) + ".json"
 			err = ioutil.WriteFile(fileName, slateBytes, 0644)
 			if err != nil {
-				return errors.Wrap(err, "cannot write file "+fileName)
+				return fmt.Errorf("%w: cannot write file %v", err, fileName)
 			}
 			fmt.Printf("wrote slate, pass it to the payer to fill in and respond: receive %v \n", fileName)
 			return nil
@@ -231,27 +256,27 @@ func main() {
 			slateFileName := args[0]
 			slateBytes, err := ioutil.ReadFile(slateFileName)
 			if err != nil {
-				return errors.Wrap(err, "cannot read sender slate file "+slateFileName)
+				return fmt.Errorf("%w: cannot read sender slate file %v", err, slateFileName)
 			}
 
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			responseSlateBytes, err := w.Respond(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot Respond")
+				return fmt.Errorf("%w: cannot Respond", err)
 			}
 			id, err := wallet.ParseIDFromSlate(responseSlateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot parse id from slate")
+				return fmt.Errorf("%w: cannot parse id from slate", err)
 			}
 			fileName := "slate-receive-" + string(id) + ".json"
 			err = ioutil.WriteFile(fileName, responseSlateBytes, 0644)
 			if err != nil {
-				return errors.Wrap(err, "cannot write file "+fileName)
+				return fmt.Errorf("%w: cannot write file %v", err, fileName)
 			}
 			fmt.Printf("wrote slate, pass it back to the sender: finalize or post %v\n", fileName)
 			return nil
@@ -267,27 +292,27 @@ func main() {
 			slateFileName := args[0]
 			slateBytes, err := ioutil.ReadFile(slateFileName)
 			if err != nil {
-				return errors.Wrap(err, "cannot read receiver slate file "+slateFileName)
+				return fmt.Errorf("%w: cannot read receiver slate file %v", err, slateFileName)
 			}
 
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			txBytes, err := w.Finalize(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot Finalize")
+				return fmt.Errorf("%w: cannot Finalize", err)
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot parse id from slate")
+				return fmt.Errorf("%w: cannot parse id from slate", err)
 			}
 			fileName := "tx-" + string(id) + ".json"
 			err = ioutil.WriteFile(fileName, txBytes, 0644)
 			if err != nil {
-				return errors.Wrap(err, "cannot write file "+fileName)
+				return fmt.Errorf("%w: cannot write file %v", err, fileName)
 			}
 			fmt.Printf("wrote transaction %v, send it to the network to get validated: broadcast %v\nthen tell the wallet the transaction has been confirmed: confirm %v\n", string(id), fileName, string(id))
 			return nil
@@ -302,13 +327,13 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			err = w.Confirm([]byte(args[0]))
 			if err != nil {
-				return errors.Wrap(err, "cannot Confirm")
+				return fmt.Errorf("%w: cannot Confirm", err)
 			}
 			fmt.Println("confirmed transaction: marked inputs as spent and outputs as confirmed")
 			return nil
@@ -323,13 +348,13 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			err = w.Cancel([]byte(args[0]))
 			if err != nil {
-				return errors.Wrap(err, "cannot Cancel")
+				return fmt.Errorf("%w: cannot Cancel", err)
 			}
 			fmt.Println("canceled transaction: marked inputs as spendable and outputs canceled")
 			return nil
@@ -345,11 +370,11 @@ func main() {
 			transactionFileName := args[0]
 			transactionBytes, err := ioutil.ReadFile(transactionFileName)
 			if err != nil {
-				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
+				return fmt.Errorf("%w: cannot read transaction file %v", err, transactionFileName)
 			}
 			tx, err := ledger.ValidateTransactionBytes(transactionBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot transaction.ValidateTransactionBytes")
+				return fmt.Errorf("%w: cannot transaction.ValidateTransactionBytes", err)
 			}
 			fmt.Printf("transaction %v is valid\n", tx.ID)
 			return nil
@@ -364,18 +389,19 @@ func main() {
 
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			err = w.Print()
 			if err != nil {
-				return errors.Wrap(err, "cannot Print")
+				return fmt.Errorf("%w: cannot Print", err)
 			}
 			return nil
 		},
 	}
-
+*/
+/*
 	var broadcastCmd = &cobra.Command{
 		Use:   "broadcast transaction_file",
 		Short: "Broadcasts transaction",
@@ -385,18 +411,18 @@ func main() {
 			transactionFileName := args[0]
 			transactionBytes, err := ioutil.ReadFile(transactionFileName)
 			if err != nil {
-				return errors.Wrap(err, "cannot read transaction file "+transactionFileName)
+				return fmt.Errorf("%w: cannot read transaction file %v", err, transactionFileName)
 			}
 
 			client, err := abci.NewClient(flagAddress)
 			if err != nil {
-				return errors.Wrap(err, "cannot get new client")
+				return fmt.Errorf("%w: cannot get new client", err)
 			}
 			defer client.Stop()
 
 			err = client.Broadcast(transactionBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot client.Broadcast")
+				return fmt.Errorf("%w: cannot client.Broadcast", err)
 			}
 
 			return nil
@@ -417,39 +443,39 @@ func main() {
 			slateFileName := args[0]
 			slateBytes, err := ioutil.ReadFile(slateFileName)
 			if err != nil {
-				return errors.Wrap(err, "cannot read receiver slate file "+slateFileName)
+				return fmt.Errorf("%w: cannot read receiver slate file %v", err, slateFileName)
 			}
 
 			w, err := wallet.NewWallet(flagPersist)
 			if err != nil {
-				return errors.Wrap(err, "cannot create wallet")
+				return fmt.Errorf("%w: cannot create wallet", err)
 			}
 			defer w.Close()
 
 			txBytes, err := w.Finalize(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot Finalize")
+				return fmt.Errorf("%w: cannot Finalize", err)
 			}
 			id, err := wallet.ParseIDFromSlate(slateBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot parse id from slate")
+				return fmt.Errorf("%w: cannot parse id from slate", err)
 			}
 			fileName := "tx-" + string(id) + ".json"
 			err = ioutil.WriteFile(fileName, txBytes, 0644)
 			if err != nil {
-				return errors.Wrap(err, "cannot write file "+fileName)
+				return fmt.Errorf("%w: cannot write file %v", err, fileName)
 			}
 			fmt.Printf("wrote %v, sending it to the network to get validated\n", fileName)
 
 			client, err := abci.NewClient(flagAddress)
 			if err != nil {
-				return errors.Wrap(err, "cannot get new client")
+				return fmt.Errorf("%w: cannot get new client", err)
 			}
 			defer client.Stop()
 
 			err = client.Broadcast(txBytes)
 			if err != nil {
-				return errors.Wrap(err, "cannot client.Broadcast")
+				return fmt.Errorf("%w: cannot client.Broadcast", err)
 			}
 
 			return nil
@@ -468,13 +494,13 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := abci.NewClient(flagAddress)
 			if err != nil {
-				return errors.Wrap(err, "cannot get new client")
+				return fmt.Errorf("%w: cannot get new client", err)
 			}
 			defer client.Stop()
 
 			err = client.ListenForTxEvents(client.PrintTxEvent)
 			if err != nil {
-				return errors.Wrap(err, "cannot client.ListenForEvents")
+				return fmt.Errorf("%w: cannot client.ListenForEvents", err)
 			}
 
 			return nil
@@ -493,7 +519,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := abci.NewClient(flagAddress)
 			if err != nil {
-				return errors.Wrap(err, "cannot get new client")
+				return fmt.Errorf("%w: cannot get new client", err)
 			}
 			defer client.Stop()
 
@@ -501,22 +527,22 @@ func main() {
 
 				w, err := wallet.NewWallet(flagPersist)
 				if err != nil {
-					fmt.Println(errors.Wrap(err, "cannot create wallet"))
+					fmt.Println(fmt.Errorf("%w: cannot create wallet", err))
 				}
 				defer w.Close()
 
 				err = w.Confirm(transactionId)
 				if err != nil {
-					fmt.Println(errors.Wrapf(err, "cannot Confirm transaction %v", string(transactionId)).Error())
+					fmt.Println(fmt.Errorf("%w: cannot Confirm transaction %v", err, string(transactionId)).Error())
 				} else {
 					err = w.Print()
 					if err != nil {
-						fmt.Println(errors.Wrap(err, "cannot Print").Error())
+						fmt.Println(fmt.Errorf("%w: cannot Print", err).Error())
 					}
 				}
 			})
 			if err != nil {
-				return errors.Wrap(err, "cannot abci.ListenForEvents")
+				return fmt.Errorf("%w: cannot abci.ListenForEvents", err)
 			}
 
 			return nil
@@ -536,13 +562,14 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := abci.Start(flagPersist, doublespend)
 			if err != nil {
-				return errors.Wrap(err, "cannot abci.Start")
+				return fmt.Errorf("%w: cannot abci.Start", err)
 			}
 			return nil
 		},
 	}
 	nodeCmd.Flags().BoolVar(&doublespend, "doublespend", false, "Double spend inputs for testing")
-
+*/
+/*
 	rootCmd = &cobra.Command{
 		Use:          "mw",
 		Short:        "Wallet and validator for Mimblewimble",
@@ -550,21 +577,23 @@ func main() {
 		SilenceUsage: true,
 	}
 
-	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, postCmd,
-		confirmCmd, cancelCmd, validateCmd, infoCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
+	rootCmd.AddCommand(initCmd, issueCmd, sendCmd, receiveCmd, invoiceCmd, finalizeCmd, confirmCmd, cancelCmd, validateCmd, infoCmd)
+		//postCmd, nodeCmd, broadcastCmd, eventsCmd, listenCmd)
 
-	dir, err := homedir.Dir()
-	if err != nil {
-		panic("cannot get homedir")
-	}
+	//dir, err := homedir.Dir()
+	//if err != nil {
+	//	panic("cannot get homedir")
+	//}
 	mwroot := filepath.Join(dir, ".mw")
 
-	rootCmd.PersistentFlags().StringVarP(&flagPersist, "persist", "", mwroot, "directory to use to store databases and user's master secret key")
+	mwroot := "~/.mw"
 
+	rootCmd.PersistentFlags().StringVarP(&flagPersist, "persist", "", mwroot, "directory to use to store databases and user's master secret key")
+*/
+/*
 	// Tendermint commands
 
 	tendermintRootCmd := tendermintCmd.RootCmd
-
 	tendermintRootCmd.AddCommand(
 		tendermintCmd.GenValidatorCmd,
 		tendermintCmd.InitFilesCmd,
@@ -583,9 +612,12 @@ func main() {
 	tendermintBaseCmd := cli.PrepareBaseCmd(tendermintRootCmd, "TM", os.ExpandEnv(filepath.Join("$HOME", cfg.DefaultTendermintDir)))
 
 	rootCmd.AddCommand(tendermintBaseCmd.Command)
-
-	err = rootCmd.Execute()
+*/
+/*
+	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(1)
+		//os.Exit(1)
+		panic(err)
 	}
+*/
 }

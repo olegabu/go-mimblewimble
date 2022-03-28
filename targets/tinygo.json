@@ -1,0 +1,29 @@
+{
+  "llvm-target": "wasm32--wasi",
+  "goos": "default",
+  "goarch": "default",
+  "build-tags": [
+    ""
+  ],
+  "gc": "conservative",
+  "scheduler": "none",
+  "linker": "wasm-ld",
+  "libc": "wasi-libc",
+  "automatic-stack-size": false,
+  "default-stack-size": 0,
+  "cflags": [
+    "--target\u003dwasm32--wasi",
+    "--sysroot\u003d{root}/lib/wasi-libc/sysroot",
+    "-Oz"
+  ],
+  "ldflags": [
+    "--allow-undefined",
+    "--stack-first",
+    "--no-demangle"
+  ],
+  "emulator": [
+    "node",
+    "targets/wasm_exec.js"
+  ],
+  "wasm-abi": "js"
+}

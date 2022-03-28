@@ -1,0 +1,26 @@
+{
+    "llvm-target":   "wasm32--wasi",
+    "build-tags":    ["tinygo.wasm"],
+    "goos":          "js",
+    "goarch":        "wasm",
+    "linker":        "/opt/wasi-sdk/bin/wasm-ld",
+    "libc":          "/opt/wasi-sdk/bin/wasi-libc",
+    "cflags": [
+        "--target=wasm32--wasi",
+        "--sysroot=/opt/wasi-sdk/lib/wasi-libc/sysroot",
+        "-DNDEBUG",
+        "-Oz"
+    ],
+    "ldflags": [
+        "--allow-undefined",
+        "--stack-first",
+        "--no-demangle",
+        "--export-dynamic",
+        "--export=__heap_base",
+        "--export=__data_end",
+        "--export=malloc",
+        "--export=free"
+    ],
+    "emulator":      ["node", "targets/wasm_exec.js"],
+    "wasm-abi":      "js"
+}

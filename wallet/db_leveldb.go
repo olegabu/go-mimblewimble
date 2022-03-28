@@ -3,8 +3,10 @@ package wallet
 import (
 	"encoding/binary"
 	"encoding/json"
-	"github.com/pkg/errors"
+	"errors"
+	"fmt"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"log"
 	"path/filepath"
@@ -15,12 +17,28 @@ type leveldbDatabase struct {
 	db *leveldb.DB
 }
 
-func NewLeveldbDatabase(dbDir string) (d Database, err error) {
-	dbFilename := filepath.Join(dbDir, "wallet")
+func NewLeveldbMemStorage() (d Database, err error) {
 
+	ldb, err := leveldb.Open(storage.NewMemStorage(), nil)
+	if err != nil {
+		err = fmt.Errorf("%w: cannot open memory storage leveldb", err)
+		return
+	}
+	//log.Printf("opened wallet db at %v\n", dbFilename)
+
+	d = &leveldbDatabase{db: ldb}
+	return
+}
+
+func NewLeveldbDatabase(dbDir string) (d Database, err error) {
+	if dbDir == "" {
+
+		return NewLeveldbMemStorage()
+	}
+	dbFilename := filepath.Join(dbDir, "wallet")
 	ldb, err := leveldb.OpenFile(dbFilename, nil)
 	if err != nil {
-		err = errors.Wrapf(err, "cannot open leveldb at %v", dbFilename)
+		err = fmt.Errorf("%w: cannot open leveldb at %v", err, dbFilename)
 		return
 	}
 	//log.Printf("opened wallet db at %v\n", dbFilename)
@@ -43,12 +61,12 @@ func senderSlateKey(id string) []byte {
 func (t *leveldbDatabase) PutSenderSlate(slate *SavedSlate) error {
 	slateBytes, err := json.Marshal(slate)
 	if err != nil {
-		return errors.Wrap(err, "cannot marshal SenderSlate into json")
+		return fmt.Errorf("%w: cannot marshal SenderSlate into json", err)
 	}
 
 	err = t.db.Put(senderSlateKey(slate.Transaction.ID.String()), slateBytes, nil)
 	if err != nil {
-		return errors.Wrap(err, "cannot Put slate")
+		return fmt.Errorf("%w: cannot Put slate", err)
 	}
 
 	return nil
@@ -61,12 +79,12 @@ func receiverSlateKey(id string) []byte {
 func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
 	slateBytes, err := json.Marshal(slate)
 	if err != nil {
-		return errors.Wrap(err, "cannot marshal ReceiverSlate into json")
+		return fmt.Errorf("%w: cannot marshal ReceiverSlate into json", err)
 	}
 
 	err = t.db.Put(receiverSlateKey(slate.Transaction.ID.String()), slateBytes, nil)
 	if err != nil {
-		return errors.Wrap(err, "cannot Put slate")
+		return fmt.Errorf("%w: cannot Put slate", err)
 	}
 
 	return nil
@@ -75,14 +93,14 @@ func (t *leveldbDatabase) PutReceiverSlate(slate *SavedSlate) error {
 func (t *leveldbDatabase) PutTransaction(transaction SavedTransaction) error {
 	transactionBytes, err := json.Marshal(transaction)
 	if err != nil {
-		return errors.Wrap(err, "cannot marshal transaction into json")
+		return fmt.Errorf("%w: cannot marshal transaction into json", err)
 	}
 
 	key := transactionKey(transaction.ID.String())
 
 	err = t.db.Put(key, transactionBytes, nil)
 	if err != nil {
-		return errors.Wrap(err, "cannot Put transaction")
+		return fmt.Errorf("%w: cannot Put transaction", err)
 	}
 
 	return nil
@@ -103,12 +121,12 @@ func transactionKey(id string) []byte {
 func (t *leveldbDatabase) PutOutput(output SavedOutput) error {
 	outputBytes, err := json.Marshal(output)
 	if err != nil {
-		return errors.Wrap(err, "cannot marshal output into json")
+		return fmt.Errorf("%w: cannot marshal output into json", err)
 	}
 
 	err = t.db.Put(outputKey(output.Commit), outputBytes, nil)
 	if err != nil {
-		return errors.Wrap(err, "cannot Put output")
+		return fmt.Errorf("%w: cannot Put output", err)
 	}
 
 	return nil
@@ -117,7 +135,7 @@ func (t *leveldbDatabase) PutOutput(output SavedOutput) error {
 func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate *SavedSlate, err error) {
 	slateBytes, err := t.db.Get(senderSlateKey(string(id)), nil)
 	if err != nil {
-		err = errors.Wrap(err, "cannot Get slate")
+		err = fmt.Errorf("%w: cannot Get slate", err)
 		return
 	}
 
@@ -125,7 +143,7 @@ func (t *leveldbDatabase) GetSenderSlate(id []byte) (slate *SavedSlate, err erro
 
 	err = json.Unmarshal(slateBytes, slate)
 	if err != nil {
-		err = errors.Wrap(err, "cannot unmarshal slateBytes")
+		err = fmt.Errorf("%w: cannot unmarshal slateBytes", err)
 		return
 	}
 
@@ -142,7 +160,7 @@ func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Saved
 		output := SavedOutput{}
 		err = json.Unmarshal(iter.Value(), &output)
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "cannot unmarshal output in iterator")
+			return nil, 0, fmt.Errorf("%w: cannot unmarshal output in iterator", err)
 		}
 		if output.Asset == asset && output.Status == OutputConfirmed {
 			outputs = append(outputs, output)
@@ -184,7 +202,7 @@ func (t *leveldbDatabase) GetInputs(amount uint64, asset string) (inputs []Saved
 		input.Status = OutputLocked
 		err = t.PutOutput(input)
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "cannot lock input")
+			return nil, 0, fmt.Errorf("%w: cannot lock input", err)
 		}
 	}
 
@@ -199,7 +217,7 @@ func (t *leveldbDatabase) ListSlates() (slates []SavedSlate, err error) {
 		slate := SavedSlate{}
 		err = json.Unmarshal(iter.Value(), &slate)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot unmarshal slate in iterator")
+			return nil, fmt.Errorf("%w: cannot unmarshal slate in iterator", err)
 		}
 		slates = append(slates, slate)
 	}
@@ -207,7 +225,7 @@ func (t *leveldbDatabase) ListSlates() (slates []SavedSlate, err error) {
 	iter.Release()
 	err = iter.Error()
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot iterate")
+		return nil, fmt.Errorf("%w: cannot iterate", err)
 	}
 
 	return slates, nil
@@ -221,7 +239,7 @@ func (t *leveldbDatabase) ListTransactions() (transactions []SavedTransaction, e
 		transaction := SavedTransaction{}
 		err = json.Unmarshal(iter.Value(), &transaction)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot unmarshal transaction in iterator")
+			return nil, fmt.Errorf("%w: cannot unmarshal transaction in iterator", err)
 		}
 		transactions = append(transactions, transaction)
 	}
@@ -229,7 +247,7 @@ func (t *leveldbDatabase) ListTransactions() (transactions []SavedTransaction, e
 	iter.Release()
 	err = iter.Error()
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot iterate")
+		return nil, fmt.Errorf("%w: cannot iterate", err)
 	}
 
 	return transactions, nil
@@ -243,7 +261,7 @@ func (t *leveldbDatabase) ListOutputs() (outputs []SavedOutput, err error) {
 		output := SavedOutput{}
 		err = json.Unmarshal(iter.Value(), &output)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot unmarshal output in iterator")
+			return nil, fmt.Errorf("%w: cannot unmarshal output in iterator", err)
 		}
 		outputs = append(outputs, output)
 	}
@@ -251,7 +269,7 @@ func (t *leveldbDatabase) ListOutputs() (outputs []SavedOutput, err error) {
 	iter.Release()
 	err = iter.Error()
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot iterate")
+		return nil, fmt.Errorf("%w: cannot iterate", err)
 	}
 
 	return outputs, nil
@@ -260,14 +278,14 @@ func (t *leveldbDatabase) ListOutputs() (outputs []SavedOutput, err error) {
 func (t *leveldbDatabase) GetTransaction(id []byte) (transaction SavedTransaction, err error) {
 	transactionBytes, err := t.db.Get(transactionKey(string(id)), nil)
 	if err != nil {
-		return SavedTransaction{}, errors.Wrap(err, "cannot Get transaction")
+		return SavedTransaction{}, fmt.Errorf("%w: cannot Get transaction", err)
 	}
 
 	transaction = SavedTransaction{}
 
 	err = json.Unmarshal(transactionBytes, &transaction)
 	if err != nil {
-		return SavedTransaction{}, errors.Wrap(err, "cannot unmarshal transactionBytes")
+		return SavedTransaction{}, fmt.Errorf("%w: cannot unmarshal transactionBytes", err)
 	}
 
 	return transaction, nil
@@ -276,14 +294,14 @@ func (t *leveldbDatabase) GetTransaction(id []byte) (transaction SavedTransactio
 func (t *leveldbDatabase) GetOutput(commit string) (output SavedOutput, err error) {
 	outputBytes, err := t.db.Get(outputKey(commit), nil)
 	if err != nil {
-		return SavedOutput{}, errors.Wrap(err, "cannot Get output")
+		return SavedOutput{}, fmt.Errorf("%w: cannot Get output", err)
 	}
 
 	output = SavedOutput{}
 
 	err = json.Unmarshal(outputBytes, &output)
 	if err != nil {
-		return SavedOutput{}, errors.Wrap(err, "cannot unmarshal outputBytes")
+		return SavedOutput{}, fmt.Errorf("%w: cannot unmarshal outputBytes", err)
 	}
 
 	return output, nil
@@ -300,53 +318,53 @@ func (t *leveldbDatabase) Cancel(transactionID []byte) error {
 func (t *leveldbDatabase) update(transactionID []byte, transactionStatus TransactionStatus, inputStatus OutputStatus, outputStatus OutputStatus) error {
 	tx, err := t.GetTransaction(transactionID)
 	if err != nil {
-		return errors.Wrap(err, "cannot GetTransaction")
+		return fmt.Errorf("%w: cannot GetTransaction", err)
 	}
 
 	tx.Status = transactionStatus
 
 	err = t.PutTransaction(tx)
 	if err != nil {
-		return errors.Wrap(err, "cannot PutTransaction")
+		return fmt.Errorf("%w: cannot PutTransaction", err)
 	}
 
 	for _, o := range tx.Body.Inputs {
 		output, err := t.GetOutput(o.Commit)
 
-		if errors.Cause(err) == leveldb.ErrNotFound {
+		if errors.Is(err, leveldb.ErrNotFound) {
 			// not my input
 			continue
 		}
 
 		if err != nil {
-			return errors.Wrap(err, "cannot GetOutput")
+			return fmt.Errorf("%w: cannot GetOutput", err)
 		}
 
 		output.Status = inputStatus
 
 		err = t.PutOutput(output)
 		if err != nil {
-			return errors.Wrap(err, "cannot PutOutput")
+			return fmt.Errorf("%w: cannot PutOutput", err)
 		}
 	}
 
 	for _, o := range tx.Body.Outputs {
 		output, err := t.GetOutput(o.Commit)
 
-		if errors.Cause(err) == leveldb.ErrNotFound {
+		if errors.Is(err, leveldb.ErrNotFound) {
 			// not my output
 			continue
 		}
 
 		if err != nil {
-			return errors.Wrap(err, "cannot GetOutput")
+			return fmt.Errorf("%w: cannot GetOutput", err)
 		}
 
 		output.Status = outputStatus
 
 		err = t.PutOutput(output)
 		if err != nil {
-			return errors.Wrap(err, "cannot PutOutput")
+			return fmt.Errorf("%w: cannot PutOutput", err)
 		}
 	}
 
@@ -358,7 +376,7 @@ const indexKey = "index"
 func (t *leveldbDatabase) NextIndex() (uint32, error) {
 	exists, err := t.db.Has([]byte(indexKey), nil)
 	if err != nil {
-		return 0, errors.Wrap(err, "cannot check if Has index")
+		return 0, fmt.Errorf("%w: cannot check if Has index", err)
 	}
 
 	var index uint32 = 0
@@ -367,7 +385,7 @@ func (t *leveldbDatabase) NextIndex() (uint32, error) {
 	if exists {
 		indexBytes, err := t.db.Get([]byte(indexKey), nil)
 		if err != nil {
-			return 0, errors.Wrap(err, "cannot Get index")
+			return 0, fmt.Errorf("%w: cannot Get index", err)
 		}
 
 		index = binary.BigEndian.Uint32(indexBytes)
@@ -378,7 +396,7 @@ func (t *leveldbDatabase) NextIndex() (uint32, error) {
 
 	err = t.db.Put([]byte(indexKey), indexBytes, nil)
 	if err != nil {
-		return 0, errors.Wrap(err, "cannot Put index")
+		return 0, fmt.Errorf("%w: cannot Put index", err)
 	}
 
 	return index, nil
