@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"encoding/json"
+	"github.com/olegabu/go-mimblewimble/pkg/ledger"
 	"github.com/tyler-smith/go-bip32"
 	"sort"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 
-	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 

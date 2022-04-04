@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"github.com/blockcypher/libgrin/core"
-	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/pkg/ledger"
 	"github.com/pkg/errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"

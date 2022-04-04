@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
-	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/pkg/ledger"
 )
 
 type Database interface {

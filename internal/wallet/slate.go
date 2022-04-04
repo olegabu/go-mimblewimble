@@ -7,7 +7,7 @@ import (
 	"github.com/blockcypher/libgrin/core"
 	"github.com/blockcypher/libgrin/libwallet"
 	"github.com/google/uuid"
-	"github.com/olegabu/go-mimblewimble/ledger"
+	"github.com/olegabu/go-mimblewimble/pkg/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"github.com/pkg/errors"
 )

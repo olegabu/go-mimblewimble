@@ -4,14 +4,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	ledger2 "github.com/olegabu/go-mimblewimble/pkg/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 	"os/user"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/olegabu/go-mimblewimble/ledger"
 )
 
 func testDbDir() string {
@@ -131,7 +130,7 @@ func TestWalletExchange(t *testing.T) {
 	err = w.Print()
 	assert.NoError(t, err)
 
-	tx, err := ledger.ValidateTransactionBytes(txBytes)
+	tx, err := ledger2.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
 
 	err = w.Confirm([]byte(tx.ID.String()))
@@ -161,7 +160,7 @@ func TestTotalIssues(t *testing.T) {
 		totalCashIssues += value
 		issueBytes, err := w.Issue(value, "cash")
 		assert.NoError(t, err)
-		issue := ledger.Issue{}
+		issue := ledger2.Issue{}
 		err = json.Unmarshal(issueBytes, &issue)
 		assert.NoError(t, err)
 		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
@@ -178,7 +177,7 @@ func TestTotalIssues(t *testing.T) {
 	zero := zero32[:]
 
 	// commitment to total tokens issued is with a zero blind TI = 0*G + totalCashIssues*H
-	totalCashIssuesValue := ledger.CommitValue(totalCashIssues, "cash")
+	totalCashIssuesValue := ledger2.CommitValue(totalCashIssues, "cash")
 	totalCashIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalCashIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	assert.NoError(t, err)
 
@@ -189,7 +188,7 @@ func TestTotalIssues(t *testing.T) {
 		totalAppleIssues += value
 		issueBytes, err := w.Issue(value, "apple")
 		assert.NoError(t, err)
-		issue := ledger.Issue{}
+		issue := ledger2.Issue{}
 		err = json.Unmarshal(issueBytes, &issue)
 		assert.NoError(t, err)
 		issueExcess, err := secp256k1.CommitmentFromString(issue.Kernel.Excess)
@@ -202,7 +201,7 @@ func TestTotalIssues(t *testing.T) {
 	}
 
 	// commitment to total coins issued is with a zero blind TI = 0*G + totalAppleIssues*H
-	totalAppleIssuesValue := ledger.CommitValue(totalAppleIssues, "apple")
+	totalAppleIssuesValue := ledger2.CommitValue(totalAppleIssues, "apple")
 	totalAppleIssuesCommitment, err := secp256k1.Commit(w.context, zero, totalAppleIssuesValue, &secp256k1.GeneratorH, &secp256k1.GeneratorG)
 	assert.NoError(t, err)
 
@@ -241,7 +240,7 @@ func TestTotalIssues(t *testing.T) {
 	assert.Equal(t, sumCommitment.String(), totalIssuesCommitment.String())
 }
 
-func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
+func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger2.Transaction) {
 	slateBytes, err := w.Send(amount, asset, 0, "")
 	assert.NoError(t, err)
 	fmt.Println("send " + string(slateBytes))
@@ -263,7 +262,7 @@ func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *
 	err = w.Print()
 	assert.NoError(t, err)
 
-	tx, err = ledger.ValidateTransactionBytes(txBytes)
+	tx, err = ledger2.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
 
 	err = w.Confirm([]byte(tx.ID.String()))
@@ -275,7 +274,7 @@ func testSendReceive(t *testing.T, w *Wallet, amount uint64, asset string) (tx *
 	return
 }
 
-func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger.Transaction) {
+func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *ledger2.Transaction) {
 	slateBytes, err := w.Send(0, "", amount, asset)
 	//slateBytes, err := w.Invoice(amount, asset)
 	assert.NoError(t, err)
@@ -298,7 +297,7 @@ func testInvoicePay(t *testing.T, w *Wallet, amount uint64, asset string) (tx *l
 	err = w.Print()
 	assert.NoError(t, err)
 
-	tx, err = ledger.ValidateTransactionBytes(txBytes)
+	tx, err = ledger2.ValidateTransactionBytes(txBytes)
 	assert.NoError(t, err)
 
 	err = w.Confirm([]byte(tx.ID.String()))

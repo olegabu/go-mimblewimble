@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/mitchellh/go-homedir"
-	"github.com/olegabu/go-mimblewimble/abci"
-	"github.com/olegabu/go-mimblewimble/ledger"
-	"github.com/olegabu/go-mimblewimble/wallet"
+	"github.com/olegabu/go-mimblewimble/internal/abci"
+	"github.com/olegabu/go-mimblewimble/internal/wallet"
+	"github.com/olegabu/go-mimblewimble/pkg/ledger"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"

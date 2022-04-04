@@ -3,13 +3,13 @@ package wallet
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/olegabu/go-mimblewimble/pkg/ledger"
 	"os"
 	"testing"
 
 	"github.com/blockcypher/libgrin/core"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/olegabu/go-mimblewimble/ledger"
 	"github.com/olegabu/go-secp256k1-zkp"
 )
 
