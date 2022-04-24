@@ -2,6 +2,14 @@
 
 This is a toy. Do not use in anything serious (yet).
 
+# TODO
+
+- post collides
+- issue event should print out info
+- ... then tell the wallet the transaction...
+- no need to send proof in issue tx
+- sign issue with Schnorr r*G when value*H is known
+
 ## Prerequisites
 
 Install Golang ([instructions](https://github.com/golang/go/wiki/Ubuntu)).
@@ -156,7 +164,7 @@ Clean up: delete wallets and reset Tendermint ledger.
 ```bash
 mw tendermint unsafe_reset_all && rm -rf ~/.mw*
 ```
-Start Tendermint consensus node with a built in Mimblewimble ABCI application.
+Start Tendermint consensus node with a built-in Mimblewimble ABCI application.
 ```bash
 mw node
 ```
@@ -204,7 +212,8 @@ mw info
 
 Start Receiver's wallet in another console in listening mode.
 ```bash
-MW_PERSIST=~/.mw_r mw listen
+export MW_PERSIST=~/.mw_r
+mw listen
 ```
 
 Receive an input from Sender's slate file saved in the same folder. In reality users send slates to each other.  
@@ -222,7 +231,8 @@ Return to Sender's wallet console.
 Post the transaction: finalize to create a `tx-<transaction uuid>.json` 
 and broadcast it to consensus network to get recorded in the ledger.
 ```bash
-mw post slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+mw finalize slate-receive-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
+mw broadcast tx-8668319f-d8ae-4dda-be5b-e3fd1648565e.json
 mw info
 ```
 Observe both Sender's and Receiver's listening wallets get a transaction event and update their databases.
@@ -318,7 +328,8 @@ mw receive slate-send-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
 
 Sender finalizes and broadcasts the transaction.
 ```bash
-mw post slate-receive-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
+mw finalize slate-receive-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
+mw broadcast tx-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
 ```
 
 Observe in the listening consoles a `transfer` event from node0 update Sender's wallet,
@@ -395,7 +406,8 @@ mw receive slate-send-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
 
 Sender finalizes and broadcasts the transaction.
 ```bash
-mw post slate-receive-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
+mw finalize slate-receive-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
+mw broadcast tx-3e722a37-f6a3-46a1-8e7b-c67000ddc666.json
 ```
 
 Observe in the listening console a `transfer` event from node2 update Receiver's wallet. 
@@ -417,7 +429,8 @@ mw receive slate-send-2ce5a045-2678-4f5d-bb0f-fa5f2139deed.json
 
 Back in Sender's console post the new transaction.
 ```bash
-mw post slate-receive-2ce5a045-2678-4f5d-bb0f-fa5f2139deed.json
+mw finalize slate-receive-2ce5a045-2678-4f5d-bb0f-fa5f2139deed.json
+mw post tx-2ce5a045-2678-4f5d-bb0f-fa5f2139deed.json
 ```
 
 Sender broadcast to node0 which is the malicious one, so it accepted the double spending transaction. 

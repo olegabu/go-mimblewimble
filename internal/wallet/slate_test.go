@@ -115,7 +115,7 @@ func newTestWallet(t *testing.T) (w *Wallet) {
 	w, err = NewWalletWithoutMasterKey(dir)
 	assert.NoError(t, err)
 
-	_, err = w.InitMasterKey("")
+	_, err = w.InitMasterKey("digital fatigue essay pretty number firm calm skirt exhibit seat able phrase")
 	assert.NoError(t, err)
 
 	return
@@ -208,6 +208,13 @@ func TestExcess(t *testing.T) {
 	fmt.Printf("slate.Transaction.Body.Kernels[0].Excess: %s\n", kex0)
 
 	assert.Equal(t, kex0, kex.String())
+}
+
+func TestNewOutput(t *testing.T) {
+	w := newTestWallet(t)
+	defer w.Close()
+
+	w.newOutput(3, core.PlainOutput, "cash", OutputLocked)
 }
 
 var slateFinal []byte = []byte(`{

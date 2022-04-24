@@ -49,6 +49,22 @@ func getTx(slateBytes []byte) (tx *Transaction, err error) {
 	return &ltx, nil
 }
 
+func TestCommitValue(t *testing.T) {
+	v := CommitValue(uint64(3), "cash")
+	assert.Equal(t, uint64(9652291107), v)
+
+	v = CommitValue(uint64(3), "")
+	assert.Equal(t, uint64(3), v)
+
+	const MaxUint64 = ^uint64(0)
+	v = CommitValue(MaxUint64, "")
+	assert.Equal(t, MaxUint64, v)
+
+	//TODO results in a wrap around
+	v = CommitValue(MaxUint64, "cash")
+	assert.Equal(t, uint64(18446744070492121247), v)
+}
+
 func TestIssue(t *testing.T) {
 	bytes := []byte(`{
   "output": {

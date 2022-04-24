@@ -30,11 +30,53 @@ func Parse(bytes []byte) (tx *Transaction, issue *Issue, err error) {
 }
 
 func CommitValue(value uint64, asset string) uint64 {
-	assetHash, _ := blake2b.New256(nil)
+	//TODO this is a temp fix. Need to blind the value generator H as secp256k1.Commit takes uint64 for value not big int we get from multiplying asset hash and value
+
+	fmt.Printf("value %v\n", value)
+
+	if len(asset) == 0 {
+		return value
+	}
+
+	// 8 byte hash to produce a 64-bit number
+	//assetHash, _ := blake2b.New(8, nil)
+	//assetHash.Write([]byte(asset))
+	//assetHashBytes := assetHash.Sum(nil)
+	//fmt.Printf("assetHashBytes %v\n", assetHashBytes)
+
+	//// this returns incorrect value, wraparound?
+	//assetHashInt := binary.BigEndian.Uint64(assetHashBytes)
+	//
+	//fmt.Printf("assetHashInt %v\n", assetHashInt)
+	//
+	//res := value * assetHashInt
+
+	// this is a safe 32 bit int option to get the same results as in js where there's no native support for 64 bit, and we're limited to 53 byte number
+	assetHash, _ := blake2b.New(4, nil)
 	assetHash.Write([]byte(asset))
 	assetHashBytes := assetHash.Sum(nil)
-	assetHashInt, _ := binary.Uvarint(assetHashBytes)
-	return value * assetHashInt
+	fmt.Printf("assetHashBytes %v\n", assetHashBytes)
+
+	assetHashInt := uint64(binary.BigEndian.Uint32(assetHashBytes))
+	fmt.Printf("assetHashInt %v\n", assetHashInt)
+
+	res := value * assetHashInt
+
+	//// this still wraps around when cast to uint64
+	//assetHashBig := new(big.Int).SetBytes(assetHashBytes)
+	//fmt.Printf("assetHashBig %v\n", assetHashBig)
+	//
+	//valueBig := new(big.Int).SetUint64(value)
+	//fmt.Printf("valueBig %v\n", valueBig)
+	//
+	//resBig := new(big.Int).Mul(valueBig, assetHashBig)
+	//fmt.Printf("resBig %v\n", resBig)
+	//
+	//res := resBig.Uint64()
+
+	fmt.Printf("res %v\n", res)
+
+	return res
 }
 
 func ValidateTransaction(ledgerTx *Transaction) (err error) {
@@ -287,7 +329,7 @@ func KernelSignatureMessage(kernel core.TxKernel) []byte {
 	binary.BigEndian.PutUint64(feeBytes, uint64(kernel.Fee))
 	binary.BigEndian.PutUint64(lockHeightBytes, uint64(kernel.LockHeight))
 
-	hash, _ := blake2b.New256(nil)
+	hash, _ := blake2b.New512(nil)
 	hash.Write(featuresBytes)
 	if kernel.Features == core.PlainKernel {
 		hash.Write(feeBytes)

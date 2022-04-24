@@ -531,6 +531,7 @@ func (t *Wallet) newOutput(
 
 	blind = secret[:]
 
+	// //TODO or use GenerateBlinded() ?
 	commitValue := ledger.CommitValue(value, asset)
 
 	// create commitment to value and blinding factor
@@ -552,6 +553,7 @@ func (t *Wallet) newOutput(
 		nil,
 		commitValue,
 		blind[:],
+		//TODO reuse blind as nonce?
 		blind[:],
 		nil,
 		nil,

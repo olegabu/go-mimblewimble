@@ -187,15 +187,21 @@ func (t *Wallet) secret(index uint32) (secret [32]byte, err error) {
 		return [32]byte{}, errors.Wrap(err, "cannot get NewChildKey")
 	}
 
-	childKeyBytes, err := childKey.Serialize()
-	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "cannot Serialize childKey")
-	}
+	//TODO why Serialize?
+	//childKeyBytes, err := childKey.Serialize()
+	//if err != nil {
+	//	return [32]byte{}, errors.Wrap(err, "cannot Serialize childKey")
+	//}
 
-	secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
-	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "cannot AggsigGenerateSecureNonce from childKeyBytes")
-	}
+	childKeyBytes := childKey.Key
 
-	return
+	//TODO should use secp256k1.AggsigGenerateSecureNonce?
+	//secret, err = secp256k1.AggsigGenerateSecureNonce(t.context, childKeyBytes)
+	//if err != nil {
+	//	return [32]byte{}, errors.Wrap(err, "cannot AggsigGenerateSecureNonce from childKeyBytes")
+	//}
+
+	copy(secret[:], childKeyBytes[:32])
+
+	return secret, nil
 }
